@@ -1,0 +1,7 @@
+tail -n 10 J*/2*/*/*/meerpipe* | grep -B 10 'Disk quota' | grep 'meerpipe_out' | awk '{split($0,a,"/"); print a[1],a[2];}'
+ls -lrt J*/2*/*/*/decimated/*TF.ar | grep -v "Jun" | awk '{split($9,a,"/"); print a[1],a[2];}'
+
+python query_obs.py -utc1 2019-01-30-00:00:00 -utc2 2020-04-09-00:00:00 -pid PTA -psr $psr -outfile /fred/oz005/users/aparthas/reprocessing_MK/PTA/lists/before_autocal/
+
+python query_obs.py -utc1 2020-04-09-00:00:00 -utc2 2020-07-20-00:00:00 -pid PTA -psr $psr -outfile /fred/oz005/users/aparthas/reprocessing_MK/PTA/lists/after_autocal/
+

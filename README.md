@@ -1,2 +1,1 @@
-# meerpipe
-Pulsar timing data processing pipeline for MeerTime data. 
+Creating documentation...to be updated
