@@ -27,6 +27,7 @@ parser = argparse.ArgumentParser(description="Launch flux calibration for MeerTi
 parser.add_argument("-path", dest="path", help="Path to the reprocessing directory",required=True)
 parser.add_argument("-psr", dest="psr", help="Pulsar name",required=True)
 parser.add_argument("-obs", dest="obsdir", help="Directory name or directory lists (like 2020*)")
+parser.add_argument("-pid", dest="pid", help="Project ID", required=True)
 args = parser.parse_args()
 
 
@@ -56,7 +57,10 @@ for observation in observation_dirs:
                 if len(glob.glob(os.path.join(files,"*add")))> 0:
                     obsheader_path = glob.glob(os.path.join(files,"*obs.header"))[0]
                     add_file = glob.glob(os.path.join(files,"*add"))[0]
-                    TP_file = glob.glob(os.path.join(files,"decimated/*zapTp.ar"))[0]
+                    if str(args.pid) == "TPA":
+                        TP_file = glob.glob(os.path.join(files,"decimated/*zapTp.ar"))[0]
+                    if str(args.pid) == "PTA":
+                        TP_file = glob.glob(os.path.join(files,"decimated/*t32p*ar"))[0]
                     decimated_products = glob.glob(os.path.join(files,"decimated/*.ar"))
                     print "Using {0} for fluxcal".format(os.path.split(add_file)[-1])
                 else:
@@ -81,7 +85,7 @@ for observation in observation_dirs:
                     job_file.write("#SBATCH --output={0}/{1}_{2}_fluxcal.out\n".format(output_dir,psr_name,obs_name))
                     job_file.write("#SBATCH --ntasks=1 \n")
                     job_file.write("#SBATCH --mem=64g \n")
-                    job_file.write("#SBATCH --time=01:00:00 \n")
+                    job_file.write("#SBATCH --time=00:20:00 \n")
                     job_file.write("#SBATCH --mail-type=FAIL --mail-user=adityapartha3112@gmail.com \n")
                     job_file.write('cd {0} \n'.format(mysoft_path))
                     job_file.write("python fluxcal.py -psrname {0} -obsname {1} -obsheader {2} -TPfile {3} -rawfile {4} -dec_path {5}".format(psr_name,obs_name,obsheader_path,TP_file,add_file,decimated_list))

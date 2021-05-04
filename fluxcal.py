@@ -65,7 +65,7 @@ def get_freqlist(archive):
 def get_glgb(psrname):
     "Get GL and GB from psrname"
     
-    info = 'psrcat -c "GL GB" {0} -X'.format(psrname)
+    info = 'psrcat -c "GL GB" {0} -all -X'.format(psrname)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
     info = proc.stdout.readline().split()
