@@ -192,6 +192,8 @@ def get_outputinfo(cparams,logger):
     psrnames=[]
     observations = []
     proposal_ids = []
+    required_ram_list = []
+    obs_time_list = []
 
     if cparams["batch"] == "batch":
         pulsar_dirs = sorted(glob.glob(os.path.join(input_path,cparams["dirname"])))
@@ -256,6 +258,8 @@ def get_outputinfo(cparams,logger):
 
         #NEW directory structure
         for pulsar in pulsar_dirs:
+
+
             psr_path,psr_name = os.path.split(pulsar)
             psr_name_split = psr_name.split("_")
             
@@ -280,8 +284,8 @@ def get_outputinfo(cparams,logger):
                     for files in freq_dirs:
                         freq_path,freq_name = os.path.split(files)
                         archives = sorted(glob.glob(os.path.join(files,"*.ar")))
+                        info_params = get_obsinfo(glob.glob(os.path.join(files,"obs_info.dat"))[0])
                         if not "pid" in cparams:
-                            info_params = get_obsinfo(glob.glob(os.path.join(files,"obs_info.dat"))[0])
                             pid_dir = get_pid_dir(info_params["proposal_id"])
                             proposal_ids.append(str(pid_dir))
                             results_path.append(str(output_path+"/"+pid_dir+"/"+psr_name+"/"+obs_name+"/"+beam_name+"/"+freq_name+"/"))
@@ -292,8 +296,25 @@ def get_outputinfo(cparams,logger):
                         psrnames.append(psr_name)
                         all_archives.append(archives)
 
+                        #Computing RAM requirements for this observation
+                        if float(info_params["target_duration"]) <= 600.0: #Less than 10 mins
+                            reqram = "64g"
+                        elif float(info_params["target_duration"]) > 600.0 and float(info_params["target_duration"]) <= 1800.0: #10 mins to 30 mins
+                            reqram = "128g"
+                        elif float(info_params["target_duration"]) > 1800.0 and float(info_params["target_duration"]) <= 7200.0: #30 mins to 2 hours
+                            reqram = "256g"
+                        elif float(info_params["target_duration"]) > 3600.0 and float(info_params["target_duration"]) < 18000.0: #2 hours to 5 hours
+                            reqram = "512g"
+                        elif float(info_params["target_duration"]) > 18000.0: #More than 5 hours
+                            reqram = "768g"
+             
+                        obs_time_list.append(info_params["target_duration"])
+                        required_ram_list.append(reqram)
+
+
+
          
-    return results_path,all_archives,psrnames,proposal_ids
+    return results_path,all_archives,psrnames,proposal_ids,required_ram_list,obs_time_list
 
 
 def create_structure(output_dir,cparams,psrname,logger):

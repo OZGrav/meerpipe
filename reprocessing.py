@@ -29,11 +29,15 @@ def run_meerpipe(psrname,utcname,default_pid,config_path):
         pid = default_pid
 
     print "Running meerpipe for {0},{1} as PID:{2}".format(psrname,utcname,pid)
+
     meerpipe = "python /fred/oz005/meerpipe/run_pipe.py -cfile {2} -dirname {0} -utc {1} -verbose -pid {3} -slurm".format(psrname,utcname,config_path,pid)
+
     proc_meerpipe = shlex.split(meerpipe)
     p_meerpipe = subprocess.Popen(proc_meerpipe)
     p_meerpipe.wait()
-    print "MeerPipe job submitted for PSR:{0}, UTC:{1} and PID:{2} ".format(psrname,utcname,pid)
+    print "MeerPipe job submitted for PSR:{0}, UTC:{1} and PID:{2}".format(psrname,utcname,pid)
+
+
 
 if args.list_pid:
     #psrlist = np.genfromtxt(str(args.list_pid),delimiter=" ",dtype=str,comments="#")
@@ -46,8 +50,10 @@ elif args.list:
     psrlist = psrlist.values
 
 for item in psrlist:
+    #psrname, utcname, pid, configpath
+
     if args.list_pid:
         run_meerpipe(item[0],item[1],item[2],str(args.configfile))
+
     elif args.list:
         run_meerpipe(item[0],item[1],str(args.runas),str(args.configfile))
- 

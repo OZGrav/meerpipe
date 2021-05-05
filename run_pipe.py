@@ -45,6 +45,7 @@ parser.add_argument("-utc", dest="utc", help="Process a particular UTC. Should b
 parser.add_argument("-batch", dest="batch", help="Enable batch processing - multiple files")
 parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm",action="store_true")
 parser.add_argument("-pid",dest="pid",help="Process pulsars as PID (Ignores original PID)")
+parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value. Automatic allocation is ignored")
 parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
 args = parser.parse_args()
 
@@ -109,19 +110,26 @@ if toggle:
     if args.pid:
         config_params["pid"] = str(args.pid)
 
-    output_info,archive_list,psrnames,proposal_ids  = get_outputinfo(config_params,logger)
+    output_info,archive_list,psrnames,proposal_ids,required_ram_list,obstime_list = get_outputinfo(config_params,logger)
 
     #For each input directory, an equivalent output directory is created using create_MTstructure.
     for obs_num, output_dir in enumerate(output_info):
         logger.info ("############")
 
         config_params["pid"] = proposal_ids[obs_num]
+        obstime = obstime_list[obs_num]
+        required_ram = required_ram_list[obs_num]
+
+        if args.forceram:
+            required_ram = int(args.forceram)
+            logger.warning("Forcing RAM to be {0}".format(required_ram))
 
         #Creating output directories for saving the data products
         create_structure(output_dir,config_params,psrnames[obs_num],logger)
         
         if args.slurm:
             logger.info("Creating and submitting pipeline jobs using Slurm")
+            logger.info("Observation length is {0}. Using RAM of {1} to process".format(obstime,required_ram))
             np.save(os.path.join(output_dir,"archivelist"),archive_list[obs_num])
             np.save(os.path.join(output_dir,"output"),output_info[obs_num])
             np.save(os.path.join(output_dir,"psrname"),psrnames[obs_num])
@@ -135,7 +143,7 @@ if toggle:
                 job_file.write("#SBATCH --job-name={0}_{1} \n".format(psrnames[obs_num],obs_num))
                 job_file.write("#SBATCH --output={0}meerpipe_out_{1}_{2} \n".format(str(output_dir),psrnames[obs_num],obs_num))
                 job_file.write("#SBATCH --ntasks=1 \n")
-                job_file.write("#SBATCH --mem=256g \n")
+                job_file.write("#SBATCH --mem={0} \n".format(required_ram))
                 job_file.write("#SBATCH --time=08:00:00 \n")
                 #job_file.write("#SBATCH --reservation=oz005_obs \n")
                 #job_file.write("#SBATCH --account=oz005 \n")
