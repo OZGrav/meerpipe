@@ -35,7 +35,7 @@ import pickle
 from initialize import parse_config,create_structure,get_outputinfo, \
     setup_logging
 
-from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives, calibrate_data
+from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives, calibrate_data, fluxcalibrate
 
 #Argument parsing
 parser = argparse.ArgumentParser(description="Run MeerPipe")
@@ -194,6 +194,10 @@ if toggle:
                 #Checking flags and creating appropriate data products
                 processed_archives = decimate_data(cleaned_archives,output_dir,config_params,logger)
                 logger.info("Processed archives {0}".format(processed_archives))
+
+
+                #Flux calibrating the decimated data products
+                fluxcalibrate(output_dir,config_params,psrnames[obs_num],logger)
 
                 #Forming ToAs from the processed archives
                 generate_toas(processed_archives,output_dir,config_params,psrnames[obs_num],logger)

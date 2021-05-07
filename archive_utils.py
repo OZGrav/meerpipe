@@ -1016,6 +1016,41 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
     return processed_archives
 
 
+def fluxcalibrate(output_dir,cparams,psrname,logger):
+
+    logger.info("Flux calibrating the decimated data products of {0}".format(psrname))
+    pid = cparams["pid"]
+    decimated_path = os.path.join(str(output_dir),"decimated")
+    obsheader_path = glob.glob(os.path.join(str(output_dir),"*obs.header"))[0]
+    obsname = decimated_path.split("/")[-4]
+    decimated_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
+    for archive in decimated_archives:
+        if pid == "TPA":
+            if "zapTp.ar" in archive:
+                TP_file = archive
+        if pid == "PTA":
+            if "t32p" in archive:
+                TP_file = archive
+    addfile = glob.glob(os.path.join(str(output_dir),"*add"))[0]
+
+    np.save(os.path.join(decimated_path,"decimatedlist"), decimated_archives)
+    decimated_list = os.path.join(decimated_path,"decimatedlist.npy")
+
+
+    fluxcal_command = "python fluxcal.py -psrname {0} -obsname {1} -obsheader {2} -TPfile {3} -rawfile {4} -dec_path {5}".format(psrname,obsname,obsheader_path,TP_file,addfile,decimated_list)
+
+    fluxcalproc = shlex.split(fluxcal_command)
+    subprocess.call(fluxcalproc)
+
+    fluxcal_obs = glob.glob(os.path.join(decimated_path,"*.fluxcal"))
+    if len(fluxcal_obs) == len(decimated_archives):
+        logger.info("All decimated observations of {0}:{1} are flux calibrated".format(psrname,obsname))
+    else:
+        logger.warning("Flux calibration failed")
+
+
+
+
 def generate_toas(processed_archives,output_dir,cparams,psrname,logger):
     # Routine to call pat
 
