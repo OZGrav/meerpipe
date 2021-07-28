@@ -61,7 +61,12 @@ for observation in observation_dirs:
                         TP_file = glob.glob(os.path.join(files,"decimated/*zapTp.ar"))[0]
                     if str(args.pid) == "PTA":
                         TP_file = glob.glob(os.path.join(files,"decimated/*t32p*ar"))[0]
+                    if str(args.pid) == "RelBin":
+                        TP_file = glob.glob(os.path.join(files,"decimated/*zap.Tp.ar"))[0]
+
                     decimated_products = glob.glob(os.path.join(files,"decimated/*.ar"))
+                    cleaned_archive = glob.glob(os.path.join(files,"cleaned/*.ar"))[0]
+                    decimated_products.append(cleaned_archive)
                     print "Using {0} for fluxcal".format(os.path.split(add_file)[-1])
                 else:
                     print "WARNING: No added file present. Observation may not have been processed well."

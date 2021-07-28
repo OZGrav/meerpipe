@@ -35,7 +35,7 @@ import pickle
 from initialize import parse_config,create_structure,get_outputinfo, \
     setup_logging
 
-from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives, calibrate_data, fluxcalibrate
+from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives, calibrate_data, fluxcalibrate, dynamic_spectra
 
 #Argument parsing
 parser = argparse.ArgumentParser(description="Run MeerPipe")
@@ -188,17 +188,19 @@ if toggle:
                 logger.info("Cleaned archives: {0}".format(cleaned_archives))
 
             if not config_params["fluxcal"]:
-                #Generating dynamic spectra from calibrated archives
-                #dynamic_spectra(cleaned_archives,output_dir,config_params,psrnames[obs_num],logger)
-
                 #Checking flags and creating appropriate data products
                 processed_archives = decimate_data(cleaned_archives,output_dir,config_params,logger)
-                logger.info("Processed archives {0}".format(processed_archives))
+                #logger.info("Processed archives {0}".format(processed_archives))
+
+
+                #Generating dynamic spectra from calibrated archives
+                dynamic_spectra(output_dir,config_params,psrnames[obs_num],logger)
 
 
                 #Flux calibrating the decimated data products
                 fluxcalibrate(output_dir,config_params,psrnames[obs_num],logger)
 
+                
                 #Forming ToAs from the processed archives
                 generate_toas(processed_archives,output_dir,config_params,psrnames[obs_num],logger)
                 logger.info ("##############")

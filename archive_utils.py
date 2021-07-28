@@ -26,8 +26,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 #Importing scintools (@dreardon)
-#sys.path.append('/fred/oz002/dreardon/scintools/scintools')
-#from dynspec import Dynspec
+sys.path.append('/fred/oz002/dreardon/scintools')
+from scintools.dynspec import Dynspec
 
 #psrchive imports
 import psrchive as ps
@@ -100,7 +100,7 @@ def get_meertimetemplate(psrname,output_path,cparams,logger):
     
     if os.path.exists(psr_template):
         #Template sanity checks
-        print psr_template
+        logger.info("Template: {0}".format(psr_template))
         template_ar = ps.Archive_load(str(psr_template))
         if int(template_ar.get_nbin()) == 1024:
             return psr_template
@@ -165,7 +165,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
             p_add = subprocess.Popen(proc_add)
             p_add.wait()
  
-        if pid == "TPA" or pid == "PTA":
+        if pid == "TPA" or pid == "PTA" or pid == "RelBin":
             #Check for new MK DMs and RMs and apply if present. If not, the DM is applied from the ephemeris and the RM from psrcat.
             #Applying DM
             dm_path = cparams["dmcat"]
@@ -195,7 +195,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 p_dm.wait()
 
         
-        if pid == "TPA" or pid == "PTA" or pid == "J0437_LT":
+        if pid == "TPA" or pid == "PTA" or pid == "J0437_LT" or pid == "RelBin":
             #Applying RMs
             rm_path = cparams["rmcat"]
             rm_cat = np.genfromtxt(rm_path,delimiter=" ",dtype=str)
@@ -281,33 +281,58 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
         return str(time_diff[-1])
 
 
+
 def calibrate_data(added_archives,output_dir,cparams,logger):
     
    #Routine to calibrate the data - either using jones matrices or just use pac -XP
 
-    pid = cparams["pid"]
-    pipe = cparams["pipe"]
+    if os.path.exists(os.path.join(str(output_dir),"obs.header")):
+        header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
+    else:
+        header_params = None
 
-    if pipe == "new":
-        calibrated_archives=[]
-        flags = cparams["flags"]
-        output_path = cparams["output_path"]
-        calibrators_path = cparams["calibrators_path"]
-        logger.info("Using jones matrices for calibration")
-        for add_archive in added_archives:
-            add_ar = ps.Archive_load(add_archive)
-            archive_path,archive_name = os.path.split(add_ar.get_filename())
-            archive_name = archive_name.split('.')[0]
+    pid = cparams["pid"]
+    calibrated_archives=[]
+    flags = cparams["flags"]
+    output_path = cparams["output_path"]
+    calibrators_path = cparams["calibrators_path"]
+    
+    for add_archive in added_archives:
+        add_ar = ps.Archive_load(add_archive)
+        archive_path,archive_name = os.path.split(add_ar.get_filename())
+        archive_name = archive_name.split('.')[0]
+
+        archive_utc = os.path.split(add_archive)[1].split("_")[-1].split('.add')[0]
+        archive_utc_datetime = datetime.datetime.strptime(archive_utc, '%Y-%m-%d-%H:%M:%S')
+        reference_calib_date = datetime.datetime.strptime("2020-04-10-00:00:00",'%Y-%m-%d-%H:%M:%S')
+
+        if (archive_utc_datetime - reference_calib_date).total_seconds() > 0:
+            if header_params["BW"] == "544.0":
+                logger.info("Polarisation calibration not available (yet) for UHF data. Just correcting headers")
+            else:
+                logger.info("Data already polarisation calibrated. Just correcting headers.")
+
+            calibrated_path = os.path.join(str(output_dir),"calibrated")
+
+            if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
+                pac_com = 'pac -XP {0} -O {1} -e calib '.format(add_archive,calibrated_path)
+                proc_pac = shlex.split(pac_com)
+                p_pac = subprocess.Popen(proc_pac)
+                p_pac.wait()
+            else:
+                logger.info("Calibrated data already exists")
+
+            calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
+
+
+        elif (archive_utc_datetime - reference_calib_date).total_seconds() <=0:
+            logger.info("Polarisation calibration manually applied using Jones matrices")
 
             calibrated_path = os.path.join(str(output_dir),"calibrated")
 
             #Identify the jones matrix file to use for polarization calibration. 
             calib_utcs = sorted(glob.glob(os.path.join(calibrators_path,"*jones")))
-            archive_utc = os.path.split(add_archive)[1].split("_")[-1].split('.add')[0]
-            if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-                header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-            else:
-                header_params = None
+            
             calibrator_archive = get_calibrator(archive_utc,calib_utcs,header_params,logger)
 
             logger.info("Found jones matrix file:{0}".format(calibrator_archive))
@@ -328,29 +353,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
 
             calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
 
-    elif pipe == "old":
-        calibrated_archives=[]
-        flags = cparams["flags"]
-        output_path = cparams["output_path"]
-
-        logger.info("Using pac -XP for calibration")
-
-        for add_archive in added_archives:
-            add_ar = ps.Archive_load(add_archive)
-            archive_path,archive_name = os.path.split(add_ar.get_filename())
-            archive_name = archive_name.split('.')[0]
-
-            calibrated_path = os.path.join(str(output_dir),"calibrated")
-
-            if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
-                pac_com = 'pac -XP {0} -O {1} -e calib '.format(add_archive,calibrated_path)
-                proc_pac = shlex.split(pac_com)
-                p_pac = subprocess.Popen(proc_pac)
-                p_pac.wait()
-            else:
-                logger.info("Calibrated data already exists")
-
-            calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
 
     return calibrated_archives
 
@@ -490,7 +492,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
     return cleaned_archives
 
 
-def dynamic_spectra(cleaned_archives,output_dir,cparams,psrname,logger):
+def dynamic_spectra(output_dir,cparams,psrname,logger):
     """
     Routine to produce the dynamic spectra by running psrflux.
     Produces dynamic and secondary spectra plots using scintools (@dreardon)
@@ -504,41 +506,70 @@ def dynamic_spectra(cleaned_archives,output_dir,cparams,psrname,logger):
 
     template = get_meertimetemplate(psrname,output_path,cparams,logger)
 
+    cleaned_dir = os.path.join(str(output_dir),"cleaned")
+    cleaned_archives = sorted(glob.glob(os.path.join(str(cleaned_dir),"*.ar")))
+    cleaned_archives.append(glob.glob(os.path.join(str(output_dir),"calibrated/*.calib"))[0])
+
     if not template == None:
 
         for clean_archive in cleaned_archives:
      
             clean_ar = ps.Archive_load(clean_archive)
             archive_path,archive_name = os.path.split(clean_ar.get_filename())
+            extension = archive_name.split('.')[-1]
             archive_name = archive_name.split('.')[0]
-           
-            if not os.path.exists(os.path.join(ds_path,"{0}.dynspec".format(archive_name))):
 
-                try: 
+            logger.info("Archive name:{0} and extension: {1}".format(archive_name, extension))
+            
+            if extension == "ch.ar":
+                dynspec_name = archive_name+".ch.dynspec"
+            if extension == "ar":
+                dynspec_name = archive_name+".dynspec"
+            if extension == "calib":
+                dynspec_name = archive_name+".calib.dynspec"
+
+            if not os.path.exists(os.path.join(ds_path,"{0}".format(dynspec_name))):
+
+                if "ch" in dynspec_name:
+                    psrflux_com = 'psrflux -s {0} {1} -e ch.dynspec'.format(template,clean_archive)
+                if dynspec_name == archive_name+".dynspec":
                     psrflux_com = 'psrflux -s {0} {1} -e dynspec'.format(template,clean_archive)
-                    proc_psrflux = shlex.split(psrflux_com)
-                    p_psrflux = subprocess.Popen(proc_psrflux)
-                    p_psrflux.wait()
+                if "calib" in dynspec_name:
+                    psrflux_com = 'psrflux -s {0} {1} -e dynspec'.format(template,clean_archive)
 
-                    #Moving the dynamic spectra to the scintillation directory
-                    dynspec = str(clean_archive)+".dynspec"
-                    new_dynspec = os.path.join(ds_path,"{0}.dynspec".format(archive_name))
-                    os.rename(dynspec,new_dynspec)
-                    logger.info("Dynamic spectra generated and moved to Scintillation directory for {0}".format(archive_name))
+                proc_psrflux = shlex.split(psrflux_com)
+                p_psrflux = subprocess.Popen(proc_psrflux)
+                p_psrflux.wait()
 
-                    logger.info("Creating dynamic spectra plots using scintools")
-                    dynspec_file = glob.glob(os.path.join(ds_path,"*.dynspec"))[0]
+                #Moving the dynamic spectra to the scintillation directory
+                if "ar.ch" in dynspec_name:
+                    old_name = "{0}/{1}.ar.ch.dynspec".format(os.path.join(str(output_dir),"cleaned"),archive_name)
+                if "ch.ar" in dynspec_name:
+                    old_name = "{0}/{1}.ch.ar.dynspec".format(os.path.join(str(output_dir),"cleaned"),archive_name)
+                if dynspec_name == archive_name+".dynspec":
+                    old_name = "{0}/{1}.ar.dynspec".format(os.path.join(str(output_dir),"cleaned"),archive_name)
+                if "calib" in dynspec_name:
+                    old_name = "{0}/{1}.calib.dynspec".format(os.path.join(str(output_dir),"calibrated"),archive_name)
 
-                    dyn = Dynspec(dynspec_file, process=False, verbose=False)
-                    dyn.plot_dyn(filename=os.path.join(ds_path,"{0}_dynspec.png".format(archive_name)))
-                    logger.info("Refilling")
-                    dyn.trim_edges()
-                    dyn.refill(linear=False)
-                    logger.info("Secondary spectra")
-                    dyn.cut_dyn(tcuts=0, fcuts=7, plot=True, filename=os.path.join(ds_path,"{0}_subband.png".format(archive_name)))
+                new_name = os.path.join(ds_path,"{0}".format(dynspec_name))
+                logger.info("Old name:{0}".format(old_name))
+                logger.info("New name:{0}".format(new_name))
+                os.rename(old_name,new_name)
+                logger.info("Dynamic spectra generated and moved to Scintillation directory: {0}".format(dynspec_name))
 
-                except:
-                    logger.info("Scintools failed. Dyanmic spectra couldn't be created")
+                logger.info("Creating dynamic spectra plots using scintools")
+                dynspec_file = glob.glob(os.path.join(ds_path,"{0}".format(dynspec_name)))[0]
+
+                dyn = Dynspec(dynspec_file, process=False, verbose=False)
+                dyn.plot_dyn(filename=os.path.join(ds_path,"{0}.png".format(dynspec_name)),display=False,title="{0}".format(dynspec_name))
+                logger.info("Refilling")
+                dyn.trim_edges()
+                dyn.refill(linear=False)
+                #logger.info("Secondary spectra")
+                #dyn.cut_dyn(tcuts=0, fcuts=7, plot=True, filename=os.path.join(ds_path,"{0}_subband.png".format(archive_name)))
+
+               # except:
+               #     logger.info("Scintools failed. Dyanmic spectra couldn't be created")
                 
             else:
                 logger.info("Dynamic spectra already exists")
@@ -548,7 +579,7 @@ def dynamic_spectra(cleaned_archives,output_dir,cparams,psrname,logger):
 
 
 def get_extension(commands,chopped):
-    #Routine to generate extension based on pam command (for RelBin decimation)
+    #Routine to generate extension based on pam command 
 
     commands = commands.split(" ")
     extension = ""
@@ -809,83 +840,59 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
             #Decimating on a fresh copy of the archive
             logger.info("Loading a fresh version of the archive file")
-            clean_archive = loaded_archive.clone()
-            #get archive name
-            archive_path,archive_name = os.path.split(str(clean_archive.get_filename()))
-            archive_name = archive_name.split('.')[0]
 
-            #decimation_info = np.genfromtxt(cparams["decimation_products"],delimiter=", ",dtype=str)
+            cleaned_path = os.path.join(str(output_dir),"cleaned")
+            cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
+            
+            if os.path.exists(cleaned_file):
+                cleaned_ar = ps.Archive_load(cleaned_file)
+           
+                #get archive name
+                archive_path,archive_name = os.path.split(str(cleaned_ar.get_filename()))
+                archive_name = archive_name.split('.')[0]
+                psrname = archive_name.split("_")[0]
+
+                freqs = cleaned_ar.get_frequencies().tolist()
+
+
             decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str, header=None)
             decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
             decimation_info = decimation_info.values.tolist()
-            psrname = archive_name.split("_")[0]
-            for num in range(0,len(decimation_info)):
-                while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                if decimation_info[num][0] == psrname:
-                    for item in decimation_info[num]:
-                        if not item == psrname:
-                            extension = get_extension(item,False)
-                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
-                                logger.info("Producing {0} archives".format(extension))
-                                proc_pam = shlex.split(pam_command)
-                                subprocess.call(proc_pam)
-                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                            else:
-                                logger.info("{0}.{1} exists".format(archive_name,extension))
-                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+
+            #If the recorded number of channels is 928 (Mostly L-band observations)
+            if len(freqs) == 928:
+
+                for num in range(0,len(decimation_info)):
+                    while 'None' in decimation_info[num]: decimation_info[num].remove('None')
+                    if decimation_info[num][0] == psrname:
+                        for item in decimation_info[num]:
+                            if not item == psrname:
+                                extension = get_extension(item,False)
+                                if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                    pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
+                                    logger.info("Producing {0} archives".format(extension))
+                                    proc_pam = shlex.split(pam_command)
+                                    subprocess.call(proc_pam)
+                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                else:
+                                    logger.info("{0}.{1} exists".format(archive_name,extension))
+                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
 
-        elif pid == "PTA":
-            #Using pta_decimation.list (in additional_info) for decimating cleaned archives. 
 
-            #Decimating on a fresh copy of the archive
-            logger.info("Loading a fresh version of the archive file")
-            clean_archive = loaded_archive.clone()
-            #get archive name
-            archive_path,archive_name = os.path.split(str(clean_archive.get_filename()))
-            archive_name = archive_name.split('.')[0]
 
-            cleaned_path = os.path.join(str(output_dir),"cleaned")
-            cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
-            if os.path.exists(cleaned_file):
-                cleaned_ar = ps.Archive_load(cleaned_file)
-                freqs = cleaned_ar.get_frequencies().tolist()
-                if len(freqs) > 928:
-                    print "Producing only full BW data products"
-                    decimation_info = ["all", "-F -T -p", "-t 32 -f 128 -p"]
+            #If the recorded number of channels is greater than 928 (could be either L-band or UHF)
+
+            elif len(freqs) > 928:
+                
+                if os.path.exists(os.path.join(str(output_dir),"obs.header")):
+                    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
                 else:
-                    print "Producing all data products"
-                    #decimation_info = np.genfromtxt(cparams["decimation_products"],delimiter=", ",dtype=str)
-                    decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str)
-                    decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
-                    decimation_info = decimation_info.values.tolist()
-                    decimation_info = decimation_info[0]
-            
-            print decimation_info
-            psrname = archive_name.split("_")[0]
-            for item in decimation_info:
-                #for item in decimation_info[num]:
-                if not item == "all":
-                    extension = get_extension(item,False)
-                    if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                        pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
-                        logger.info("Producing {0} archives".format(extension))
-                        proc_pam = shlex.split(pam_command)
-                        subprocess.call(proc_pam)
-                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                    else:
-                        logger.info("{0}.{1} exists".format(archive_name,extension))
-                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                    header_params = None
 
-
-            #Running a frequency extraction to reject ~48 channels on either side if BW is 856 MHz to produce consistent data prodcuts throughout. Only done for 8ch1s.ar
-            cleaned_path = os.path.join(str(output_dir),"cleaned")
-            cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
-            if os.path.exists(cleaned_file):
-                cleaned_ar = ps.Archive_load(cleaned_file)
-                freqs = cleaned_ar.get_frequencies().tolist()
-                if len(freqs) > 928:
+                #L-BAND DATA
+                if not header_params["BW"] == "544.0":
+                
                     logger.info("Extracting frequency channels from cleaned file since BW is 856 MHz (1024 channels)")
                     reference_928ch_freqlist  = np.load(cparams["ref_freq_list"]).tolist()
                     oar = cleaned_ar.clone()
@@ -909,25 +916,195 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                     if dd:
                         oar.dedisperse()
 
-                    oar.unload(os.path.join(decimated_path,archive_name+".tmp"))
-                    logger.info("Unloaded extracted file")
+                    if not os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
+                        oar.unload(os.path.join(cleaned_path,archive_name+".ch.ar"))
+                        logger.info("Unloaded extracted file")
+                    else:
+                        logger.info("Chopped cleaned file already exists")
 
-                    if os.path.exists(os.path.join(decimated_path,archive_name+".tmp")):
-                        tmp_ar = os.path.join(decimated_path,archive_name+".tmp")
-                        chopped = ["-T -f 4", "-t 32 -p", "-t 32 -f 116 -p", "-F -T -p"]
-                        for item in chopped:
-                            extension_ch = get_extension(item,True)
-                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension_ch))):
-                                pam_comm = "pam {0} -e {1} {2} -u {3}".format(item, extension_ch, tmp_ar,decimated_path)
-                                logger.info("Producing sub-banded and t-scruched archives with full stokes - {0}".format(extension_ch))
-                                proc_pam = shlex.split(pam_comm)
-                                subprocess.call(proc_pam)
-                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension_ch)))
-                            else:
-                                logger.info("{0}.{1} already exists".format(archive_name,extension_ch))
-                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension_ch)))
+                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
+                        chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
+                        for num in range(0,len(decimation_info)):
+                            while 'None' in decimation_info[num]: decimation_info[num].remove('None')
+                            if decimation_info[num][0] == psrname:
+                                for item in decimation_info[num]:
+                                    if not item == psrname:
+                                        extension = get_extension(item,True)
+                                        if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                            pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,chopped_cleaned_file)
+                                            logger.info("Producing {0} chopped archives".format(extension))
+                                            proc_pam = shlex.split(pam_command)
+                                            subprocess.call(proc_pam)
+                                            og_name = "{0}/{1}.ch.{2}".format(decimated_path,archive_name,extension)
+                                            corrected_name = "{0}/{1}.{2}".format(decimated_path,archive_name,extension)
+                                            os.rename(og_name,corrected_name)
+                                            logger.info("Renamed to {0}".format(corrected_name))
+                                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                        else:
+                                            logger.info("{0}.{1} exists".format(archive_name,extension))
+                                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+
+                #UHF DATA
+                elif header_params["BW"] == "544.0":
+                    logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
+                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                        cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+                        for num in range(0,len(decimation_info)):
+                            while 'None' in decimation_info[num]: decimation_info[num].remove('None')
+                            if decimation_info[num][0] == psrname:
+                                for item in decimation_info[num]:
+                                    if not item == psrname:
+                                        
+                                        #Scaling the scrunch factors to 1024 channels (only for UHF data)
+                                        if item == "-f 58 -t 8":
+                                            item = "-f 64 -t 8"
+                                        if item == "-f 58 -t 8 -p":
+                                            item = "-f 64 -t 8 -p"
+                                        if item == "-f 116 -t 128 -p":
+                                            item = "-f 128 -t 128 -p"
+                                        if item == "-f 116 -t 32 -p":
+                                            item = "-f 128 -t 32 -p"
+
+                                        extension = get_extension(item,False)
+                                        if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                            pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                            logger.info("Producing {0} UHF archives".format(extension))
+                                            proc_pam = shlex.split(pam_command)
+                                            subprocess.call(proc_pam)
+                                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                        else:
+                                            logger.info("{0}.{1} exists".format(archive_name,extension))
+                                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+
+
+
+
+        elif pid == "PTA":
+    
+            #Using pta_decimation.list (in additional_info) for decimating cleaned archives. 
+
+            #Decimating on a fresh copy of the archive
+            logger.info("Loading a fresh version of the archive file")
+            
+            cleaned_path = os.path.join(str(output_dir),"cleaned")
+            cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
+            if os.path.exists(cleaned_file):
+                cleaned_ar = ps.Archive_load(cleaned_file)
+                freqs = cleaned_ar.get_frequencies().tolist()
  
-                        os.remove(tmp_ar)
+            #get archive name
+            archive_path,archive_name = os.path.split(str(cleaned_ar.get_filename()))
+            archive_name = archive_name.split('.')[0]
+
+            #decimation_info = np.genfromtxt(cparams["decimation_products"],delimiter=", ",dtype=str)
+            decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str, header=None)
+            decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
+            decimation_info = decimation_info.values.tolist()
+            decimation_info = decimation_info[0]
+            psrname = archive_name.split("_")[0]
+
+            if len(freqs) == 928:
+                logger.info("Recorded number of channels is 928. Producing decimated data products")
+                for item in decimation_info:
+                    if not item == "all":
+                        extension = get_extension(item,False)
+                        if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                            pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
+                            logger.info("Producing {0} archives".format(extension))
+                            proc_pam = shlex.split(pam_command)
+                            subprocess.call(proc_pam)
+                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                        else:
+                            logger.info("{0}.{1} exists".format(archive_name,extension))
+                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+
+
+            elif len(freqs) > 928:
+
+                if os.path.exists(os.path.join(str(output_dir),"obs.header")):
+                    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
+                else:
+                    header_params = None
+
+                #L-band data
+                if not header_params["BW"] == "544.0":
+
+                    #CHOPPING TO 775.75 MHz
+                    logger.info("Extracting frequency channels from cleaned file since BW is 856 MHz (1024 channels)")
+                    reference_928ch_freqlist  = np.load(cparams["ref_freq_list"]).tolist()
+                    oar = cleaned_ar.clone()
+                    dd = oar.get_dedispersed()
+                    if dd:
+                        oar.dededisperse()
+
+                    recheck=True
+                    while recheck:
+                        recheck=False
+                        freqs = oar.get_frequencies()
+                        for i,f in enumerate(freqs):
+                            if f in reference_928ch_freqlist:
+                                pass
+                            else:
+                                oar.remove_chan(i,i)
+                                recheck=True
+                                break
+
+                    logger.info("Done extracting")
+                    if dd:
+                        oar.dedisperse()
+
+                    if not os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
+                        oar.unload(os.path.join(cleaned_path,archive_name+".ch.ar"))
+                        logger.info("Unloaded extracted file")
+                    else:
+                        logger.info("Chopped cleaned file already exists")
+
+                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
+                        chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
+                        
+                        for item in decimation_info:
+                            if not item == "all":
+                                extension = get_extension(item,True)
+                                if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                    pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,chopped_cleaned_file)
+                                    logger.info("Producing {0} archives".format(extension))
+                                    proc_pam = shlex.split(pam_command)
+                                    subprocess.call(proc_pam)
+                                    og_name = "{0}/{1}.ch.{2}".format(decimated_path,archive_name,extension)
+                                    corrected_name = "{0}/{1}.{2}".format(decimated_path,archive_name,extension)
+                                    os.rename(og_name,corrected_name)
+                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                else:
+                                    logger.info("{0}.{1} exists".format(archive_name,extension))
+                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+
+
+                #UHF DATA
+                elif header_params["BW"] == "544.0":
+                    logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
+                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                        cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+                        for item in decimation_info:
+                            if not item == "all":
+                                #Scaling the scrunch factors to 1024 channels (only for UHF data)
+                                if item == "-t 32 -f 116 -p":
+                                    item = "-t 32 -f 128 -p"
+                                if item == "-T -f 29":
+                                    item = "-T -f 32 "
+                                if item == "-T -f 58":
+                                    item = "-T -f 64"
+
+                                extension = get_extension(item,False)
+                                if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                    pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                    logger.info("Producing {0} UHF archives".format(extension))
+                                    proc_pam = shlex.split(pam_command)
+                                    subprocess.call(proc_pam)
+                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                else:
+                                    logger.info("{0}.{1} exists".format(archive_name,extension))
+                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+
 
 
 
@@ -947,7 +1124,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info.values.tolist()
             print decimation_info
             psrname = archive_name.split("_")[0]
-            for num in range(0,len(decimation_info)):
+            for num in range(0,en(decimation_info)):
                 while 'None' in decimation_info[num]: decimation_info[num].remove('None')
                 for item in decimation_info[num]:
                     if not item == "all":
@@ -1018,35 +1195,55 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
 def fluxcalibrate(output_dir,cparams,psrname,logger):
 
-    logger.info("Flux calibrating the decimated data products of {0}".format(psrname))
-    pid = cparams["pid"]
-    decimated_path = os.path.join(str(output_dir),"decimated")
     obsheader_path = glob.glob(os.path.join(str(output_dir),"*obs.header"))[0]
-    obsname = decimated_path.split("/")[-4]
-    decimated_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
-    for archive in decimated_archives:
-        if pid == "TPA":
-            if "zapTp.ar" in archive:
-                TP_file = archive
-        if pid == "PTA":
-            if "t32p" in archive:
-                TP_file = archive
-    addfile = glob.glob(os.path.join(str(output_dir),"*add"))[0]
+    header_params = get_obsheadinfo(obsheader_path)
 
-    np.save(os.path.join(decimated_path,"decimatedlist"), decimated_archives)
-    decimated_list = os.path.join(decimated_path,"decimatedlist.npy")
+    if not header_params["BW"] == "544.0":
+        logger.info("Flux calibrating the decimated data products of {0}".format(psrname))
+        pid = cparams["pid"]
+        decimated_path = os.path.join(str(output_dir),"decimated")
+        obsname = decimated_path.split("/")[-4]
+        decimated_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
+        logger.info("Also adding the cleaned file for flux calibration")
+        cleaned_archive = glob.glob(os.path.join(os.path.join(str(output_dir),"cleaned"),"J*ar"))
+        
+        if len(cleaned_archive) > 1:
+            for clean_ar in cleaned_archive:
+                decimated_archives.append(clean_ar)
+        else:
+            decimated_archives.append(cleaned_archive[0])
+
+        for archive in decimated_archives:
+            if pid == "TPA":
+                if "zapTp.ar" in archive:
+                    TP_file = archive
+            if pid == "PTA":
+                if "t32p" in archive:
+                    TP_file = archive
+            if pid == "RelBin":
+                if "zap.Tp.ch.ar" in archive:
+                    TP_file = archive
+
+        addfile = glob.glob(os.path.join(str(output_dir),"*add"))[0]
+
+        np.save(os.path.join(decimated_path,"decimatedlist"), decimated_archives)
+        decimated_list = os.path.join(decimated_path,"decimatedlist.npy")
 
 
-    fluxcal_command = "python fluxcal.py -psrname {0} -obsname {1} -obsheader {2} -TPfile {3} -rawfile {4} -dec_path {5}".format(psrname,obsname,obsheader_path,TP_file,addfile,decimated_list)
+        fluxcal_command = "python fluxcal.py -psrname {0} -obsname {1} -obsheader {2} -TPfile {3} -rawfile {4} -dec_path {5}".format(psrname,obsname,obsheader_path,TP_file,addfile,decimated_list)
 
-    fluxcalproc = shlex.split(fluxcal_command)
-    subprocess.call(fluxcalproc)
+        fluxcalproc = shlex.split(fluxcal_command)
+        subprocess.call(fluxcalproc)
 
-    fluxcal_obs = glob.glob(os.path.join(decimated_path,"*.fluxcal"))
-    if len(fluxcal_obs) == len(decimated_archives):
-        logger.info("All decimated observations of {0}:{1} are flux calibrated".format(psrname,obsname))
+        fluxcal_obs = glob.glob(os.path.join(decimated_path,"*.fluxcal"))
+        if len(fluxcal_obs) == len(decimated_archives):
+            logger.info("All decimated observations of {0}:{1} are flux calibrated".format(psrname,obsname))
+        else:
+            logger.warning("Flux calibration failed")
+
     else:
-        logger.warning("Flux calibration failed")
+        logger.info("Flux calibration not implemented for UHF data")
+        pass
 
 
 

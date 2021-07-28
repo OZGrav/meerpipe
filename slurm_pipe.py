@@ -63,12 +63,12 @@ elif config_params["fluxcal"]:
     logger.info("Cleaned archives: {0}".format(cleaned_archives))
 
 if not config_params["fluxcal"]:
-    #Generating dynamic spectra from calibrated archives
-    #dynamic_spectra(cleaned_archives,output_dir,config_params,psrname,logger)
-
     #Checking flags and creating appropriate data products
     processed_archives = decimate_data(cleaned_archives,output_dir,config_params,logger)
-    logger.info("Processed archives: {0}".format(processed_archives))
+    #logger.info("Processed archives: {0}".format(processed_archives))
+
+    #Generating dynamic spectra from calibrated archives
+    dynamic_spectra(output_dir,config_params,psrname,logger)
 
     #Flux calibrating the decimated products
     fluxcalibrate(output_dir,config_params,psrname,logger)

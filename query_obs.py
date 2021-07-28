@@ -84,11 +84,11 @@ for pulsar in pulsar_list:
                                         f.write("{0} {1} {2} \n".format(psrname,obname,pid))
                             
                             else:
-                                print "{0} {1} {2}".format(psrname,obname,pid)
+                                #print "{0} {1}".format(psrname,obname)
                                 if args.outfile:
                                     fname = os.path.join(args.outfile,"{0}_{1}_{2}.list".format(psrname,args.utc1,args.utc2))
                                     f= open(fname,"a")
-                                    f.write("{0} {1} {2} \n".format(psrname,obname,pid))
+                                    f.write("{0} {1} \n".format(psrname,obname))
 
     else:
         obs_list = sorted(glob.glob(os.path.join(pulsar,"2*")))
@@ -107,5 +107,5 @@ for pulsar in pulsar_list:
                             if args.pid == pid:
                                 print "{0} {1} {2}".format(psrname,obname,pid)
                         else:
-                            print "{0} {1} {2}".format(psrname,obname,pid)
+                            print "{0} {1}".format(psrname,obname)
 
