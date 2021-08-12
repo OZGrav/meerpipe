@@ -22,7 +22,6 @@ import pptoas as ppt  # Import pptoas.py
 from pplib import write_TOAs  # and the function to write TOAs from pplib.py
 
 #Importing meerpipe functions
-from initialize import parse_config, get_outputinfo
 from wideband_utils import setup_logging
 
 #Argument parsing
@@ -35,7 +34,7 @@ args = parser.parse_args()
 
 #input_path = "/fred/oz005/timing_processed"
 #input_path = "/fred/oz005/users/aparthas/Meertime_Jitter/MeerPipe_SelectedPSRs"
-input_path = "/fred/oz005/users/aparthas/reprocessing_MK/PTA/"
+input_path = "/fred/oz005/users/aparthas/reprocessing_MK/RelBin/"
 #output_path = "/fred/oz005/users/aparthas/Meertime_Jitter/Jitter_top40"
 
 """

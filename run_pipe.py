@@ -202,6 +202,6 @@ if toggle:
 
                 
                 #Forming ToAs from the processed archives
-                generate_toas(processed_archives,output_dir,config_params,psrnames[obs_num],logger)
+                generate_toas(output_dir,config_params,psrnames[obs_num],logger)
                 logger.info ("##############")
 

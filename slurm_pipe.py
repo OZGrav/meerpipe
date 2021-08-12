@@ -74,6 +74,6 @@ if not config_params["fluxcal"]:
     fluxcalibrate(output_dir,config_params,psrname,logger)
 
     #Forming ToAs from the processed archives
-    generate_toas(processed_archives,output_dir,config_params,psrname,logger)
+    generate_toas(output_dir,config_params,psrname,logger)
 
     logger.info ("##############")

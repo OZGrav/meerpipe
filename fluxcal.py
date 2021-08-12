@@ -74,6 +74,96 @@ def get_glgb(psrname):
     
     return gl,gb
 
+def get_radec(psrname):
+    "Get RAJD and DECJD (in degrees) from psrname"
+    
+    info = 'psrcat -c "rajd decjd" {0} -all -X'.format(psrname)
+    arg = shlex.split(info)
+    proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
+    info = proc.stdout.readline().split()
+    rajd = float(info[0])
+    decjd = float(info[2])
+    
+    return rajd, decjd
+
+def get_tsky_updated(rajd,decjd):
+    "Get Tsky from Simon's code. Input arguments are RAJD and DECJD"
+    "Convert Tsky to Jy and subtact 3372mK as per SARAO specs"
+
+    #TSKY Default (mK)
+    tsky_default = 3400.0
+    
+    #open the fits file and get the data
+    # note that (I think) the data cover the entire 0-360 in gl and -90-90 in gb
+    # but that the pixels not covered by the survey are set to nan.
+    # WARNING: The survey only goes to +25 declination
+    # WARNING: The Galactic centre pixels are blanked out, I'm looking into it.
+    CHIPASS_PATH = "/fred/oz005/meerpipe/configuration_files/additional_info"
+    hdul = fits.open(os.path.join(CHIPASS_PATH,'CHIPASS_Equ.fits'))
+    data = hdul[0].data
+
+
+    # naxis1 is the number of pixels on axis1
+    # crval1 is the longitude of the crpix1 pixel
+    # cdelt1 is increment per pixel
+    # ditto for axis2
+    # note that crval1,crval2 = 0 in this file
+    naxis1 = hdul[0].header['NAXIS1']
+    crpix1 = hdul[0].header['CRPIX1']
+    cdelt1 = hdul[0].header['CDELT1']
+    crval1 = hdul[0].header['CRVAL1']
+    naxis2 = hdul[0].header['NAXIS2']
+    crpix2 = hdul[0].header['CRPIX2']
+    cdelt2 = hdul[0].header['CDELT2']
+    crval2 = hdul[0].header['CRVAL2']
+
+    # this is the pixel for the gl,gb
+    pix1 = (rajd-crval1)/cdelt1 + crpix1
+    pix2 = (decjd-crval2)/cdelt2 + crpix2        
+
+    # convert to integer
+    ipix1 = np.int(pix1+0.5)
+    ipix2 = np.int(pix2+0.5)
+
+    print('Pixel1: {0},Pixel2: {1}'.format(ipix1,ipix2))
+
+    # none of these should ever really happen
+    use_default_tsky = False
+    if ipix1 < 0:
+        print('ERROR:, x-pixel < 0! Using default tsky: {0}'.format(tsky_default))
+        use_default_tsky = True
+    if ipix1 > naxis1:
+        print('ERROR:, x-pixel > npix! Using default tsky: {0}'.format(tsky_default))
+        use_default_tsky = True
+    if ipix2 < 0:
+        print('ERROR:, y-pixel < 0! Using default tsky: {0}'.format(tsky_default))
+        use_default_tsky = True
+    if ipix2 > naxis2:
+        print('ERROR:, y-pixel > npix! Using default tsky: {0}'.format(tsky_default))
+        use_default_tsky = True
+
+    # get tsky for the appropriate pixel
+    if use_default_tsky == True:
+        tsky = tsky_default
+    else:
+        tsky = data[ipix2,ipix1]
+
+    # check that gl,gb is covered by the survey
+    if np.isnan(tsky):
+        print('ERROR:, Pixel blanked! Using default tsky: {0}'.format(tsky_default))
+        tsky = tsky_default
+        
+    print ('### Sky Temperature(mK) used for flux calibration: {0} ###'.format(tsky))
+        
+    #Converting to Jy and subtracting 3372mK as per SARAO specifications
+    print "Converting tsky (mK) to Jy and subtracting 3372mK (SARAO specs)"
+    tsky_jy = (tsky-3372.0)*0.019
+    print "### Tsky in Jy: {0} ###".format(tsky_jy)
+    
+    return tsky_jy
+
+
+
 def get_tsky(gl,gb):
     "Get Tsky from Simon's code. Input arguments are GL and GB"
     "Convert Tsky to Jy and subtact 3372mK as per SARAO specs"
@@ -175,7 +265,7 @@ def get_offrms(archive):
     Compute the offpulse rms for a profile at a particular frequency channel
     """
     print "Computing off-pulse rms.."
-    info = 'psrstat -c off:rms -l chan=0: -jTD -Q {0}'.format(archive)
+    info = 'psrstat -c off:rms -l chan=0: -jTDp -Q {0}'.format(archive)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
     
@@ -243,8 +333,11 @@ print "============================================"
 
 
 #Get Tsky in Jy
-gl,gb = get_glgb(psr_name)
-tsky_jy = get_tsky(gl,gb)
+#gl,gb = get_glgb(psr_name)
+#tsky_jy = get_tsky(gl,gb)
+
+rajd,decjd = get_radec(psr_name)
+tsky_jy = get_tsky_updated(rajd,decjd)
 
 #Get Ssys at 1390 MHz
 params = get_obsheadinfo(obsheader_path)
