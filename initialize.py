@@ -326,7 +326,8 @@ def create_structure(output_dir,cparams,psrname,logger):
     """
     output_path = cparams["output_path"]
     flags = cparams["flags"]
-    if 'overwrite' in cparams.keys():
+    #if 'overwrite' in cparams.keys(): - 2TO3
+    if 'overwrite' in list(cparams.keys()):
         overwrite_flag = str(cparams["overwrite"])
     else:
         overwrite_flag = "False"

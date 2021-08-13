@@ -40,7 +40,7 @@ if not args.chan_thresh and not args.subint_thresh:
             archive_name = archive_name_orig+'_zap_ch{0}_sub{1}.ar'.format(chanthresh,subintthresh)
             
             output_path = "/fred/oz005/users/aparthas/coastguard_characterize/2019-07-14-16:18:08/"
-            print archive_name
+            print (archive_name)
 
             if not os.path.exists(os.path.join(output_path,archive_name)):
             
@@ -89,7 +89,7 @@ else:
             archive_name = archive_name_orig+'_ch{0}_sub{1}.ar'.format(chan_thresh,subint_thresh)
             
             output_path = str(args.output_path)
-            print archive_name
+            print (archive_name)
 
             if not os.path.exists(os.path.join(output_path,archive_name)):
             

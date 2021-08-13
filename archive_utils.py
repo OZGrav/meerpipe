@@ -262,7 +262,7 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
                     if all(elem in sline for elem in reference_strings):
                         while "#" in sline: sline.remove("#")
                         reference_antenna = sline[-1]
-                        print reference_antenna
+                        print (reference_antenna)
                         if reference_antenna in header_params["ANTENNAE"]:
                             jones_file = item
                             bloop=True
@@ -646,9 +646,9 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                     nsub = sflag[1]
                 if sflag[2] == "f":
                     nchan = int(sflag[3])
-                print len(sflag)
+                print (len(sflag))
                 if len(sflag) > 4:
-                    print sflag
+                    print (sflag)
                     if sflag[4] == "P":
                         pol_scrunch = True
                         logger.info("Polarization scrunching enabled")
@@ -1151,7 +1151,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str)
             decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
             decimation_info = decimation_info.values.tolist()
-            print decimation_info
+            print (decimation_info)
             psrname = archive_name.split("_")[0]
             for num in range(0,en(decimation_info)):
                 while 'None' in decimation_info[num]: decimation_info[num].remove('None')

@@ -74,4 +74,4 @@ for pulsar in pulsar_dirs:
                 else:
                     print ("Total file does not exist")
 
-    print "##################################"
+    print ("##################################")

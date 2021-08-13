@@ -40,7 +40,7 @@ input_path = "/fred/oz005/users/aparthas/reprocessing_MK/RelBin/"
 """
 #Creating the wideband timing directory and setting up the logger
 wb_path = os.path.join(input_path,"Wideband_timing")
-print wb_path
+print (wb_path)
 if not os.path.exists(wb_path):
     os.makedirs(wb_path)
     print ("Wideband timing directory created")
@@ -52,7 +52,7 @@ pulsar_wbdir = os.path.join(output_path,"{0}/wideband".format(str(args.dirname))
 if args.overwrite:
     if os.path.exists(pulsar_wbdir):
         shutil.rmtree(pulsar_wbdir)
-        print "Overwritten: {0}".format(pulsar_wbdir)
+        print ("Overwritten: {0}".format(pulsar_wbdir))
 
 if not os.path.exists(pulsar_wbdir):
     os.makedirs(pulsar_wbdir)
@@ -149,8 +149,10 @@ if not os.path.exists(constant_archive):
     arch.dededisperse()
     arch.set_dispersion_measure(0.0)
     for subint in arch:
-        for ipol in xrange(arch.get_npol()):
-            for ichan in xrange(arch.get_nchan()):
+        #for ipol in xrange(arch.get_npol()): - 2TO3
+        for ipol in range(arch.get_npol()):
+            #for ichan in xrange(arch.get_nchan()): - 2TO3
+            for ichan in range(arch.get_nchan()):
                 subint.set_weight(ichan, 1.0)
                 arch_prof = subint.get_Profile(ipol, ichan)
                 arch_prof.get_amps()[:] = profile
