@@ -98,7 +98,8 @@ def get_tsky_updated(rajd,decjd):
     # but that the pixels not covered by the survey are set to nan.
     # WARNING: The survey only goes to +25 declination
     # WARNING: The Galactic centre pixels are blanked out, I'm looking into it.
-    CHIPASS_PATH = "/fred/oz005/meerpipe/configuration_files/additional_info"
+    #CHIPASS_PATH = "/fred/oz005/meerpipe/configuration_files/additional_info" - TEMP SWITCH FOR LOCAL TESTING - ADC
+    CHIPASS_PATH = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/configuration_files/additional_info"
     hdul = fits.open(os.path.join(CHIPASS_PATH,'CHIPASS_Equ.fits'))
     data = hdul[0].data
 
@@ -177,7 +178,8 @@ def get_tsky(gl,gb):
     # but that the pixels not covered by the survey are set to nan.
     # WARNING: The survey only goes to +25 declination
     # WARNING: The Galactic centre pixels are blanked out, I'm looking into it.
-    CHIPASS_PATH = "/fred/oz005/meerpipe/configuration_files/additional_info"
+    #CHIPASS_PATH = "/fred/oz005/meerpipe/configuration_files/additional_info" - TEMP SWITCH FOR LOCAL TESTING - ADC
+    CHIPASS_PATH = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/configuration_files/additional_info"
     hdul = fits.open(os.path.join(CHIPASS_PATH,'CHIPASS_Gal.fits'))
     data = hdul[0].data
 

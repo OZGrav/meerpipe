@@ -30,7 +30,8 @@ def run_meerpipe(psrname,utcname,default_pid,config_path):
 
     print ("Running meerpipe for {0},{1} as PID:{2}".format(psrname,utcname,pid))
 
-    meerpipe = "python /fred/oz005/meerpipe/run_pipe.py -cfile {2} -dirname {0} -utc {1} -verbose -pid {3} -slurm".format(psrname,utcname,config_path,pid)
+    #meerpipe = "python /fred/oz005/meerpipe/run_pipe.py -cfile {2} -dirname {0} -utc {1} -verbose -pid {3} -slurm".format(psrname,utcname,config_path,pid) - TEMP SWITCH FOR LOCAL TESTING - ADC
+    meerpipe = "python /fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/run_pipe.py -cfile {2} -dirname {0} -utc {1} -verbose -pid {3} -slurm".format(psrname,utcname,config_path,pid)
 
     proc_meerpipe = shlex.split(meerpipe)
     p_meerpipe = subprocess.Popen(proc_meerpipe)

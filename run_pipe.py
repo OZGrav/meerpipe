@@ -137,7 +137,8 @@ if toggle:
                 pickle.dump(config_params, pckl, protocol=pickle.HIGHEST_PROTOCOL)
             pckl.close()
             job_name = "{0}_{1}.bash".format(psrnames[obs_num],obs_num)
-            mysoft_path = "/fred/oz005/meerpipe"
+            #mysoft_path = "/fred/oz005/meerpipe" - TEMP SWITCH FOR LOCAL TESTING - ADC
+            mysoft_path = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe"
             with open(os.path.join(output_dir,str(job_name)),'w') as job_file:
                 job_file.write("#!/bin/bash \n")
                 job_file.write("#SBATCH --job-name={0}_{1} \n".format(psrnames[obs_num],obs_num))
