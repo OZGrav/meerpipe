@@ -24,7 +24,7 @@ import pickle
 #Importing pipeline utilities
 from initialize import parse_config, setup_logging
 
-from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives,calibrate_data, dynamic_spectra, fluxcalibrate
+from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives,calibrate_data, dynamic_spectra, fluxcalibrate, cleanup, generate_summary
 
 #Argument parsing
 parser = argparse.ArgumentParser(description="Run the MeerTime pipeline")
@@ -73,7 +73,13 @@ if not config_params["fluxcal"]:
     #Flux calibrating the decimated products
     fluxcalibrate(output_dir,config_params,psrname,logger)
 
+    #Cleaning
+    cleanup(output_dir,config_params,psrname,logger)
+
     #Forming ToAs from the processed archives
     generate_toas(output_dir,config_params,psrname,logger)
+
+    #Generate summary
+    generate_summary(output_dir,config_params,psrname,logger)
 
     logger.info ("##############")
