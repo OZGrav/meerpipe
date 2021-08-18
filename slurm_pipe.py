@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 """
 Code that runs the pipeline with the Slurm scheduler
 
