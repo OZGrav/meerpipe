@@ -1343,7 +1343,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
 def cleanup(output_dir, cparams, psrname, logger):
     #Routine to rename, remove and clean the final output files produced by the pipeline
 
-    print "Running a clean up"
+    print ("Running a clean up")
 
     output_dir = str(output_dir)
     
@@ -1354,12 +1354,12 @@ def cleanup(output_dir, cparams, psrname, logger):
         #Removing numpy and binary files
         for item in numpy_files:
             os.remove(item)
-        print "Removed numpy files"
+        print ("Removed numpy files")
         
     if len(config_params_binary) > 0:
         for item in config_params_binary:
             os.remove(item)
-        print "Removed binary files"
+        print ("Removed binary files")
 
   
     #Moving template to the timing directory
@@ -1380,14 +1380,14 @@ def cleanup(output_dir, cparams, psrname, logger):
             path,name = os.path.split(archive)
             sname = name.split("_")
             if sname[-1] == "zap.fluxcal":
-                print "Renaming .fluxcal to .fluxcal.ar (cleaned file)"
+                print ("Renaming .fluxcal to .fluxcal.ar (cleaned file)")
                 new_extension = "zap.fluxcal.ar"
                 new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
                 renamed_archive = os.path.join(cleaned_dir,new_name)
                 os.rename(archive,renamed_archive)
 
             if sname[-1] == "zap.ch.fluxcal":
-                print "Renaming .ch.fluxcal to .ch.fluxcal.ar (cleaned file)"
+                print ("Renaming .ch.fluxcal to .ch.fluxcal.ar (cleaned file)")
                 new_extension = "zap.ch.fluxcal.ar"
                 new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
                 renamed_archive = os.path.join(cleaned_dir,new_name)
@@ -1426,7 +1426,7 @@ def cleanup(output_dir, cparams, psrname, logger):
             renamed_archive = os.path.join(decimated_dir,new_name)
             os.rename(archive,renamed_archive)
 
-        print "Renamed all decimated archives"
+        print ("Renamed all decimated archives")
 
     numpy_decimated_file = glob.glob(os.path.join(decimated_dir,"*npy"))
     if len(numpy_decimated_file) > 0:
