@@ -1268,6 +1268,12 @@ def fluxcalibrate(output_dir,cparams,psrname,logger):
         archives_indecimated = glob.glob(os.path.join(decimated_path,"*.ar"))
         if len(fluxcal_obs) == len(archives_indecimated):
             logger.info("All decimated observations of {0}:{1} are flux calibrated".format(psrname,obsname))
+
+        pid = cparams["pid"]
+        if pid == "TPA" or pid == "PTA":
+            logger.info("Removing non-flux calibrated archives from the decimated directory..(change this in future)")
+            for archive in archives_indecimated:
+                os.remove(archive)
         else:
             logger.warning("Flux calibration failed")
 
@@ -1300,7 +1306,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
     logger.info("Ephemeris copied to the timing directory")
 
     decimated_path = os.path.join(str(output_dir),"decimated")
-    processed_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.fluxcal")))
+    processed_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
 
     if not template is None:
         for proc_archive in processed_archives:
@@ -1333,10 +1339,228 @@ def generate_toas(output_dir,cparams,psrname,logger):
         logger.error("Template does not exist or does not have 1024 phase bins. Skipping ToA generation.")
 
 
-    pid = cparams["pid"]
-    if pid == "TPA" or pid == "PTA" or pid == "RelBin":
-        logger.info("Removing non-flux calibrated archives from the decimated directory..(change this in future)")
-        decimated_path = os.path.join(str(output_dir),"decimated")
-        archives_indecimated = glob.glob(os.path.join(decimated_path,"J*.ar"))
-        for archive in archives_indecimated:
-            os.remove(archive)
+
+def cleanup(output_dir, cparams, psrname, logger):
+    #Routine to rename, remove and clean the final output files produced by the pipeline
+
+    print "Running a clean up"
+
+    output_dir = str(output_dir)
+    
+    numpy_files = sorted(glob.glob(os.path.join(output_dir,"*.npy")))
+    config_params_binary = glob.glob(os.path.join(output_dir,"config_params.p"))
+
+    if len(numpy_files) > 0:
+        #Removing numpy and binary files
+        for item in numpy_files:
+            os.remove(item)
+        print "Removed numpy files"
+        
+    if len(config_params_binary) > 0:
+        for item in config_params_binary:
+            os.remove(item)
+        print "Removed binary files"
+
+  
+    #Moving template to the timing directory
+    if os.path.exists(os.path.join(output_dir,"{0}.std".format(psrname))):
+        stdfile = glob.glob(os.path.join(output_dir,"{0}.std".format(psrname)))[0]
+        timing_dir = os.path.join(output_dir,"timing")
+        stdfile_timing = os.path.join(timing_dir,"{0}.std".format(psrname))
+        os.rename(stdfile,stdfile_timing)
+
+   
+    #Renaming cleaned and decimated archives
+    cleaned_dir = os.path.join(output_dir,"cleaned")
+    decimated_dir = os.path.join(output_dir,"decimated")
+
+    cleaned_files = sorted(glob.glob(os.path.join(cleaned_dir,"J*")))
+    if len(cleaned_files) > 0:
+        for archive in cleaned_files:
+            path,name = os.path.split(archive)
+            sname = name.split("_")
+            if sname[-1] == "zap.fluxcal":
+                print "Renaming .fluxcal to .fluxcal.ar (cleaned file)"
+                new_extension = "zap.fluxcal.ar"
+                new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
+                renamed_archive = os.path.join(cleaned_dir,new_name)
+                os.rename(archive,renamed_archive)
+
+            if sname[-1] == "zap.ch.fluxcal":
+                print "Renaming .ch.fluxcal to .ch.fluxcal.ar (cleaned file)"
+                new_extension = "zap.ch.fluxcal.ar"
+                new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
+                renamed_archive = os.path.join(cleaned_dir,new_name)
+                os.rename(archive,renamed_archive)
+
+
+    obsheader_path = glob.glob(os.path.join(str(output_dir),"*obs.header"))[0]
+    header_params = get_obsheadinfo(obsheader_path)
+
+    if not header_params["BW"] == "544.0":
+        decimated_files = sorted(glob.glob(os.path.join(decimated_dir,"J*fluxcal")))
+    else:
+        decimated_files = sorted(glob.glob(os.path.join(decimated_dir,"J*ar")))
+
+    if len(decimated_files) > 0:
+        for archive in decimated_files:
+            path,name = os.path.split(archive)
+            sname = name.split("_")
+
+            #Get archive properties
+            ar = ps.Archive_load(archive)
+            nchan = ar.get_nchan()
+            nsubint = ar.get_nsubint()
+            npol = ar.get_npol()
+
+            ext_nch = "{0}ch".format(nchan)
+            ext_nsubint = "{0}s".format(nsubint)
+            if npol == 4:
+                ext_pol = "IQUV"
+            else:
+                ext_pol = "I"
+
+
+            new_extension = "zap.{0}{1}{2}.fluxcal.ar".format(ext_nch,ext_nsubint,ext_pol)
+            new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
+            renamed_archive = os.path.join(decimated_dir,new_name)
+            os.rename(archive,renamed_archive)
+
+        print "Renamed all decimated archives"
+
+    numpy_decimated_file = glob.glob(os.path.join(decimated_dir,"*npy"))
+    if len(numpy_decimated_file) > 0:
+        os.remove(numpy_decimated_file[0])
+
+
+def generate_summary(output_dir, cparams, psrname, logger):
+    #Routine to create a summary file for each UTC - final stage of processing pipeline
+
+    output_dir = str(output_dir)
+
+    split_path = output_dir.split("/")
+    psrname = split_path[7]
+    utcname = split_path[8]
+    if str(split_path[10]) == "816":
+        rcvr = "UHF"
+    else:
+        rcvr = "L-band"
+
+    summaryfile = os.path.join(output_dir,"{0}_{1}.summary".format(psrname,utcname))
+    if os.path.exists(summaryfile):
+        os.remove(summaryfile)
+
+    with open(summaryfile,"w") as sfile:
+        sfile.write("{0} -- {1} -- {2} \n".format(psrname,utcname,rcvr))
+        
+        #Checking if meerpipe log file exists
+        mpipe_out = glob.glob(os.path.join(output_dir,"meerpipe_out*"))
+        if len(mpipe_out) > 0:
+            sfile.write("MeerPipeLog: CHECK \n")
+        else:
+            sfile.write("MeerPipeLog: FAIL \n")
+
+
+        #Checking if ADD file exists
+        add_file = glob.glob(os.path.join(output_dir,"*add"))
+        if len(add_file) > 0:
+            sfile.write("ADDfile: CHECK \n")
+        else:
+            sfile.write("ADDfile: FAIL \n")
+
+
+        #Checking if obs.header exists
+        obsheader = glob.glob(os.path.join(output_dir,"obs.header"))
+        if len(obsheader) > 0:
+            sfile.write("ObsHeader: CHECK \n")
+        else:
+            sfile.write("ObsHeader: FAIL \n")
+
+
+        #Checking if calibrated file exists
+        calibrated_path = os.path.join(output_dir,"calibrated")
+        calibfile = glob.glob(os.path.join(calibrated_path,"*.calib"))
+        if len(calibfile) > 0:
+            sfile.write("PolnCalibration: CHECK \n")
+        else:
+            sfile.write("PolnCalibration: FAIL \n")
+
+
+        #Checking if cleaned files exists
+        cleaned_path = os.path.join(output_dir,"cleaned")
+        cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
+        if len(cleanedfiles)  == 2:
+            sfile.write("CleanedFluxFiles: CHECK \n")
+        elif len(cleanedfiles) < 2:
+            sfile.write("CleanedFluxFiles: FAIL \n")
+
+        elif len(cleanedfiles) == 4:
+            sfile.write("CleanedChoppedFluxFile: CHECK \n")
+        elif len(cleanedfiles) < 4 and len(cleanedfiles) > 2:
+            sfile.write("CleanedChoppedFluxFile: FAIL \n")
+
+
+        #Checking if decimated files exist
+        decimated_path = os.path.join(output_dir,"decimated")
+        decimatedfiles = glob.glob(os.path.join(decimated_path,"J*.ar"))
+        if len(decimatedfiles) > 0:
+            sfile.write("DecimatedFiles: CHECK {0} \n".format(len(decimatedfiles)))
+        else:
+            sfile.write("DecimatedFiles: FAIL \n")
+
+
+        #Checking if scintillation files exist
+        scint_path = os.path.join(output_dir,"scintillation")
+        scintfiles = glob.glob(os.path.join(scint_path,"J*"))
+        if len(scintfiles) == 4:
+            sfile.write("ScintillationFiles: CHECK \n")
+        else:
+            sfile.write("ScintillationFiles: FAIL \n")
+
+
+        #Checking if timing files exist
+        timing_path = os.path.join(output_dir,"timing")
+        timingfiles = glob.glob(os.path.join(timing_path,"J*tim"))
+        parfile = glob.glob(os.path.join(timing_path,"{0}.par".format(psrname)))
+        stdfile = glob.glob(os.path.join(timing_path,"{0}.std".format(psrname)))
+
+        if len(timingfiles) == len(decimatedfiles):
+            sfile.write("TimingFiles: CHECK \n")
+        else:
+            sfile.write("TimingFiles: FAIL \n")
+
+        if len(parfile) > 0:
+            sfile.write("PARFile: CHECK \n")
+        else:
+            sfile.write("PARFile: FAIL \n")
+
+        if len(stdfile) > 0:
+            sfile.write("STDFile: CHECK \n")
+        else:
+            sfile.write("STDFile: FAIL \n")
+
+
+
+        sfile.write("=========== END ========= \n")
+        sfile.close()
+
+
+
+
+
+
+
+      
+
+
+
+
+
+
+
+
+
+
+
+
+    

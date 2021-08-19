@@ -77,12 +77,13 @@ def get_glgb(psrname):
 def get_radec(psrname):
     "Get RAJD and DECJD (in degrees) from psrname"
     
-    info = 'psrcat -c "rajd decjd" {0} -all -X'.format(psrname)
+    info = 'psrcat -c "rajd decjd" {0} -all -X -x -o short'.format(psrname)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
-    info = proc.stdout.readline().split()
+    info = proc.stdout.readline().rstrip().split()
+    print "RAJD:{0}, DECJD:{1}".format(info[0],info[1])
     rajd = float(info[0])
-    decjd = float(info[2])
+    decjd = float(info[1])
     
     return rajd, decjd
 
@@ -244,6 +245,7 @@ def get_Ssys(tsky_jy,Nant):
     SEFD_1390 = 390.0 #SEFD at 1390 MHz = 390 Jy (one dish)
     Ssys_1390 = (SEFD_1390+tsky_jy)/Nant
     print ("Ssys at 1390 MHz: {0}".format(Ssys_1390))
+    print ("Number of antennae: {0}".format(Nant))
     return Ssys_1390
 
 
@@ -259,6 +261,8 @@ def get_expectedRMS(info,ssys):
     rms = ssys/denom
     
     print ("Expected RMS: {0}".format(rms))
+    channel_bw = bw/nchan
+    print ("Tobs: {0}, nbin: {1}, nchan: {2}, Obs.BW: {3}, channelBW: {4}".format(tobs,nbin,nchan,bw,channel_bw))
     
     return rms
 

@@ -297,13 +297,13 @@ def get_outputinfo(cparams,logger):
                         all_archives.append(archives)
 
                         #Computing RAM requirements for this observation
-                        if float(info_params["target_duration"]) <= 600.0: #Less than 10 mins
+                        if float(info_params["target_duration"]) <= 900.0: #Less than 15 mins
                             reqram = "64g"
-                        elif float(info_params["target_duration"]) > 600.0 and float(info_params["target_duration"]) <= 1800.0: #10 mins to 30 mins
+                        elif float(info_params["target_duration"]) > 900.0 and float(info_params["target_duration"]) <= 3600.0: #15 mins to 1 hour
                             reqram = "128g"
-                        elif float(info_params["target_duration"]) > 1800.0 and float(info_params["target_duration"]) <= 7200.0: #30 mins to 2 hours
+                        elif float(info_params["target_duration"]) > 3600.0 and float(info_params["target_duration"]) <= 10800.0: #1 to 3 hours
                             reqram = "256g"
-                        elif float(info_params["target_duration"]) > 3600.0 and float(info_params["target_duration"]) < 18000.0: #2 hours to 5 hours
+                        elif float(info_params["target_duration"]) > 10800.0 and float(info_params["target_duration"]) < 18000.0: #3 hours to 5 hours
                             reqram = "512g"
                         elif float(info_params["target_duration"]) > 18000.0: #More than 5 hours
                             reqram = "768g"
