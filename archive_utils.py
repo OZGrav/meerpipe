@@ -262,7 +262,7 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
                     if all(elem in sline for elem in reference_strings):
                         while "#" in sline: sline.remove("#")
                         reference_antenna = sline[-1]
-                        print reference_antenna
+                        print (reference_antenna)
                         if reference_antenna in header_params["ANTENNAE"]:
                             jones_file = item
                             bloop=True
@@ -646,9 +646,9 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                     nsub = sflag[1]
                 if sflag[2] == "f":
                     nchan = int(sflag[3])
-                print len(sflag)
+                print (len(sflag))
                 if len(sflag) > 4:
-                    print sflag
+                    print (sflag)
                     if sflag[4] == "P":
                         pol_scrunch = True
                         logger.info("Polarization scrunching enabled")
@@ -823,10 +823,10 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                         for item in decimation_info:
                             if not item == "all":
                                 #Scaling the scrunch factors to 1024 channels (only for UHF data)
-                                if item == "-f 116 -T":
-                                    item = "-f 128 -T"
-                                if item == "-f 29 -T":
-                                    item = "-f 32 -T"
+                                if item == "-f 116 -T -S":
+                                    item = "-f 128 -T -S"
+                                if item == "-f 29 -T -S":
+                                    item = "-f 32 -T -S"
 
                                 extension = get_extension(item,False)
                                 if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
@@ -1151,7 +1151,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str)
             decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
             decimation_info = decimation_info.values.tolist()
-            print decimation_info
+            print (decimation_info)
             psrname = archive_name.split("_")[0]
             for num in range(0,en(decimation_info)):
                 while 'None' in decimation_info[num]: decimation_info[num].remove('None')
@@ -1343,7 +1343,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
 def cleanup(output_dir, cparams, psrname, logger):
     #Routine to rename, remove and clean the final output files produced by the pipeline
 
-    print "Running a clean up"
+    print ("Running a clean up")
 
     output_dir = str(output_dir)
     
@@ -1354,12 +1354,12 @@ def cleanup(output_dir, cparams, psrname, logger):
         #Removing numpy and binary files
         for item in numpy_files:
             os.remove(item)
-        print "Removed numpy files"
+        print ("Removed numpy files")
         
     if len(config_params_binary) > 0:
         for item in config_params_binary:
             os.remove(item)
-        print "Removed binary files"
+        print ("Removed binary files")
 
   
     #Moving template to the timing directory
@@ -1380,14 +1380,14 @@ def cleanup(output_dir, cparams, psrname, logger):
             path,name = os.path.split(archive)
             sname = name.split("_")
             if sname[-1] == "zap.fluxcal":
-                print "Renaming .fluxcal to .fluxcal.ar (cleaned file)"
+                print ("Renaming .fluxcal to .fluxcal.ar (cleaned file)")
                 new_extension = "zap.fluxcal.ar"
                 new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
                 renamed_archive = os.path.join(cleaned_dir,new_name)
                 os.rename(archive,renamed_archive)
 
             if sname[-1] == "zap.ch.fluxcal":
-                print "Renaming .ch.fluxcal to .ch.fluxcal.ar (cleaned file)"
+                print ("Renaming .ch.fluxcal to .ch.fluxcal.ar (cleaned file)")
                 new_extension = "zap.ch.fluxcal.ar"
                 new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
                 renamed_archive = os.path.join(cleaned_dir,new_name)
@@ -1413,20 +1413,43 @@ def cleanup(output_dir, cparams, psrname, logger):
             nsubint = ar.get_nsubint()
             npol = ar.get_npol()
 
-            ext_nch = "{0}ch".format(nchan)
-            ext_nsubint = "{0}s".format(nsubint)
+            if nchan == 1:
+                ext_nch = "F"
+            elif nchan > 1:
+                ext_nch = "{0}ch".format(nchan)
+
+            if nsubint == 1:
+                ext_nsubint = "T"
+            elif nsubint > 1:
+                ext_nsubint = "none"
+
             if npol == 4:
-                ext_pol = "IQUV"
+                ext_pol = "S"
             else:
                 ext_pol = "I"
 
 
-            new_extension = "zap.{0}{1}{2}.fluxcal.ar".format(ext_nch,ext_nsubint,ext_pol)
+            if not header_params["BW"] == "544.0":
+                if ext_nsubint == "T":
+                    new_extension = "zap.{0}{1}{2}.fluxcal.ar".format(ext_nch,ext_nsubint,ext_pol)
+                else:
+                    new_extension = "zap.{0}{1}.fluxcal.ar".format(ext_nch,ext_pol)
+ 
+            else:
+                if ext_nsubint == "T":
+                    new_extension = "zap.{0}{1}{2}.ar".format(ext_nch,ext_nsubint,ext_pol)
+                else:
+                    new_extension = "zap.{0}{1}.ar".format(ext_nch,ext_pol)
+ 
             new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
             renamed_archive = os.path.join(decimated_dir,new_name)
             os.rename(archive,renamed_archive)
 
-        print "Renamed all decimated archives"
+
+            if "TI" in new_name:
+                os.remove(renamed_archive)
+
+        print ("Renamed all decimated archives")
 
     numpy_decimated_file = glob.glob(os.path.join(decimated_dir,"*npy"))
     if len(numpy_decimated_file) > 0:
