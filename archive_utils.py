@@ -1437,14 +1437,20 @@ def generate_summary(output_dir, cparams, psrname, logger):
     #Routine to create a summary file for each UTC - final stage of processing pipeline
 
     output_dir = str(output_dir)
-
     split_path = output_dir.split("/")
-    psrname = split_path[7]
-    utcname = split_path[8]
-    if str(split_path[10]) == "816":
+    #psrname = split_path[7] - psrname is already defined in the function arguments
+    path_args = len(split_path)
+    utcname = split_path[path_args - 4] 
+    # Counting backwards seems more logical than counting forwards, given that the absolute path may change 
+    # depending on where results are being stored, while the lower directory structure remains constant.
+
+    # This will need modification once the S-Band receiver comes online. I have already made an appropriate start.
+    if str(split_path[path_args - 2]) == "816":
         rcvr = "UHF"
-    else:
+    elif str(split_path[path_args - 2]) == "1284":
         rcvr = "L-band"
+    else:
+        rcvr = "RCVR Unknown"
 
     summaryfile = os.path.join(output_dir,"{0}_{1}.summary".format(psrname,utcname))
     if os.path.exists(summaryfile):
