@@ -50,7 +50,7 @@ def get_freqlist(archive):
     """
     Get a list of frequencies 
     """
-    print "Getting frequency list.."
+    print ("Getting frequency list..")
     info = 'psrstat -c int:freq,nchan {0} -jTD -Q'.format(archive)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
@@ -81,7 +81,7 @@ def get_radec(psrname):
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
     info = proc.stdout.readline().rstrip().split()
-    print "RAJD:{0}, DECJD:{1}".format(info[0],info[1])
+    print ("RAJD:{0}, DECJD:{1}".format(info[0],info[1]))
     rajd = float(info[0])
     decjd = float(info[1])
     
@@ -157,9 +157,9 @@ def get_tsky_updated(rajd,decjd):
     print ('### Sky Temperature(mK) used for flux calibration: {0} ###'.format(tsky))
         
     #Converting to Jy and subtracting 3372mK as per SARAO specifications
-    print "Converting tsky (mK) to Jy and subtracting 3372mK (SARAO specs)"
+    print ("Converting tsky (mK) to Jy and subtracting 3372mK (SARAO specs)")
     tsky_jy = (tsky-3372.0)*0.019
-    print "### Tsky in Jy: {0} ###".format(tsky_jy)
+    print ("### Tsky in Jy: {0} ###".format(tsky_jy))
     
     return tsky_jy
 
@@ -228,9 +228,9 @@ def get_tsky(gl,gb):
         print ('Sky Temperature(mK): {0}'.format(tsky))
         
     #Converting to Jy and subtracting 3372mK as per SARAO specifications
-    print "Converting tsky to Jy and subtracting 3372mK (SARAO specs)"
+    print ("Converting tsky to Jy and subtracting 3372mK (SARAO specs)")
     tsky_jy = (tsky-3372.0)*0.019
-    print "Tsky in Jy: {0}".format(tsky_jy)
+    print ("Tsky in Jy: {0}".format(tsky_jy))
     
     return tsky_jy
 
@@ -242,8 +242,8 @@ def get_Ssys(tsky_jy,Nant):
     "Return Ssys at 1390 MHz"
     SEFD_1390 = 390.0 #SEFD at 1390 MHz = 390 Jy (one dish)
     Ssys_1390 = (SEFD_1390+tsky_jy)/Nant
-    print "Ssys at 1390 MHz: {0}".format(Ssys_1390)
-    print "Number of antennae: {0}".format(Nant)
+    print ("Ssys at 1390 MHz: {0}".format(Ssys_1390))
+    print ("Number of antennae: {0}".format(Nant))
     return Ssys_1390
 
 
@@ -258,9 +258,9 @@ def get_expectedRMS(info,ssys):
     denom = np.sqrt(2*bw/nchan * tobs/nbin)
     rms = ssys/denom
     
-    print "Expected RMS: {0}".format(rms)
+    print ("Expected RMS: {0}".format(rms))
     channel_bw = bw/nchan
-    print "Tobs: {0}, nbin: {1}, nchan: {2}, Obs.BW: {3}, channelBW: {4}".format(tobs,nbin,nchan,bw,channel_bw)
+    print ("Tobs: {0}, nbin: {1}, nchan: {2}, Obs.BW: {3}, channelBW: {4}".format(tobs,nbin,nchan,bw,channel_bw))
     
     return rms
 
@@ -268,7 +268,7 @@ def get_offrms(archive):
     """
     Compute the offpulse rms for a profile at a particular frequency channel
     """
-    print "Computing off-pulse rms.."
+    print ("Computing off-pulse rms..")
     info = 'psrstat -c off:rms -l chan=0: -jTDp -Q {0}'.format(archive)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
@@ -285,7 +285,7 @@ def get_offrms(archive):
 def get_median_offrms(offrms_freq_dictionary):
     "Select channels centered at 1390 MHz and compute the median of their off-pulse rms values"
     
-    print "Computing median of off-pulse rms values of channels centered at 1390 MHz.."
+    print ("Computing median of off-pulse rms values of channels centered at 1390 MHz..")
     selected_offrms = []
     selected_freqs = []
     for item in offrms_freq_dictionary.keys():
@@ -293,18 +293,18 @@ def get_median_offrms(offrms_freq_dictionary):
             selected_offrms.append(offrms_freq_dictionary[item])
             selected_freqs.append(item)
 
-    print "Number of channels used: {0}".format(len(selected_offrms))
-    print "Frequencies used: {0}".format(sorted(selected_freqs))
+    print ("Number of channels used: {0}".format(len(selected_offrms)))
+    print ("Frequencies used: {0}".format(sorted(selected_freqs)))
     
     median = np.median(selected_offrms)
-    print "Median off-pulse rms: {0}".format(median)
+    print ("Median off-pulse rms: {0}".format(median))
     return median
 
 def fluxcalibrate(archive,multiplier):
     "Applying the multiplier to all the decimated data products"
     
     
-    print "Flux calibrating {0}".format(os.path.split(archive)[-1])
+    print ("Flux calibrating {0}".format(os.path.split(archive)[-1]))
     info = "pam --mult {0} {1} -e fluxcal".format(multiplier,archive)
     arg = shlex.split(info)
     proc = subprocess.call(arg)
@@ -332,8 +332,8 @@ add_file = str(args.rawfile)
 decimated_products = np.load(args.decimated)
 
 
-print "Processing {0}:{1}".format(psr_name,obs_name)
-print "============================================"
+print ("Processing {0}:{1}".format(psr_name,obs_name))
+print ("============================================")
 
 
 #Get Tsky in Jy
@@ -352,7 +352,7 @@ ssys_1390 = get_Ssys(tsky_jy,nant)
 info_TP = get_info(TP_file)
 expected_rms = get_expectedRMS(info_TP,ssys_1390)
 
-print "============"
+print ("============")
 #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
 freqinfo = get_freqlist(add_file)
 freq_list = freqinfo[-2].split(",")
@@ -362,20 +362,20 @@ offrms_freq = dict(zip(freq_list,offrms_list))
 #Getting median rms of off-pulse rms values for ~20 channels centered at 1390 MHz
 observed_rms = get_median_offrms(offrms_freq)
 
-print "============"
+print ("============")
 #Multiplier
 multiplier = expected_rms/observed_rms
 
-print "Multiplier is: {0}".format(multiplier)
+print ("Multiplier is: {0}".format(multiplier))
 
-print "============"
+print ("============")
 #Flux calibrate all the decimated data products
 for archive in decimated_products:
     fluxcalibrate(archive,multiplier)
 
-print "============"
-print "Flux calibrated {0}:{1}".format(psr_name,obs_name)
+print ("============")
+print ("Flux calibrated {0}:{1}".format(psr_name,obs_name))
 #sys.exit()
 
 
-print "================================================="
+print ("=================================================")

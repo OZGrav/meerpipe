@@ -124,21 +124,21 @@ def run_meerpipe(utc):
     """
     Routine to execute meerpipe as a Slurm job on a particular UTC
     """
-    print "Running meerpipe for {0}".format(utc)
+    print ("Running meerpipe for {0}".format(utc))
     utcpath,utcname = os.path.split(utc)
     psrpath,psrname = os.path.split(utcpath)
     meerpipe = "python /fred/oz005/meerpipe/run_pipe.py -cfile {2} -dirname {0} -utc {1} -verbose -pid {3} -slurm".format(psrname,utcname,args.configfile,args.pid)
     proc_meerpipe = shlex.split(meerpipe)
     p_meerpipe = subprocess.Popen(proc_meerpipe)
     p_meerpipe.wait()
-    print "MeerPipe job submitted for PSR:{0}, UTC:{1}".format(psrname,utcname)
+    print ("MeerPipe job submitted for PSR:{0}, UTC:{1}".format(psrname,utcname))
 
 
 def run_meerwatch(slurm_path,psrname):
     """
     Routine to execute meerwatch as a Slurm job on a particular pulsar
     """
-    print "Running meerwatch for {0}".format(psrname)
+    print ("Running meerwatch for {0}".format(psrname))
     job_name = "{0}.bash".format(psrname)
     soft_path = "/fred/oz005/meerpipe/MeerWatch"
     with open(os.path.join(slurm_path,str(job_name)),'w') as job_file:
@@ -160,7 +160,7 @@ def run_meerwatch(slurm_path,psrname):
     args_sbatch = shlex.split(com_sbatch)
     proc_sbatch = subprocess.Popen(args_sbatch)
         
-    print "MeerWatch job submitted for PSR:{0}".format(psrname)
+    print ("MeerWatch job submitted for PSR:{0}".format(psrname))
 
 #--------------------------- Main -------------------------
 
@@ -217,18 +217,18 @@ if mw == False:
                                     pass
                                 else:
                                     if args.viewlist:
-                                        print "kronos_1", proc_obs
+                                        print ("kronos_1", proc_obs)
                                     if args.run:
                                         run_meerpipe(proc_obs)
                             else:
                                 if args.viewlist:
-                                    print "kronos_1", proc_obs
+                                    print ("kronos_1", proc_obs)
                                 if args.run:
                                     run_meerpipe(proc_obs)
 
                     else:
                         if args.viewlist: 
-                            print proc_obs
+                            print (proc_obs)
                         if args.run:
                             run_meerpipe(proc_obs)
 
@@ -244,18 +244,18 @@ if mw == False:
                                     pass
                                 else:
                                     if args.viewlist:
-                                        print "kronos_2", proc_obs
+                                        print ("kronos_2", proc_obs)
                                     if args.run:
                                         run_meerpipe(proc_obs)
                             else:
                                 if args.viewlist:
-                                    print "kronos_2", proc_obs
+                                    print ("kronos_2", proc_obs)
                                 if args.run:
                                     run_meerpipe(proc_obs)
 
                     else:
                         if args.viewlist: 
-                            print proc_obs
+                            print (proc_obs)
                         if args.run:
                             run_meerpipe(proc_obs)
 
@@ -271,20 +271,20 @@ if mw == False:
                                     pass
                                 else:
                                     if args.viewlist:
-                                        print "kronos_3", proc_obs
+                                        print ("kronos_3", proc_obs)
                                     if args.run:
                                         run_meerpipe(proc_obs)
 
                             else:
                                 if args.viewlist:
-                                    print "kronos_3", proc_obs
+                                    print ("kronos_3", proc_obs)
                                 if args.run:
                                     run_meerpipe(proc_obs)
 
 
                     else:
                         if args.viewlist: 
-                            print proc_obs
+                            print (proc_obs)
                         if args.run:
                             run_meerpipe(proc_obs)
 
@@ -300,20 +300,20 @@ if mw == False:
                                     pass
                                 else:
                                     if args.viewlist:
-                                        print "kronos_4", proc_obs
+                                        print ("kronos_4", proc_obs)
                                     if args.run:
                                         run_meerpipe(proc_obs)
                                         
                             else:
                                 if args.viewlist:
-                                    print "kronos_4", proc_obs
+                                    print ("kronos_4", proc_obs)
                                 if args.run:
                                     run_meerpipe(proc_obs)
 
 
                     else:
                         if args.viewlist: 
-                            print proc_obs
+                            print (proc_obs)
                         if args.run:
                             run_meerpipe(proc_obs)
                
@@ -342,7 +342,7 @@ if mw == True:
                 mw_utc = os.path.join(mw_path,"{0}/{1}".format(psrname,obsname))
                 if not os.path.exists(mw_utc):
                     if args.viewlist:
-                        print "MeerWatch running for {0}:{1}".format(psrname,obsname)
+                        print ("MeerWatch running for {0}:{1}".format(psrname,obsname))
                     if args.run:
                         run_meerwatch(mw_slurm,psrname)
 

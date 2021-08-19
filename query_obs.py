@@ -77,14 +77,14 @@ for pulsar in pulsar_list:
                             pid = get_pid_dir(header_params["PID"])
                             if args.pid:
                                 if args.pid == pid:
-                                    print "{0} {1} {2}".format(psrname,obname,pid)
+                                    print ("{0} {1} {2}".format(psrname,obname,pid))
                                     if args.outfile:
                                         fname = os.path.join(args.outfile,"{0}_{1}_{2}.list".format(psrname,args.utc1,args.utc2))
                                         f= open(fname,"a")
                                         f.write("{0} {1} {2} \n".format(psrname,obname,pid))
                             
                             else:
-                                #print "{0} {1}".format(psrname,obname)
+                                #print ("{0} {1}".format(psrname,obname))
                                 if args.outfile:
                                     fname = os.path.join(args.outfile,"{0}_{1}_{2}.list".format(psrname,args.utc1,args.utc2))
                                     f= open(fname,"a")
@@ -105,7 +105,7 @@ for pulsar in pulsar_list:
                         pid = get_pid_dir(header_params["PID"])
                         if args.pid:
                             if args.pid == pid:
-                                print "{0} {1} {2}".format(psrname,obname,pid)
+                                print ("{0} {1} {2}".format(psrname,obname,pid))
                         else:
-                            print "{0} {1}".format(psrname,obname)
+                            print ("{0} {1}".format(psrname,obname))
 

@@ -36,15 +36,15 @@ pulsar_dir = os.path.join(args.path,args.psr)
 psr_path,psr_name = os.path.split(pulsar_dir)
 
 if not args.obsdir:
-    print "Looping through all observations of {0}".format(psr_name)
+    print ("Looping through all observations of {0}".format(psr_name))
     observation_dirs = sorted(glob.glob(os.path.join(pulsar_dir,"*")))
 else:
-    print "Using {0} observations of {1}".format(args.obsdir,psr_name)
+    print ("Using {0} observations of {1}".format(args.obsdir,psr_name))
     observation_dirs = sorted(glob.glob(os.path.join(pulsar_dir,"{0}*".format(args.obsdir))))
     
 for observation in observation_dirs:
     obs_path,obs_name = os.path.split(observation)    
-    print "Processing {0}:{1}".format(psr_name,obs_name)
+    print ("Processing {0}:{1}".format(psr_name,obs_name))
     beam_dirs = sorted(glob.glob(os.path.join(observation,"*")))
     for beam in beam_dirs:
         beam_path,beam_name = os.path.split(beam)
@@ -67,15 +67,15 @@ for observation in observation_dirs:
                     decimated_products = glob.glob(os.path.join(files,"decimated/*.ar"))
                     cleaned_archive = glob.glob(os.path.join(files,"cleaned/*.ar"))[0]
                     decimated_products.append(cleaned_archive)
-                    print "Using {0} for fluxcal".format(os.path.split(add_file)[-1])
+                    print ("Using {0} for fluxcal".format(os.path.split(add_file)[-1]))
                 else:
-                    print "WARNING: No added file present. Observation may not have been processed well."
+                    print ("WARNING: No added file present. Observation may not have been processed well.")
                     continue
                     
                 
                 output_dir = os.path.join(files,"fluxcal_jobs")
                 if not os.path.exists(output_dir):
-                    print "Created fluxcal_job directory for {0}:{1}".format(psr_name,obs_name)
+                    print ("Created fluxcal_job directory for {0}:{1}".format(psr_name,obs_name))
                     os.makedirs(output_dir)
                     
                     
@@ -97,7 +97,7 @@ for observation in observation_dirs:
                     
                 job_file.close()
                 
-                print "Job script created for {0}:{1}".format(psr_name,obs_name)
+                print ("Job script created for {0}:{1}".format(psr_name,obs_name))
                 
                 print ("Deploying {0}".format(job_name))
                 com_sbatch = 'sbatch {0}'.format(os.path.join(output_dir,str(job_name)))
@@ -108,7 +108,7 @@ for observation in observation_dirs:
                 
                 
             else:
-                print "Flux calibrated files already exist for {0}:{1}".format(psr_name,obs_name)
+                print ("Flux calibrated files already exist for {0}:{1}".format(psr_name,obs_name))
                 
                                    
                                    
