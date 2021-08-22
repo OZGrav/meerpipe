@@ -13,7 +13,4 @@ module load scipy/1.3.0-python-3.6.4
 module load astropy/3.1.2-python-3.6.4
 
 # PSRDB SETUP
-setenv PSRDB_TOKEN `get_ingest_token.sh`
-
-# LOAD REQUIRED VIRTUAL ENVIRONMENT
-#source /home/acameron/virtual-envs/meerpipe_db/bin/activate.csh
+# setenv PSRDB_TOKEN `get_ingest_token.sh`
