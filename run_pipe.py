@@ -102,6 +102,9 @@ elif args.batch:
     config_params["batch"] = "batch"
     toggle=True
 
+# PSRDB MODIFICATION
+env_query = 'echo $PSRDB_TOKEN'
+PSRDB_TOKEN = str(subprocess.check_output(env_query, shell=True).decode("utf-8"))
 
 if toggle:
 
@@ -150,7 +153,9 @@ if toggle:
                 #job_file.write("#SBATCH --account=oz005 \n")
                 job_file.write("#SBATCH --mail-type=FAIL --mail-user=adityapartha3112@gmail.com \n")
                 job_file.write('cd {0} \n'.format(mysoft_path))
-                job_file.write("source env_setup.csh\n")
+                job_file.write("source env_setup.sh\n")
+                job_file.write("export PSRDB_TOKEN={0} \n".format(PSRDB_TOKEN))
+                #job_file.write("echo 'Token =' $PSRDB_TOKEN\n")
                 job_file.write("source /home/acameron/virtual-envs/meerpipe_db/bin/activate\n")
                 job_file.write("python slurm_pipe.py -obsname {0}archivelist.npy -outputdir {0}output.npy -psrname {0}psrname.npy".format(output_dir))
 

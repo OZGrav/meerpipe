@@ -1,6 +1,6 @@
-#!/bin/tcsh
+#!/bin/bash
 
-# CSH SCRIPT TO SET UP ENVIRONMENT FOR OPERATION OF MEERPIPE_DB
+# BASH SCRIPT TO SET UP ENVIRONMENT FOR OPERATION OF MEERPIPE_DB
 # LOAD REQUIRED MODULES
 
 module purge
@@ -13,7 +13,7 @@ module load scipy/1.3.0-python-3.6.4
 module load astropy/3.1.2-python-3.6.4
 
 # SET ENVIRONMENT VARIABLES
-setenv COAST_GUARD /fred/oz002/dreardon/MeerGuard3
-setenv COASTGUARD_CFG $COAST_GUARD/configurations
-setenv PATH $PATH\:$COAST_GUARD\:$COAST_GUARD/coast_guard
-setenv PYTHONPATH $PYTHONPATH\:$COAST_GUARD\:$COAST_GUARD/coast_guard
+export COAST_GUARD=/fred/oz002/dreardon/MeerGuard3
+export COASTGUARD_CFG=$COAST_GUARD/configurations
+export PATH=$PATH\:$COAST_GUARD\:$COAST_GUARD/coast_guard
+export PYTHONPATH=$PYTHONPATH\:$COAST_GUARD\:$COAST_GUARD/coast_guard
