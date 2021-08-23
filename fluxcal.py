@@ -81,7 +81,7 @@ def get_radec(psrname):
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
     info = proc.stdout.readline().rstrip().split()
-    print ("RAJD:{0}, DECJD:{1}".format(info[0],info[1]))
+    print ("RAJD:{0}, DECJD:{1}".format(str(info[0].decode("utf-8")),str(info[1].decode("utf-8"))))
     rajd = float(info[0])
     decjd = float(info[1])
     
