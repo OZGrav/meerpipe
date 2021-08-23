@@ -823,10 +823,10 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                         for item in decimation_info:
                             if not item == "all":
                                 #Scaling the scrunch factors to 1024 channels (only for UHF data)
-                                if item == "-f 116 -T":
-                                    item = "-f 128 -T"
-                                if item == "-f 29 -T":
-                                    item = "-f 32 -T"
+                                if item == "-f 116 -T -S":
+                                    item = "-f 128 -T -S"
+                                if item == "-f 29 -T -S":
+                                    item = "-f 32 -T -S"
 
                                 extension = get_extension(item,False)
                                 if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
@@ -1413,18 +1413,40 @@ def cleanup(output_dir, cparams, psrname, logger):
             nsubint = ar.get_nsubint()
             npol = ar.get_npol()
 
-            ext_nch = "{0}ch".format(nchan)
-            ext_nsubint = "{0}s".format(nsubint)
+            if nchan == 1:
+                ext_nch = "F"
+            elif nchan > 1:
+                ext_nch = "{0}ch".format(nchan)
+
+            if nsubint == 1:
+                ext_nsubint = "T"
+            elif nsubint > 1:
+                ext_nsubint = "none"
+
             if npol == 4:
-                ext_pol = "IQUV"
+                ext_pol = "S"
             else:
                 ext_pol = "I"
 
 
-            new_extension = "zap.{0}{1}{2}.fluxcal.ar".format(ext_nch,ext_nsubint,ext_pol)
+            if not header_params["BW"] == "544.0":
+                if ext_nsubint == "T":
+                    new_extension = "zap.{0}{1}{2}.fluxcal.ar".format(ext_nch,ext_nsubint,ext_pol)
+                else:
+                    new_extension = "zap.{0}{1}.fluxcal.ar".format(ext_nch,ext_pol)
+ 
+            else:
+                if ext_nsubint == "T":
+                    new_extension = "zap.{0}{1}{2}.ar".format(ext_nch,ext_nsubint,ext_pol)
+                else:
+                    new_extension = "zap.{0}{1}.ar".format(ext_nch,ext_pol)
+ 
             new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
             renamed_archive = os.path.join(decimated_dir,new_name)
             os.rename(archive,renamed_archive)
+
+            if "TI" in new_name:
+                os.remove(renamed_archive)
 
         print ("Renamed all decimated archives")
 

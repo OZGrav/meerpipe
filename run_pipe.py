@@ -145,7 +145,7 @@ if toggle:
                 job_file.write("#SBATCH --output={0}meerpipe_out_{1}_{2} \n".format(str(output_dir),psrnames[obs_num],obs_num))
                 job_file.write("#SBATCH --ntasks=1 \n")
                 job_file.write("#SBATCH --mem={0} \n".format(required_ram))
-                job_file.write("#SBATCH --time=08:00:00 \n")
+                job_file.write("#SBATCH --time=01:00:00 \n")
                 #job_file.write("#SBATCH --reservation=oz005_obs \n")
                 #job_file.write("#SBATCH --account=oz005 \n")
                 job_file.write("#SBATCH --mail-type=FAIL --mail-user=adityapartha3112@gmail.com \n")
