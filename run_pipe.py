@@ -4,7 +4,7 @@ MeerPipe: Processing pipeline for pulsar timing data.
 
 __author__ = "Aditya Parthasarathy"
 __copyright__ = "Copyright 2019, MeerTime"
-__credits__ = ["Renee Spiewak", "Daniel Reardon"]
+__credits__ = ["Renee Spiewak", "Daniel Reardon", "Andrew Cameron"]
 __license__ = "Public Domain"
 __version__ = "0.2"
 __maintainer__ = "Aditya Parthasarathy"
@@ -30,12 +30,18 @@ import glob
 import time
 import pandas as pd
 import pickle
+import json
 
 #Importing pipeline utilities
 from initialize import parse_config,create_structure,get_outputinfo, \
     setup_logging
 
 from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives, calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary
+
+from db_utils import utc_normal2psrdb,utc_psrdb2normal,utc_normal2date,utc_psrdb2date,utc_date2normal,utc_date2psrdb,pid_getofficial,pid_getshort,list_psrdb_query,write_obs_list,get_pulsar_id,get_observation_id,get_project_embargo,get_observation_project_code,get_project_id,job_state_code,create_psrdb_query,update_psrdb_query,get_node_name,psrdb_json_formatter
+
+# DB path
+PSRDB = "psrdb.py"
 
 #Argument parsing
 parser = argparse.ArgumentParser(description="Run MeerPipe")
@@ -47,6 +53,8 @@ parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm",action=
 parser.add_argument("-pid",dest="pid",help="Process pulsars as PID (Ignores original PID)")
 parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value. Automatic allocation is ignored")
 parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
+parser.add_argument("-db", dest="db_flag", help="Toggle PSRDB functionality (e.g. launching from / writing to PSRDB)", action="store_true")
+parser.add_argument("-db_pipe", dest="db_pipe", help="PSRDB ID of the pipeline being launched")
 args = parser.parse_args()
 
 #Parsing the configuration file
@@ -102,9 +110,9 @@ elif args.batch:
     config_params["batch"] = "batch"
     toggle=True
 
-# PSRDB MODIFICATION
-env_query = 'echo $PSRDB_TOKEN'
-PSRDB_TOKEN = str(subprocess.check_output(env_query, shell=True).decode("utf-8"))
+if (args.db_flag):
+    env_query = 'echo $PSRDB_TOKEN'
+    PSRDB_TOKEN = str(subprocess.check_output(env_query, shell=True).decode("utf-8"))
 
 if toggle:
 
@@ -129,6 +137,46 @@ if toggle:
 
         #Creating output directories for saving the data products
         create_structure(output_dir,config_params,psrnames[obs_num],logger)
+
+        # setup the DB processing entry to record results if the DB flag is set
+        if (args.db_flag):
+            
+            # - observation ID
+            split_path = output_info[obs_num].split("/")
+            path_args = len(split_path)
+            obs_utc = split_path[path_args - 4]
+            obs_id = get_observation_id(obs_utc, psrnames[obs_num])
+
+            # - pipeline ID
+            pipe_query = "%s pipelines list --id %s" % (PSRDB, args.db_pipe)
+            pipe_data = list_psrdb_query(pipe_query)
+            if (len(pipe_data) != 2):
+                raise Exception("Invalid pipeline ID (%s), not found in PSRDB table 'pipelines'" % (args.db_pipe))
+            
+            # - parent ID - id of PTUSE pipeline
+            parent_id = str(1)
+            
+            # - embargo_end - tied to obs_id
+            project_id = get_project_id(get_observation_project_code(obs_id))
+            embargo_period = get_project_embargo(project_id)
+            embargo_end = utc_date2psrdb(utc_normal2date(obs_utc) + embargo_period)
+
+            # - location - this is just output_info[obs_num]
+            
+            # - job_state
+            job_state = psrdb_json_formatter(job_state_code(0))
+
+            # - job_output - for the moment an empty JSON string
+            job_output = psrdb_json_formatter({})
+
+            # - results - for the moment an empty JSON string
+            results = psrdb_json_formatter({})
+
+            # information has been compiled - seed the database entry and record the resulting ID
+            proc_query = "%s processings create %s %s %s %s %s %s %s %s" % (PSRDB, obs_id, args.db_pipe, parent_id, embargo_end, output_info[obs_num], job_state, job_output, results)
+            print (proc_query)
+            proc_id = create_psrdb_query(proc_query)
+
         
         if args.slurm:
             logger.info("Creating and submitting pipeline jobs using Slurm")
@@ -151,11 +199,11 @@ if toggle:
                 job_file.write("#SBATCH --time=01:00:00 \n")
                 #job_file.write("#SBATCH --reservation=oz005_obs \n")
                 #job_file.write("#SBATCH --account=oz005 \n")
-                job_file.write("#SBATCH --mail-type=FAIL --mail-user=adityapartha3112@gmail.com \n")
+                job_file.write("#SBATCH --mail-type=FAIL --mail-user=adityapartha3112@gmail.com,andrewcameron@swin.edu.au \n")
                 job_file.write('cd {0} \n'.format(mysoft_path))
                 job_file.write("source env_setup.sh\n")
-                job_file.write("export PSRDB_TOKEN={0} \n".format(PSRDB_TOKEN))
-                #job_file.write("echo 'Token =' $PSRDB_TOKEN\n")
+                if (args.db_flag):
+                    job_file.write("export PSRDB_TOKEN={0} \n".format(PSRDB_TOKEN))
                 job_file.write("source /home/acameron/virtual-envs/meerpipe_db/bin/activate\n")
                 job_file.write("python slurm_pipe.py -obsname {0}archivelist.npy -outputdir {0}output.npy -psrname {0}psrname.npy".format(output_dir))
 
@@ -164,8 +212,25 @@ if toggle:
             logger.info("Deploying {0}".format(job_name))
             com_sbatch = 'sbatch {0}'.format(os.path.join(output_dir,str(job_name)))
             args_sbatch = shlex.split(com_sbatch)
-            proc_sbatch = subprocess.Popen(args_sbatch)
-            time.sleep(1)
+            proc_sbatch = subprocess.Popen(args_sbatch, stdout=subprocess.PIPE)
+
+            if (args.db_flag):
+                # wait for the job to be launched
+                proc_sbatch.wait()
+                # grab the submitted jobid
+                out = proc_sbatch.stdout.read().decode("utf-8")
+                jobid = out.split("\n")[0].split(" ")[3]
+
+                # update the processing entry in PSRDB
+                job_state = psrdb_json_formatter(job_state_code(1))
+                job_output = psrdb_json_formatter(json.dumps({"job_id": jobid, "job_node": "Unallocated"}))
+                proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, proc_id, obs_id, args.db_pipe, parent_id, output_info[obs_num], embargo_end, job_state, job_output, results)
+                print (proc_query)
+                update_psrdb_query(proc_query)
+            
+            else:
+                time.sleep(1)
+
             logger.info("{0} deployed.".format(job_name))
 
             """
@@ -176,6 +241,20 @@ if toggle:
             """
 
         else:
+            
+            # describes pipeline operation on a host node, not being routed to the OZSTAR HPC nodes
+
+            if (args.db_flag):
+
+                # update the processing entry in PSRDB
+                job_state = psrdb_json_formatter(job_state_code(2))
+                # get the name of the current node
+                node_name = get_node_name()
+                job_output = psrdb_json_formatter(json.dumps({"job_id": "N/A", "job_node": node_name}))
+                proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, proc_id, obs_id, args.db_pipe, parent_id, output_info[obs_num], embargo_end, job_state, job_output, results)
+                print (proc_query)
+                update_psrdb_query(proc_query)            
+
 
             #Add the archive files per observation directory into a single file
             added_archives = add_archives(archive_list[obs_num],output_dir,config_params,psrnames[obs_num],logger)
