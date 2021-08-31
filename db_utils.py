@@ -314,3 +314,47 @@ def get_node_name():
 def psrdb_json_formatter(json_str):
 
     return """'{0}'""".format(json_str)
+
+# returns the slurm job id of a processing entry from PSRDB
+def get_slurm_id(proc_id):
+
+    # set up the query
+    proc_query = "%s processings list --id %s" % (PSRDB, proc_id)
+    # run the query and get the resulting database
+    proc_data = list_psrdb_query(proc_query)
+
+    # there should only be two lines - the header and the unique observation entry
+    # confirm this and report back result
+    if (len(proc_data) == 2):
+        jobout_index = proc_data[0].index("jobOutput")
+        jobout_data = proc_data[1][jobout_index]
+    else:
+        raise Exception("Incorrect number of PSRDB entries reported in table 'processings' for ID %s" % (proc_id))
+
+    # now we need to interpret the JSON string and recall the JOB_ID
+    jobout_json = json.loads(jobout_data.replace("'", '"'))
+    
+    return jobout_json['job_id']
+
+
+# returns the job state of a processing entry from PSRDB
+def get_job_state(proc_id):
+
+    # set up the query
+    proc_query = "%s processings list --id %s" % (PSRDB, proc_id)
+    # run the query and get the resulting database
+    proc_data = list_psrdb_query(proc_query)
+
+    # there should only be two lines - the header and the unique observation entry
+    # confirm this and report back result
+    if (len(proc_data) == 2):
+        jobstate_index = proc_data[0].index("jobState")
+        jobstate_data = proc_data[1][jobstate_index]
+    else:
+        raise Exception("Incorrect number of PSRDB entries reported in table 'processings' for ID %s" % (proc_id))
+
+    # now we need to interpret the JSON string and recall the job state
+    jobstate_json = json.loads(jobstate_data.replace("'", '"'))
+
+    return jobstate_json['job_state']
+    

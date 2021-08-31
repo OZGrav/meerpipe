@@ -146,37 +146,32 @@ if toggle:
             path_args = len(split_path)
             obs_utc = split_path[path_args - 4]
             obs_id = get_observation_id(obs_utc, psrnames[obs_num])
-
             # - pipeline ID
             pipe_query = "%s pipelines list --id %s" % (PSRDB, args.db_pipe)
             pipe_data = list_psrdb_query(pipe_query)
             if (len(pipe_data) != 2):
                 raise Exception("Invalid pipeline ID (%s), not found in PSRDB table 'pipelines'" % (args.db_pipe))
-            
             # - parent ID - id of PTUSE pipeline
             parent_id = str(1)
-            
             # - embargo_end - tied to obs_id
             project_id = get_project_id(get_observation_project_code(obs_id))
             embargo_period = get_project_embargo(project_id)
             embargo_end = utc_date2psrdb(utc_normal2date(obs_utc) + embargo_period)
-
             # - location - this is just output_info[obs_num]
-            
             # - job_state
             job_state = psrdb_json_formatter(job_state_code(0))
-
             # - job_output - for the moment an empty JSON string
             job_output = psrdb_json_formatter({})
-
             # - results - for the moment an empty JSON string
             results = psrdb_json_formatter({})
 
             # information has been compiled - seed the database entry and record the resulting ID
             proc_query = "%s processings create %s %s %s %s %s %s %s %s" % (PSRDB, obs_id, args.db_pipe, parent_id, embargo_end, output_info[obs_num], job_state, job_output, results)
-            print (proc_query)
             proc_id = create_psrdb_query(proc_query)
-
+            logger.info("Created PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
+            
+            # seed the processing id into the config params
+            config_params["db_proc_id"] = proc_id
         
         if args.slurm:
             logger.info("Creating and submitting pipeline jobs using Slurm")
@@ -199,7 +194,8 @@ if toggle:
                 job_file.write("#SBATCH --time=01:00:00 \n")
                 #job_file.write("#SBATCH --reservation=oz005_obs \n")
                 #job_file.write("#SBATCH --account=oz005 \n")
-                job_file.write("#SBATCH --mail-type=FAIL --mail-user=adityapartha3112@gmail.com,andrewcameron@swin.edu.au \n")
+                #job_file.write("#SBATCH --mail-type=FAIL --mail-user=adityapartha3112@gmail.com,andrewcameron@swin.edu.au \n")
+                job_file.write("#SBATCH --mail-type=FAIL --mail-user=andrewcameron@swin.edu.au \n")
                 job_file.write('cd {0} \n'.format(mysoft_path))
                 job_file.write("source env_setup.sh\n")
                 if (args.db_flag):
@@ -225,9 +221,9 @@ if toggle:
                 job_state = psrdb_json_formatter(job_state_code(1))
                 job_output = psrdb_json_formatter(json.dumps({"job_id": jobid, "job_node": "Unallocated"}))
                 proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, proc_id, obs_id, args.db_pipe, parent_id, output_info[obs_num], embargo_end, job_state, job_output, results)
-                print (proc_query)
                 update_psrdb_query(proc_query)
-            
+                logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
+
             else:
                 time.sleep(1)
 
@@ -252,9 +248,8 @@ if toggle:
                 node_name = get_node_name()
                 job_output = psrdb_json_formatter(json.dumps({"job_id": "N/A", "job_node": node_name}))
                 proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, proc_id, obs_id, args.db_pipe, parent_id, output_info[obs_num], embargo_end, job_state, job_output, results)
-                print (proc_query)
                 update_psrdb_query(proc_query)            
-
+                logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
 
             #Add the archive files per observation directory into a single file
             added_archives = add_archives(archive_list[obs_num],output_dir,config_params,psrnames[obs_num],logger)
