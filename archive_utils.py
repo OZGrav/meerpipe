@@ -985,14 +985,16 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                     if not item == psrname:
                                         
                                         #Scaling the scrunch factors to 1024 channels (only for UHF data)
-                                        if item == "-f 58 -t 8":
-                                            item = "-f 64 -t 8"
-                                        if item == "-f 58 -t 8 -p":
-                                            item = "-f 64 -t 8 -p"
-                                        if item == "-f 116 -t 128 -p":
-                                            item = "-f 128 -t 128 -p"
-                                        if item == "-f 116 -t 32 -p":
-                                            item = "-f 128 -t 32 -p"
+                                        #if item == "-f 58 -t 8":
+                                        #    item = "-f 64 -t 8"
+                                        #if item == "-f 58 -t 8 -p":
+                                        #    item = "-f 64 -t 8 -p"
+                                        #if item == "-f 116 -t 128 -p":
+                                        #    item = "-f 128 -t 128 -p"
+                                        #if item == "-f 116 -t 32 -p":
+                                        #    item = "-f 128 -t 32 -p"
+                                        # making the above more general
+                                        item.replace('-f 58', '-f 64').replace('-f 116', '-f 128')
 
                                         extension = get_extension(item,False)
                                         if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
@@ -1026,7 +1028,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             archive_name = archive_name.split('.')[0]
 
             #decimation_info = np.genfromtxt(cparams["decimation_products"],delimiter=", ",dtype=str)
-            decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str, header=None)
+            decimation_info = pd.read_csv(cparams["decimation_products"], sep=", ", dtype=str, header=None, engine='python')
             decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
             decimation_info = decimation_info.values.tolist()
             decimation_info = decimation_info[0]
@@ -1222,19 +1224,25 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
     return processed_archives
 
 
-def fluxcalibrate(output_dir,cparams,psrname,logger):
+def fluxcalibrate(output_dir, cparams, psrname, logger):
 
-    obsheader_path = glob.glob(os.path.join(str(output_dir),"*obs.header"))[0]
+    obsheader_path = glob.glob(os.path.join(str(output_dir), "*obs.header"))[0]
     header_params = get_obsheadinfo(obsheader_path)
+    parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{}*par".format(psrname)))
+    if len(parfile) == 0:
+        logger.warning("No par file found for "+psrname)
+        parfile = None
+    else:
+        parfile = parfile[0]
 
     if not header_params["BW"] == "544.0":
         logger.info("Flux calibrating the decimated data products of {0}".format(psrname))
         pid = cparams["pid"]
-        decimated_path = os.path.join(str(output_dir),"decimated")
+        decimated_path = os.path.join(str(output_dir), "decimated")
         obsname = decimated_path.split("/")[-4]
-        decimated_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
+        decimated_archives = sorted(glob.glob(os.path.join(decimated_path, "J*.ar")))
         logger.info("Also adding the cleaned file for flux calibration")
-        cleaned_archive = glob.glob(os.path.join(os.path.join(str(output_dir),"cleaned"),"J*ar"))
+        cleaned_archive = glob.glob(os.path.join(str(output_dir), "cleaned", "J*ar"))
         
         if len(cleaned_archive) > 1:
             for clean_ar in cleaned_archive:
@@ -1243,37 +1251,36 @@ def fluxcalibrate(output_dir,cparams,psrname,logger):
             decimated_archives.append(cleaned_archive[0])
 
         for archive in decimated_archives:
-            if pid == "TPA":
-                if "Tp" in archive:
-                    TP_file = archive
-            if pid == "PTA":
-                if "t32p" in archive:
-                    TP_file = archive
-            if pid == "RelBin":
-                if "Tp" in archive:
-                    TP_file = archive
+            if pid == "TPA" and "Tp" in archive:
+                TP_file = archive
+            elif pid == "PTA" and "t32p" in archive:
+                TP_file = archive
+            elif pid == "RelBin" and "Tp" in archive:
+                TP_file = archive
 
-        addfile = glob.glob(os.path.join(str(output_dir),"*add"))[0]
+        addfile = glob.glob(os.path.join(str(output_dir), "*add"))[0]
 
-        np.save(os.path.join(decimated_path,"decimatedlist"), decimated_archives)
-        decimated_list = os.path.join(decimated_path,"decimatedlist.npy")
+        np.save(os.path.join(decimated_path, "decimatedlist"), decimated_archives)
+        decimated_list = os.path.join(decimated_path, "decimatedlist.npy")
+        par_opt = " -parfile "+parfile if parfile is not None else ""
 
-
-        fluxcal_command = "python fluxcal.py -psrname {0} -obsname {1} -obsheader {2} -TPfile {3} -rawfile {4} -dec_path {5}".format(psrname,obsname,obsheader_path,TP_file,addfile,decimated_list)
+        fluxcal_command = "python fluxcal.py -psrname {0} -obsname {1} -obsheader {2} -TPfile {3} -rawfile {4} -dec_path {5}{6}".format(psrname, obsname, obsheader_path, TP_file, addfile, decimated_list, par_opt)
 
         fluxcalproc = shlex.split(fluxcal_command)
-        subprocess.call(fluxcalproc)
+        try:
+            subprocess.check_call(fluxcalproc)
+        except subprocess.CalledProcessError:
+            logger.error("fluxcal failed")
 
-        fluxcal_obs = glob.glob(os.path.join(decimated_path,"*.fluxcal"))
-        archives_indecimated = glob.glob(os.path.join(decimated_path,"*.ar"))
+        fluxcal_obs = glob.glob(os.path.join(decimated_path, "*.fluxcal"))
+        archives_indecimated = glob.glob(os.path.join(decimated_path, "*.ar"))
         if len(fluxcal_obs) == len(archives_indecimated):
-            logger.info("All decimated observations of {0}:{1} are flux calibrated".format(psrname,obsname))
+            logger.info("All decimated observations of {0}:{1} are flux calibrated".format(psrname, obsname))
 
-        pid = cparams["pid"]
-        if pid == "TPA" or pid == "PTA":
-            logger.info("Removing non-flux calibrated archives from the decimated directory..(change this in future)")
-            for archive in archives_indecimated:
-                os.remove(archive)
+            if pid == "TPA" or pid == "PTA":
+                logger.info("Removing non-flux calibrated archives from the decimated directory...") #change this in future
+                for archive in archives_indecimated:
+                    os.remove(archive)
         else:
             logger.warning("Flux calibration failed")
 
@@ -1343,7 +1350,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
 def cleanup(output_dir, cparams, psrname, logger):
     #Routine to rename, remove and clean the final output files produced by the pipeline
 
-    print ("Running a clean up")
+    logger.info("Running a clean up")
 
     output_dir = str(output_dir)
     
@@ -1354,12 +1361,12 @@ def cleanup(output_dir, cparams, psrname, logger):
         #Removing numpy and binary files
         for item in numpy_files:
             os.remove(item)
-        print ("Removed numpy files")
+        logger.info("Removed numpy files")
         
     if len(config_params_binary) > 0:
         for item in config_params_binary:
             os.remove(item)
-        print ("Removed binary files")
+        logger.info("Removed binary files")
 
   
     #Moving template to the timing directory
@@ -1380,14 +1387,14 @@ def cleanup(output_dir, cparams, psrname, logger):
             path,name = os.path.split(archive)
             sname = name.split("_")
             if sname[-1] == "zap.fluxcal":
-                print ("Renaming .fluxcal to .fluxcal.ar (cleaned file)")
+                logger.info("Renaming .fluxcal to .fluxcal.ar (cleaned file)")
                 new_extension = "zap.fluxcal.ar"
                 new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
                 renamed_archive = os.path.join(cleaned_dir,new_name)
                 os.rename(archive,renamed_archive)
 
             if sname[-1] == "zap.ch.fluxcal":
-                print ("Renaming .ch.fluxcal to .ch.fluxcal.ar (cleaned file)")
+                logger.info("Renaming .ch.fluxcal to .ch.fluxcal.ar (cleaned file)")
                 new_extension = "zap.ch.fluxcal.ar"
                 new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
                 renamed_archive = os.path.join(cleaned_dir,new_name)
@@ -1449,7 +1456,7 @@ def cleanup(output_dir, cparams, psrname, logger):
             if "TI" in new_name:
                 os.remove(renamed_archive)
 
-        print ("Renamed all decimated archives")
+        logger.info("Renamed all decimated archives")
 
     numpy_decimated_file = glob.glob(os.path.join(decimated_dir,"*npy"))
     if len(numpy_decimated_file) > 0:

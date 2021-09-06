@@ -32,10 +32,10 @@ import pandas as pd
 import pickle
 
 #Importing pipeline utilities
-from initialize import parse_config,create_structure,get_outputinfo, \
-    setup_logging
+from initialize import (parse_config, create_structure, get_outputinfo, setup_logging)
 
-from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives, calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary
+from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives,
+                           calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary)
 
 #Argument parsing
 parser = argparse.ArgumentParser(description="Run MeerPipe")
@@ -47,10 +47,12 @@ parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm",action=
 parser.add_argument("-pid",dest="pid",help="Process pulsars as PID (Ignores original PID)")
 parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value. Automatic allocation is ignored")
 parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
+parser.add_argument("-softpath", help="Change software path", default="/fred/oz005/meerpipe/")
 args = parser.parse_args()
 
 #Parsing the configuration file
 config_params = parse_config(str(args.configfile))
+mysoft_path = (args.softpath)
 
 #Checking validity of the input and output paths
 if not os.path.exists(config_params["input_path"]):
@@ -125,19 +127,24 @@ if toggle:
             logger.warning("Forcing RAM to be {0}".format(required_ram))
 
         #Creating output directories for saving the data products
-        create_structure(output_dir,config_params,psrnames[obs_num],logger)
+        create_structure(output_dir, config_params, psrnames[obs_num], logger)
         
         if args.slurm:
             logger.info("Creating and submitting pipeline jobs using Slurm")
-            logger.info("Observation length is {0}. Using RAM of {1} to process".format(obstime,required_ram))
-            np.save(os.path.join(output_dir,"archivelist"),archive_list[obs_num])
-            np.save(os.path.join(output_dir,"output"),output_info[obs_num])
-            np.save(os.path.join(output_dir,"psrname"),psrnames[obs_num])
+            logger.info("Observation length is {0}. Using RAM of {1} to process"
+                        .format(obstime, required_ram))
+            np.save(os.path.join(output_dir,"archivelist"), archive_list[obs_num])
+            np.save(os.path.join(output_dir,"output"), output_info[obs_num])
+            np.save(os.path.join(output_dir,"psrname"), psrnames[obs_num])
             with open(os.path.join(output_dir,"config_params.p"), 'wb') as pckl:
                 pickle.dump(config_params, pckl, protocol=pickle.HIGHEST_PROTOCOL)
             pckl.close()
             job_name = "{0}_{1}.bash".format(psrnames[obs_num],obs_num)
-            mysoft_path = "/fred/oz005/meerpipe"
+            if 'email' in config_params:
+                user_email = config_params['email']
+            else:
+                user_email = "adityapartha3112@gmail.com"
+            
             with open(os.path.join(output_dir,str(job_name)),'w') as job_file:
                 job_file.write("#!/bin/bash \n")
                 job_file.write("#SBATCH --job-name={0}_{1} \n".format(psrnames[obs_num],obs_num))
@@ -147,7 +154,7 @@ if toggle:
                 job_file.write("#SBATCH --time=01:00:00 \n")
                 #job_file.write("#SBATCH --reservation=oz005_obs \n")
                 #job_file.write("#SBATCH --account=oz005 \n")
-                job_file.write("#SBATCH --mail-type=FAIL --mail-user=adityapartha3112@gmail.com \n")
+                job_file.write("#SBATCH --mail-type=FAIL --mail-user={} \n".format(user_email))
                 job_file.write('cd {0} \n'.format(mysoft_path))
                 job_file.write("python slurm_pipe.py -obsname {0}archivelist.npy -outputdir {0}output.npy -psrname {0}psrname.npy".format(output_dir))
 
