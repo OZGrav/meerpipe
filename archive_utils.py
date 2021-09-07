@@ -214,7 +214,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 args_rm = shlex.split(cat_rm)
                 proc_rm = subprocess.Popen(args_rm, stdout=subprocess.PIPE)
                 rm_out = proc_rm.stdout.readline().split()[0]
-                if rm_out == "*" or rm_out == " ":
+                if rm_out == "*" or rm_out == " " or rm_out == "WARNING:":
                     logger.info("RM not found in psrcat and in file. Not applying")
                     pass
                 else:
@@ -568,16 +568,17 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
                 logger.info("Creating dynamic spectra plots using scintools")
                 dynspec_file = glob.glob(os.path.join(ds_path,"{0}".format(dynspec_name)))[0]
 
-                dyn = Dynspec(dynspec_file, process=False, verbose=False)
-                dyn.plot_dyn(filename=os.path.join(ds_path,"{0}.png".format(dynspec_name)),display=False,title="{0}".format(dynspec_name))
-                logger.info("Refilling")
-                dyn.trim_edges()
-                dyn.refill(linear=False)
-                #logger.info("Secondary spectra")
-                #dyn.cut_dyn(tcuts=0, fcuts=7, plot=True, filename=os.path.join(ds_path,"{0}_subband.png".format(archive_name)))
+                try:
+                    dyn = Dynspec(dynspec_file, process=False, verbose=False)
+                    dyn.plot_dyn(filename=os.path.join(ds_path,"{0}.png".format(dynspec_name)),display=False,title="{0}".format(dynspec_name))
+                    logger.info("Refilling")
+                    dyn.trim_edges()
+                    dyn.refill(linear=False)
+                    #logger.info("Secondary spectra")
+                    #dyn.cut_dyn(tcuts=0, fcuts=7, plot=True, filename=os.path.join(ds_path,"{0}_subband.png".format(archive_name)))
 
-               # except:
-               #     logger.info("Scintools failed. Dyanmic spectra couldn't be created")
+                except:
+                    logger.info("Scintools failed. Dyanmic spectra couldn't be created")
                 
             else:
                 logger.info("Dynamic spectra already exists")
