@@ -1481,11 +1481,12 @@ def generate_summary(output_dir, cparams, psrname, logger):
     with open(summaryfile,"w") as sfile:
         sfile.write("{0} -- {1} -- {2} \n".format(psrname,utcname,rcvr))
         
-        #Checking if meerpipe log file exists
+        #Checking if meerpipe log file exists (only if SLURM launched)
         mpipe_out = glob.glob(os.path.join(output_dir,"meerpipe_out*"))
+        bfile = glob.glob(os.path.join(output_dir,"*.bash"))
         if len(mpipe_out) > 0:
             sfile.write("MeerPipeLog: CHECK \n")
-        else:
+        elif len(bfile) > 0:
             sfile.write("MeerPipeLog: FAIL \n")
 
 
@@ -1572,23 +1573,49 @@ def generate_summary(output_dir, cparams, psrname, logger):
         sfile.write("=========== END ========= \n")
         sfile.close()
 
+# routine to check the pass/fail status of a processing's summary file
+# returns True or False
+def check_summary(output_dir, logger):
 
+    output_dir = str(output_dir)
 
+    # get the summary file and check that there is only one
+    summaryfile = glob.glob(os.path.join(output_dir,"*.summary"))
+    if (len(summaryfile) != 1):
+        raise Exception("Checking for summary file in %s\nInvalid number of files (%d) found." % (output_dir, len(summaryfile)))
 
+    # check contents of file - depends on the behaviour of generate_summary()
+    # currently, number of lines with "CHECK" should be two less than the total linecount (header and footer)
+    passString = "CHECK"
+    failString = "FAIL"
 
+    summaryfile_handle = open(summaryfile[0], 'r')
+    sumLines = summaryfile_handle.readlines()
 
+    lines_total = 0
+    lines_pass = 0
+    lines_fail = 0
 
-      
+    for line in sumLines:
 
+        lines_total += 1
+        
+        if passString in line:
+            lines_pass += 1
+        if failString in line:
+            lines_fail += 1
 
+    if (lines_pass == lines_total - 2) and (lines_fail == 0):
+        retval = True
+    else:
+        retval = False
 
+    return retval
 
+# routine to check if a 'fluxcal' run of the pipeline has produced the correct output
+# returns True/False
+#def check_fluxcal(output_dir,logger):
 
-
-
-
-
-
-
+#    output_dir = str(output_dir)
 
     

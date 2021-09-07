@@ -36,7 +36,7 @@ import json
 from initialize import parse_config,create_structure,get_outputinfo, \
     setup_logging
 
-from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives, calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary
+from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives, calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary, check_summary
 
 from db_utils import utc_normal2psrdb,utc_psrdb2normal,utc_normal2date,utc_psrdb2date,utc_date2normal,utc_date2psrdb,pid_getofficial,pid_getshort,list_psrdb_query,write_obs_list,get_pulsar_id,get_observation_id,get_project_embargo,get_observation_project_code,get_project_id,job_state_code,create_psrdb_query,update_psrdb_query,get_node_name,psrdb_json_formatter
 
@@ -251,6 +251,12 @@ if toggle:
                 update_psrdb_query(proc_query)            
                 logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
 
+            #####
+
+            # Each of the following functions may make its own modifications to the relevant PSRDB processings entry, or may create linked entries in other tables
+
+            #####
+
             #Add the archive files per observation directory into a single file
             added_archives = add_archives(archive_list[obs_num],output_dir,config_params,psrnames[obs_num],logger)
             logger.info("Added archive: {0}".format(added_archives))
@@ -293,3 +299,32 @@ if toggle:
 
                 logger.info ("##############")
 
+            #####
+
+            # check for success condition to finalise the entry in the PSRDB processings table
+
+            if (args.db_flag):
+
+                # recall the current state of processing
+                proc_query = "%s -l processings list --id %s" % (PSRDB, proc_id)
+                proc_data = list_psrdb_query(proc_query)
+
+                # specify custom success conditions for various pipeline states
+
+                if (config_params["fluxcal"]):
+
+                    # TODO: COMPLETE THIS LATER
+                    job_state = psrdb_json_formatter(job_state_code(5))
+
+                elif not (config_params["fluxcal"]):
+
+                    # check the generated summary file for pass/fail status
+                    if (check_summary(output_dir, logger)):
+                        job_state = psrdb_json_formatter(job_state_code(3))
+                    else:
+                        job_state = psrdb_json_formatter(job_state_code(4))
+
+                # and now update the entry in processings
+                proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, proc_id, proc_data[1][1], proc_data[1][2], proc_data[1][3], proc_data[1][4], proc_data[1][5], job_state, psrdb_json_formatter(proc_data[1][7].replace("'", '"')), psrdb_json_formatter(proc_data[1][8].replace("'", '"')))
+                update_psrdb_query(proc_query)
+                logger.info("Updated PSRDB entry in 'processings' table with final job state, ID = {0}".format(proc_id))
