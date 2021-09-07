@@ -121,7 +121,6 @@ def job_state_code(jid):
     elif jid == 4:
         state = "Failure" # job has finished unsuccessfully
 
-    # until AJ fixes the issue between the CLI and the underlying PSRDB, we have to output this as a JSON
     #return state
     return json.dumps({"job_state": state})
 

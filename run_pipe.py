@@ -166,7 +166,7 @@ if toggle:
             results = psrdb_json_formatter({})
 
             # information has been compiled - seed the database entry and record the resulting ID
-            proc_query = "%s processings create %s %s %s %s %s %s %s %s" % (PSRDB, obs_id, args.db_pipe, parent_id, embargo_end, output_info[obs_num], job_state, job_output, results)
+            proc_query = "%s processings create %s %s %s %s %s %s %s %s" % (PSRDB, obs_id, args.db_pipe, parent_id, output_info[obs_num], embargo_end, job_state, job_output, results)
             proc_id = create_psrdb_query(proc_query)
             logger.info("Created PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
             

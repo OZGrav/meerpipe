@@ -51,6 +51,8 @@ fp.close()
 
 logger=setup_logging(config_params["output_path"],True,False)
 
+#####
+
 # update PSRDB entry now that job is running - but check to make sure there's no conflict first
 if (config_params["db_proc_id"]):
     pendflag = True
@@ -73,6 +75,8 @@ if (config_params["db_proc_id"]):
     proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, config_params["db_proc_id"], proc_data[1][1], proc_data[1][2], proc_data[1][3], proc_data[1][4], proc_data[1][5], job_state, job_output, proc_data[1][8])
     update_psrdb_query(proc_query)
     logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(config_params["db_proc_id"]))
+
+#####
 
 #Add the archive files per observation directory into a single file
 added_archives = add_archives(archive_list,output_dir,config_params,psrname,logger)
