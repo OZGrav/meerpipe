@@ -54,7 +54,7 @@ logger=setup_logging(config_params["output_path"],True,False)
 #####
 
 # update PSRDB entry now that job is running - but check to make sure there's no conflict first
-if (config_params["db_proc_id"]):
+if (config_params["db_flag"]):
     pendflag = True
     dest_state = json.loads(job_state_code(1))['job_state']
     while (pendflag):
@@ -126,7 +126,7 @@ if not config_params["fluxcal"]:
 
 # check for success condition to finalise the entry in the PSRDB processings table
 
-if (config_params["db_proc_id"]):
+if (config_params["db_flag"]):
 
     # recall the current state of processing
     proc_query = "%s -l processings list --id %s" % (PSRDB, config_params["db_proc_id"])

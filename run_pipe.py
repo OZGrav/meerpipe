@@ -113,6 +113,9 @@ elif args.batch:
 if (args.db_flag):
     env_query = 'echo $PSRDB_TOKEN'
     PSRDB_TOKEN = str(subprocess.check_output(env_query, shell=True).decode("utf-8"))
+    config_params["db_flag"] = True
+else:
+    config_params["db_flag"] = False
 
 if toggle:
 

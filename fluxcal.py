@@ -43,7 +43,7 @@ def get_info(archive):
     info = 'psrstat -c length,nbin,bw,nchan {0} -jpD -Q'.format(archive)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
-    info = proc.stdout.readline().split()
+    info = str(proc.stdout.readline().decode("utf-8")).split()
     return info 
 
 def get_freqlist(archive):
@@ -54,7 +54,7 @@ def get_freqlist(archive):
     info = 'psrstat -c int:freq,nchan {0} -jTD -Q'.format(archive)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
-    info = proc.stdout.readline().split()
+    info = str(proc.stdout.readline().decode("utf-8")).split()
     return info
 
 
@@ -358,7 +358,7 @@ expected_rms = get_expectedRMS(info_TP,ssys_1390)
 print ("============")
 #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
 freqinfo = get_freqlist(add_file)
-freq_list = str(freqinfo[-2].decode("utf-8")).split(",")
+freq_list = freqinfo[-2].split(",")
 offrms_list = get_offrms(add_file)                
 #offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
 offrms_freq = dict(list(zip(freq_list,offrms_list)))

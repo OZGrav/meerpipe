@@ -213,7 +213,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 cat_rm = 'psrcat -c RM {0} -X -all'.format(psrname)
                 args_rm = shlex.split(cat_rm)
                 proc_rm = subprocess.Popen(args_rm, stdout=subprocess.PIPE)
-                rm_out = proc_rm.stdout.readline().split()[0]
+                rm_out = str(proc_rm.stdout.readline().split()[0].decode("utf-8"))
                 if rm_out == "*" or rm_out == " ":
                     logger.info("RM not found in psrcat and in file. Not applying")
                     pass
