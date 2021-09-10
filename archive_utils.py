@@ -39,6 +39,9 @@ from coast_guard import cleaners
 import json
 import requests
 
+# PSRDB imports - assumes psrdb/latest module
+from util import ephemeris
+from db_utils import record_ephemeris
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -1332,6 +1335,32 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 mw_launch = open("{0}/{1}.launch".format(str(output_dir),str(psrname)),"w")
                 mw_launch.write("Launch_MeerWatch. MeerPipe successful")
                 mw_launch.close()
+
+                # create the relevant entries in PSRDB
+                # create / recall the ephemeris entry
+                if cparams["db_flag"]:
+                    if not cparams["fluxcal"]:
+
+                        # load and convert the ephemeris
+                        eph = ephemeris.Ephemeris()
+                        eph.load_from_file(copy_parfile)
+
+                        # recall the DM and RM being used by this file
+                        comm = "vap -c dm,rm {0}".format(proc_archive)
+                        args = shlex.split(comm)
+                        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                        proc.wait()
+                        info = proc.stdout.read().decode("utf-8").split("\n")
+                        dm = info[1].split()[1]
+                        rm = info[1].split()[2]
+                        
+                        # call the ephemeris creation function
+                        eph_id = record_ephemeris(psrname, eph, dm, rm, cparams, logger)
+                        
+                        # check output and report
+                        
+                        logger.info("Ephemeris recorded to PSRDB as ID {0}.".format(psrname))
+
 
             else:
                 logger.info("{0} file exists. Skipping ToA computation.".format(tim_name))

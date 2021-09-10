@@ -107,8 +107,8 @@ def array_launcher(arr, ag):
                 launch_pid = pid_getshort(config_json['pid'])
                     
             # NOW LAUNCH THE DAMN THING
-            #pipeline_launch_instruction = "%s -cfile %s -dirname %s -utc %s -verbose -pid %s -slurm -db -db_pipe %s" % (config_json['path'], config_json['config'], psr_name, utc, launch_pid, pipe_id)
-            pipeline_launch_instruction = "%s -cfile %s -dirname %s -utc %s -verbose -pid %s -db -db_pipe %s" % (config_json['path'], config_json['config'], psr_name, utc, launch_pid, pipe_id)
+            pipeline_launch_instruction = "%s -cfile %s -dirname %s -utc %s -verbose -pid %s -slurm -db -db_pipe %s" % (config_json['path'], config_json['config'], psr_name, utc, launch_pid, pipe_id)
+            #pipeline_launch_instruction = "%s -cfile %s -dirname %s -utc %s -verbose -pid %s -db -db_pipe %s" % (config_json['path'], config_json['config'], psr_name, utc, launch_pid, pipe_id)
             proc_query = shlex.split(pipeline_launch_instruction)
             proc = subprocess.Popen(proc_query)
             # wait until jobs are finished launching before returning the command line

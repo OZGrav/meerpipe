@@ -20,6 +20,11 @@ import shlex
 import json
 import time
 import pandas as pd
+import logging
+from util import header, ephemeris
+from util import time as util_time
+import getpass
+from astropy.time import Time as astrotime
 
 # Important paths
 PSRDB = "psrdb.py"
@@ -359,3 +364,70 @@ def get_job_state(proc_id):
 
     return jobstate_json['job_state']
     
+# creates an ephemeris entry in PSRDB, but checks to see if a matching entry already exists
+# and if so, will use the existing entry instead
+# returns the ID of the relevant entry
+def record_ephemeris(psrname, eph, dm, rm, cparams, logger):
+
+    logger.info("Checking for ephemeris for {0} as part of TOA generation...".format(psrname))
+
+    # recall matching entries in Ephemerides table and check for equivalence
+    psr_id = get_pulsar_id(psrname)
+    query = "%s ephemerides list --pulsar %s --dm %s --rm %s" % (PSRDB, psr_id, str(dm), str(rm))
+    data = list_psrdb_query(query)
+
+    # need to introduced a loop to catch any simultaneous writes to the database to avoid ephemeris duplication
+    success = False
+
+    counter = 0
+
+    while not (success) and (counter < 3):
+        
+        counter = counter + 1
+
+        # scroll until a match is found
+        eph_json = eph.ephem
+        match = False
+        if (len(data) > 0):
+            eph_index = data[0].index("ephemeris")
+            for x in (1, len(data)):
+                check_json = json.loads(data[x][eph_index])
+                if (check_json == eph_json):
+                    match = True
+                    break
+                
+        # check for match, otherwise create a new entry
+        if (match):
+            id_index = data[0].index("id")
+            retval = data[x][id_index]
+            success = True
+            logger.info("Match found, ephemeris ID = {0}".format(retval))
+        else:
+            # get the required parameters
+            created_at = util_time.get_current_time()
+            created_by = getpass.getuser()
+            comment = "Created by MeerPIPE - Pipeline ID {0}".format(cparams["db_proc_id"])
+            
+            # check if the ephemeris has its own start/end fields
+            if 'START' in eph_json and 'FINISH' in eph_json:
+                start = astrotime(float(eph.ephem['START']['val']), format='mjd', scale='utc').datetime.replace(microsecond=0)
+                finish = astrotime(float(eph.ephem['FINISH']['val']), format='mjd', scale='utc').datetime.replace(microsecond=0)
+                valid_from = utc_date2psrdb(start)
+                valid_to = utc_date2psrdb(finish)
+            else:
+                valid_from = util_time.get_time(0)
+                valid_to = util_time.get_time(4294967295)
+                
+            # double check for simultaneous writes
+            prev_len = len(data)
+            data = list_psrdb_query(query)
+                
+            if (len(data) == prev_len):
+                # if no new entries have been written
+                query = "%s ephemerides create %s %s %s %s %s %s %s %s %s %s" % (PSRDB, psr_id, created_at, created_by, psrdb_json_formatter(json.dumps(eph.ephem)), eph.p0, str(dm), str(rm), psrdb_json_formatter(comment), valid_from, valid_to)
+                retval = create_psrdb_query(query)
+                success = True
+                logger.info("No match found, new ephemeris entry created, ID = {0}".format(retval))
+
+
+    return retval
