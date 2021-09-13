@@ -33,12 +33,14 @@ import pickle
 import json
 
 #Importing pipeline utilities
-from initialize import parse_config,create_structure,get_outputinfo, \
-    setup_logging
+from initialize import (parse_config, create_structure, get_outputinfo, setup_logging)
 
-from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives, calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary, check_summary
+from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives,
+                           calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary, check_summary)
 
-from db_utils import utc_normal2psrdb,utc_psrdb2normal,utc_normal2date,utc_psrdb2date,utc_date2normal,utc_date2psrdb,pid_getofficial,pid_getshort,list_psrdb_query,write_obs_list,get_pulsar_id,get_observation_id,get_project_embargo,get_observation_project_code,get_project_id,job_state_code,create_psrdb_query,update_psrdb_query,get_node_name,psrdb_json_formatter
+from db_utils import (utc_normal2date, utc_date2psrdb, list_psrdb_query, get_observation_id,
+                      get_project_embargo, get_observation_project_code, get_project_id, job_state_code,
+                      create_psrdb_query, update_psrdb_query, get_node_name, psrdb_json_formatter)
 
 # DB path
 PSRDB = "psrdb.py"
@@ -53,12 +55,16 @@ parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm",action=
 parser.add_argument("-pid",dest="pid",help="Process pulsars as PID (Ignores original PID)")
 parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value. Automatic allocation is ignored")
 parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
+parser.add_argument("-softpath", help="Change software path", default="/fred/oz005/meerpipe/")
+
 parser.add_argument("-db", dest="db_flag", help="Toggle PSRDB functionality (e.g. launching from / writing to PSRDB)", action="store_true")
 parser.add_argument("-db_pipe", dest="db_pipe", help="PSRDB ID of the pipeline being launched")
+
 args = parser.parse_args()
 
 #Parsing the configuration file
 config_params = parse_config(str(args.configfile))
+mysoft_path = (args.softpath)
 
 #Checking validity of the input and output paths
 if not os.path.exists(config_params["input_path"]):
@@ -139,7 +145,7 @@ if toggle:
             logger.warning("Forcing RAM to be {0}".format(required_ram))
 
         #Creating output directories for saving the data products
-        create_structure(output_dir,config_params,psrnames[obs_num],logger)
+        create_structure(output_dir, config_params, psrnames[obs_num], logger)
 
         # setup the DB processing entry to record results if the DB flag is set
         if (args.db_flag):
@@ -178,27 +184,36 @@ if toggle:
         
         if args.slurm:
             logger.info("Creating and submitting pipeline jobs using Slurm")
-            logger.info("Observation length is {0}. Using RAM of {1} to process".format(obstime,required_ram))
-            np.save(os.path.join(output_dir,"archivelist"),archive_list[obs_num])
-            np.save(os.path.join(output_dir,"output"),output_info[obs_num])
-            np.save(os.path.join(output_dir,"psrname"),psrnames[obs_num])
+            logger.info("Observation length is {0}. Using RAM of {1} to process"
+                        .format(obstime, required_ram))
+            np.save(os.path.join(output_dir,"archivelist"), archive_list[obs_num])
+            np.save(os.path.join(output_dir,"output"), output_info[obs_num])
+            np.save(os.path.join(output_dir,"psrname"), psrnames[obs_num])
             with open(os.path.join(output_dir,"config_params.p"), 'wb') as pckl:
                 pickle.dump(config_params, pckl, protocol=pickle.HIGHEST_PROTOCOL)
             pckl.close()
             job_name = "{0}_{1}.bash".format(psrnames[obs_num],obs_num)
+
             #mysoft_path = "/fred/oz005/meerpipe" - TEMP SWITCH FOR LOCAL TESTING - ADC
             mysoft_path = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe"
+
+            if 'email' in config_params:
+                user_email = config_params['email']
+            else:
+                user_email = "adityapartha3112@gmail.com"
+            
             with open(os.path.join(output_dir,str(job_name)),'w') as job_file:
                 job_file.write("#!/bin/bash \n")
                 job_file.write("#SBATCH --job-name={0}_{1} \n".format(psrnames[obs_num],obs_num))
                 job_file.write("#SBATCH --output={0}meerpipe_out_{1}_{2} \n".format(str(output_dir),psrnames[obs_num],obs_num))
                 job_file.write("#SBATCH --ntasks=1 \n")
                 job_file.write("#SBATCH --mem={0} \n".format(required_ram))
-                job_file.write("#SBATCH --time=01:00:00 \n")
+                job_file.write("#SBATCH --time=04:00:00 \n")
                 #job_file.write("#SBATCH --reservation=oz005_obs \n")
                 #job_file.write("#SBATCH --account=oz005 \n")
-                #job_file.write("#SBATCH --mail-type=FAIL --mail-user=adityapartha3112@gmail.com,andrewcameron@swin.edu.au \n")
-                job_file.write("#SBATCH --mail-type=FAIL --mail-user=andrewcameron@swin.edu.au \n")
+
+                job_file.write("#SBATCH --mail-type=FAIL --mail-user={} \n".format(user_email))
+
                 job_file.write('cd {0} \n'.format(mysoft_path))
                 job_file.write("source env_setup.sh\n")
                 if (args.db_flag):

@@ -17,6 +17,7 @@ from scipy import stats
 
 import getopt
 from astropy.io import fits
+from astropy.coordinates import (SkyCoord, Longitude, Latitude)
 
 #=============================================================================
 
@@ -74,6 +75,7 @@ def get_glgb(psrname):
     
     return gl,gb
 
+
 def get_radec(psrname):
     "Get RAJD and DECJD (in degrees) from psrname"
     
@@ -81,13 +83,70 @@ def get_radec(psrname):
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
     info = proc.stdout.readline().rstrip().split()
-    print ("RAJD:{0}, DECJD:{1}".format(str(info[0].decode("utf-8")),str(info[1].decode("utf-8"))))
-    rajd = float(info[0])
-    decjd = float(info[1])
-    
+    try:
+        rajd = float(info[0])
+        decjd = float(info[1])
+        print ("RAJD:{0}, DECJD:{1}".format(str(info[0].decode("utf-8")), str(info[1].decode("utf-8"))))
+    except ValueError:
+        raise(RuntimeError("Cannot convert values {} and {} to floats".format(str(info[0].decode("utf-8")), str(info[1].decode("utf-8")))))
+                       
     return rajd, decjd
 
-def get_tsky_updated(rajd,decjd):
+
+def get_radec_new(parfile):
+    "Get RAJD and DECJD (in degrees) from the par file"
+    all_args = "grep {{}} {}".format(parfile)
+
+    # try grabbing RAJ and DECJ directly first
+    ra_args = shlex.split(all_args.format("RAJ"))
+    proc1 = subprocess.Popen(ra_args, stdout=subprocess.PIPE)
+    ra_str = str(proc1.communicate()[0]).split()[1]
+    if ra_str != "":
+        dec_args = shlex.split(all_args.format("DECJ"))
+        proc2 = subprocess.Popen(dec_args, stdout=subprocess.PIPE)
+        dec_str = str(proc2.communicate()[0]).split()[1]
+        pos = SkyCoord(Longitude(ra_str, unit='hourangle'),
+                       Latitude(dec_str, unit='deg'))
+        rajd = pos.ra.to('deg').value
+        decjd = pos.dec.to('deg').value
+
+    else: # coords in par file are not RA and Dec
+        elong_args = shlex.split(all_args.format("ELONG"))
+        proc1 = subprocess.Popen(elong_args, stdout=subprocess.PIPE)
+        info = proc1.communicate()[0]
+        if len(info.split('\n')) > 1:
+            for line in info.split('\n'):
+                if line.split()[0] == "ELONG":
+                    elong_val = float(line.split()[1])
+                    break
+        elif info != "":
+            elong_val = float(info.split()[1])
+        else:
+            print("Par file contains neither RAJ nor ELONG")
+            return(None, None)
+
+        elat_args = shlex.split(all_args.format("ELAT"))
+        proc2 = subprocess.Popen(elat_args, stdout=subprocess.PIPE)
+        info = proc2.communicate()[0]
+        if len(info.split('\n')) > 1:
+            for line in info.split('\n'):
+                if line.split()[0] == "ELAT":
+                    elat_val =float(line.split()[1])
+                    break
+        elif info != "":
+            elat_val = float(info.split()[1])
+
+        # convert ecliptic to J2000
+        pos = SkyCoord(elong_val, elat_val, unit='deg', frame='GeocentricMeanEcliptic')
+        pos.transform_to('ICRS')
+        rajd = pos.ra.to('deg').value
+        decjd = pos.dec.to('deg').value
+
+    print("RA and Dec from par file: {} {}".format(rajd, decjd))
+    return(rajd, decjd)
+
+
+def get_tsky_updated(rajd, decjd):
     "Get Tsky from Simon's code. Input arguments are RAJD and DECJD"
     "Convert Tsky to Jy and subtact 3372mK as per SARAO specs"
 
@@ -318,12 +377,13 @@ def fluxcalibrate(archive,multiplier):
 
 
 parser = argparse.ArgumentParser(description="Flux calibrate MTime data")
-parser.add_argument("-psrname", dest="psrname", help="psrname",required=True)
+parser.add_argument("-psrname", dest="psrname", help="psrname", required=True)
 parser.add_argument("-obsname", dest="obsname", help="Observation name", required=True)
-parser.add_argument("-obsheader", dest="obsheader", help="obsheader",required=True)
-parser.add_argument("-TPfile", dest="tpfile", help="T+P scrunched archive",required=True)
-parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive",required=True)
-parser.add_argument("-dec_path", dest="decimated", help="List of decimated directories",required=True)
+parser.add_argument("-obsheader", dest="obsheader", help="obsheader", required=True)
+parser.add_argument("-TPfile", dest="tpfile", help="T+P scrunched archive", required=True)
+parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
+parser.add_argument("-dec_path", dest="decimated", help="List of decimated directories", required=True)
+parser.add_argument("-parfile", help="Path to par file for pulsar", default="None")
 args = parser.parse_args()
 
 
@@ -335,7 +395,7 @@ add_file = str(args.rawfile)
 decimated_products = np.load(args.decimated)
 
 
-print ("Processing {0}:{1}".format(psr_name,obs_name))
+print ("Processing {0}:{1}".format(psr_name, obs_name))
 print ("============================================")
 
 
@@ -343,17 +403,23 @@ print ("============================================")
 #gl,gb = get_glgb(psr_name)
 #tsky_jy = get_tsky(gl,gb)
 
-rajd,decjd = get_radec(psr_name)
-tsky_jy = get_tsky_updated(rajd,decjd)
+# Get the RA and Dec from the par file if possible
+if str(args.parfile) != "None":
+    rajd, decjd = get_radec_new(str(args.parfile))
+
+if str(args.parfile) == "None" or rajd is None:
+    rajd, decjd = get_radec(psr_name)
+
+tsky_jy = get_tsky_updated(rajd, decjd)
 
 #Get Ssys at 1390 MHz
 params = get_obsheadinfo(obsheader_path)
 nant = len(params["ANTENNAE"].split(",")) 
-ssys_1390 = get_Ssys(tsky_jy,nant)
+ssys_1390 = get_Ssys(tsky_jy, nant)
 
 #Get expected RMS in a single channel at 1390 MHz
 info_TP = get_info(TP_file)
-expected_rms = get_expectedRMS(info_TP,ssys_1390)
+expected_rms = get_expectedRMS(info_TP, ssys_1390)
 
 print ("============")
 #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
@@ -361,7 +427,7 @@ freqinfo = get_freqlist(add_file)
 freq_list = freqinfo[-2].split(",")
 offrms_list = get_offrms(add_file)                
 #offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
-offrms_freq = dict(list(zip(freq_list,offrms_list)))
+offrms_freq = dict(list(zip(freq_list, offrms_list)))
 
 #Getting median rms of off-pulse rms values for ~2 channels centered at 1390 MHz
 observed_rms = get_median_offrms(offrms_freq)
@@ -375,10 +441,10 @@ print ("Multiplier is: {0}".format(multiplier))
 print ("============")
 #Flux calibrate all the decimated data products
 for archive in decimated_products:
-    fluxcalibrate(archive,multiplier)
+    fluxcalibrate(archive, multiplier)
 
 print ("============")
-print ("Flux calibrated {0}:{1}".format(psr_name,obs_name))
+print ("Flux calibrated {0}:{1}".format(psr_name, obs_name))
 #sys.exit()
 
 
