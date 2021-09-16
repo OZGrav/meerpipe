@@ -42,8 +42,9 @@ from db_utils import (utc_normal2date, utc_date2psrdb, list_psrdb_query, get_obs
                       get_project_embargo, get_observation_project_code, get_project_id, job_state_code,
                       create_psrdb_query, update_psrdb_query, get_node_name, psrdb_json_formatter)
 
-# DB path
+# DB info
 PSRDB = "psrdb.py"
+PTUSE = "1"
 
 #Argument parsing
 parser = argparse.ArgumentParser(description="Run MeerPipe")
@@ -161,7 +162,7 @@ if toggle:
             if (len(pipe_data) != 2):
                 raise Exception("Invalid pipeline ID (%s), not found in PSRDB table 'pipelines'" % (args.db_pipe))
             # - parent ID - id of PTUSE pipeline
-            parent_id = str(1)
+            parent_id = PTUSE
             # - embargo_end - tied to obs_id
             project_id = get_project_id(get_observation_project_code(obs_id))
             embargo_period = get_project_embargo(project_id)
@@ -173,6 +174,40 @@ if toggle:
             job_output = psrdb_json_formatter({})
             # - results - for the moment an empty JSON string
             results = psrdb_json_formatter({})
+
+            # before creating the processing entry, check for a folding entry
+            # if no entry exists, skip this file, report issue, move to next file
+            query = "%s -l processings list --observation %s" % (PSRDB, obs_id)
+            data = list_psrdb_query(query)
+            match_counter = 0
+            if (len(data) > 0):
+                # processings found, scan for PTUSE entries
+                pipe_index = data[0].index("pipeline_id")
+                id_index = data[0].index("id")
+                for x in range (1, len(data)):
+                    if (data[x][pipe_index] == PTUSE):
+                        # get processing ID and check if there is a matching folding entry
+                        fold_query = "%s -l foldings list --processing %s" % (PSRDB, data[x][id_index])
+                        fold_data = list_psrdb_query(fold_query)
+
+                        # check how many entries we got as a match
+                        if (len(fold_data) > 0):
+                            fold_id_index = fold_data[0].index("id")
+                            for y in range (1, len(fold_data)):
+                                match_counter = match_counter + 1
+                                fold_id = fold_data[y][fold_id_index]
+            
+            if (match_counter == 0):
+                logger.error("No 'folding' entries found matching observation ID %s (PTUSE pipeline ID %s)" % (obs_id, PTUSE))
+                logger.error("Discontinuing launch of %s - %s" % (psrnames[obs_num], obs_utc))
+                continue
+            elif (match_counter > 1):
+                logger.error("Multiple 'folding' entries found matching observation ID %s (PTUSE pipeline ID %s) - only one should exist" % (obs_id, PTUSE))
+                logger.error("Discontinuing launch of %s - %s" % (psrnames[obs_num], obs_utc))
+                continue
+            else:
+                config_params["db_fold_id"] = fold_id
+                logger.info("Found matching entry in 'foldings' - ID = %s (PTUSE pipeline ID %s)" % (fold_id, PTUSE))
 
             # information has been compiled - seed the database entry and record the resulting ID
             proc_query = "%s processings create %s %s %s %s %s %s %s %s" % (PSRDB, obs_id, args.db_pipe, parent_id, output_info[obs_num], embargo_end, job_state, job_output, results)

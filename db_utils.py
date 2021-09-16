@@ -378,11 +378,13 @@ def record_ephemeris(psrname, eph, dm, rm, cparams, logger):
 
     # need to introduced a loop to catch any simultaneous writes to the database to avoid ephemeris duplication
     success = False
-
     counter = 0
 
     while not (success) and (counter < 3):
-        
+
+        if (counter == 3):
+            raise Exception("Stalement detected in processing ID {0}: unable to access PSRDB due to conflict with simulataneous job. Please relaunch this job." % (proc_id))
+
         counter = counter + 1
 
         # scroll until a match is found
@@ -390,7 +392,7 @@ def record_ephemeris(psrname, eph, dm, rm, cparams, logger):
         match = False
         if (len(data) > 0):
             eph_index = data[0].index("ephemeris")
-            for x in (1, len(data)):
+            for x in range(1, len(data)):
                 check_json = json.loads(data[x][eph_index])
                 if (check_json == eph_json):
                     match = True
@@ -406,7 +408,7 @@ def record_ephemeris(psrname, eph, dm, rm, cparams, logger):
             # get the required parameters
             created_at = util_time.get_current_time()
             created_by = getpass.getuser()
-            comment = "Created by MeerPIPE - Pipeline ID {0}".format(cparams["db_proc_id"])
+            comment = "Entry created as part of MeerPIPE - Pipeline ID {0} (Project {1})".format(cparams["db_proc_id"], cparams["pid"])
             
             # check if the ephemeris has its own start/end fields
             if 'START' in eph_json and 'FINISH' in eph_json:
@@ -428,6 +430,77 @@ def record_ephemeris(psrname, eph, dm, rm, cparams, logger):
                 retval = create_psrdb_query(query)
                 success = True
                 logger.info("No match found, new ephemeris entry created, ID = {0}".format(retval))
+
+
+    return retval
+
+# creates a template entry in PSRDB, but checks to see if a matching entry already exists
+# and if so, will use the existing entry instead
+# returns the ID of the relevant entry
+def record_template(psrname, template, cparams, logger):
+
+    logger.info("Checking for templates for {0} as part of TOA generation...".format(psrname))
+
+    # extract relevant template info
+    comm = "vap -c bw,freq {0}".format(template)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    info = proc.stdout.read().decode("utf-8").split("\n")
+    bw = info[1].split()[1]
+    freq = info[1].split()[2]
+
+    # recall matching entries in Templates table and check for equivalence
+    psr_id = get_pulsar_id(psrname)
+    query = "%s templates list --pulsar %s --frequency %s --bandwidth %s" % (PSRDB, psr_id, str(freq), str(bw))
+    data = list_psrdb_query(query)
+
+    # need to introduced a loop to catch any simultaneous writes to the database to avoid ephemeris duplication
+    success = False
+    counter = 0
+
+    while not (success) and (counter < 3):
+
+        if (counter == 3):
+            raise Exception("Stalement detected in processing ID {0}: unable to access PSRDB due to conflict with simulataneous job. Please relaunch this job." % (proc_id))
+
+        counter = counter + 1
+
+        # scroll until a match is found
+        match = False
+        if (len(data) > 0):
+            loc_index = data[0].index("location")
+            for x in range(1, len(data)):
+                # check for location match
+                if (data[x][loc_index] == template):
+                    match = True
+                    break
+
+        # check for match, otherwise create a new entry
+        if (match):
+            id_index = data[0].index("id")
+            retval = data[x][id_index]
+            success = True
+            logger.info("Match found, template ID = {0}".format(retval))
+        else:
+            # get the required parameters
+            created_at = util_time.get_current_time()
+            created_by = getpass.getuser()
+            location = template
+            temp_method = "PAAS" # (?)
+            temp_type = "2D" # (?)
+            comment = "Entry created as part of MeerPIPE - Pipeline ID {0} (Project {1})".format(cparams["db_proc_id"], cparams["pid"])
+
+            # double check for simultaneous writes
+            prev_len = len(data)
+            data = list_psrdb_query(query)
+
+            if (len(data) == prev_len):
+                # if no new entries have been written
+                query = "%s templates create %s %s %s %s %s %s %s %s %s" % (PSRDB, psr_id, freq, bw, created_at, created_by, location, psrdb_json_formatter(temp_method), psrdb_json_formatter(temp_type),  psrdb_json_formatter(comment))
+                retval = create_psrdb_query(query)
+                success = True
+                logger.info("No match found, new template entry created, ID = {0}".format(retval))
 
 
     return retval

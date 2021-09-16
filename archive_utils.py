@@ -41,7 +41,7 @@ import requests
 
 # PSRDB imports - assumes psrdb/latest module
 from util import ephemeris
-from db_utils import record_ephemeris
+from db_utils import record_ephemeris, record_template
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -1345,7 +1345,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 mw_launch.close()
 
                 # create the relevant entries in PSRDB
-                # create / recall the ephemeris entry
+                # create / recall the ephemeris and template entries
                 if cparams["db_flag"]:
                     if not cparams["fluxcal"]:
 
@@ -1362,13 +1362,17 @@ def generate_toas(output_dir,cparams,psrname,logger):
                         dm = info[1].split()[1]
                         rm = info[1].split()[2]
                         
-                        # call the ephemeris creation function
+                        # call the ephemeris and template creation functions
                         eph_id = record_ephemeris(psrname, eph, dm, rm, cparams, logger)
+                        template_id = record_template(psrname, template, cparams, logger)
                         
                         # check output and report
                         
-                        logger.info("Ephemeris recorded to PSRDB as ID {0}.".format(psrname))
+                        logger.info("Ephemeris recorded to PSRDB as ID {0}.".format(eph_id))
+                        logger.info("Template recorded to PSRDB as ID {0}.".format(template_id))
 
+                        # link via entry in TOA table
+                        
 
             else:
                 logger.info("{0} file exists. Skipping ToA computation.".format(tim_name))
