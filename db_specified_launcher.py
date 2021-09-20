@@ -17,6 +17,8 @@ import time
 # Custom Imports
 from db_utils import utc_normal2psrdb,utc_psrdb2normal,utc_normal2date,utc_psrdb2date,pid_getofficial,pid_getshort,list_psrdb_query,write_obs_list,get_pulsar_id
 
+from graphql_client import GraphQLClient
+
 # Important paths
 PSRDB = "psrdb.py"
 
@@ -40,6 +42,14 @@ def array_launcher(arr, ag):
     utc_index = arr[0].index("processing_observation_utcStart")
     obs_index = arr[0].index("processing_location")
 
+    # set up PSRDB (temp fix until we can rewrite this!)
+    env_query = 'echo $PSRDB_TOKEN'
+    token = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+    env_query = 'echo $PSRDB_URL'
+    url = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+
+    client = GraphQLClient(url, False)
+
     # begin scrolling through the array
     for x in range (1, len(arr)):
 
@@ -48,7 +58,7 @@ def array_launcher(arr, ag):
         utc = utc_psrdb2normal(arr[x][utc_index])
         obs_location = arr[x][obs_index]
         # get the pulsar id
-        psr_id = get_pulsar_id(psr_name)
+        psr_id = get_pulsar_id(psr_name, client, url, token)
         
         # now lookup which pipelines have to be run from the launches table
         launch_query = "%s -l launches list --pulsar_id %s" % (PSRDB, psr_id)

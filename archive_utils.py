@@ -41,7 +41,9 @@ import requests
 
 # PSRDB imports - assumes psrdb/latest module
 from util import ephemeris
-from db_utils import record_ephemeris, record_template
+from tables import *
+from graphql_client import GraphQLClient
+from db_utils import create_ephemeris, create_template
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -1347,6 +1349,10 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 # create the relevant entries in PSRDB
                 # create / recall the ephemeris and template entries
                 if cparams["db_flag"]:
+                 
+                    # create client
+                    db_client = GraphQLClient(cparams["db_url"], False)
+
                     if not cparams["fluxcal"]:
 
                         # load and convert the ephemeris
@@ -1363,13 +1369,13 @@ def generate_toas(output_dir,cparams,psrname,logger):
                         rm = info[1].split()[2]
                         
                         # call the ephemeris and template creation functions
-                        eph_id = record_ephemeris(psrname, eph, dm, rm, cparams, logger)
-                        template_id = record_template(psrname, template, cparams, logger)
+                        eph_id = create_ephemeris(psrname, eph, dm, rm, cparams, db_client, logger)
+                        template_id = create_template(psrname, template, cparams, db_client, logger)
                         
                         # check output and report
                         
-                        logger.info("Ephemeris recorded to PSRDB as ID {0}.".format(eph_id))
-                        logger.info("Template recorded to PSRDB as ID {0}.".format(template_id))
+                        logger.info("Used ephemeris ID {0}.".format(eph_id))
+                        logger.info("Used template ID {0}.".format(template_id))
 
                         # link via entry in TOA table
                         

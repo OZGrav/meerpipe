@@ -23,7 +23,7 @@ import glob
 import pickle
 import json
 
-# Important paths
+# PSRDB paths 
 PSRDB = "psrdb.py"
 
 #Importing pipeline utilities
@@ -31,7 +31,10 @@ from initialize import parse_config, setup_logging
 
 from archive_utils import decimate_data,mitigate_rfi,generate_toas,add_archives,calibrate_data, dynamic_spectra, fluxcalibrate, cleanup, generate_summary, check_summary
 
-from db_utils import get_node_name,psrdb_json_formatter,update_psrdb_query,job_state_code,get_slurm_id,get_job_state,job_state_code,list_psrdb_query
+# PSRDB imports
+from tables import *
+from graphql_client import GraphQLClient
+from db_utils import get_node_name,job_state_code,get_slurm_id,get_job_state,job_state_code, update_processing
 
 #Argument parsing
 parser = argparse.ArgumentParser(description="Run the MeerTime pipeline")
@@ -39,7 +42,6 @@ parser.add_argument("-obsname", dest="obsname", help="Process a specified observ
 parser.add_argument("-outputdir", dest="outputdir", help="Output directory for the pipeline")
 parser.add_argument("-psrname", dest="psrname", help="Psrname")
 args = parser.parse_args()
-
 
 archive_list = list(np.load(str(args.obsname)))
 output_dir = np.load(str(args.outputdir))
@@ -55,26 +57,32 @@ logger=setup_logging(config_params["output_path"],True,False)
 
 # update PSRDB entry now that job is running - but check to make sure there's no conflict first
 if (config_params["db_flag"]):
+
+    # set up the db client and required parameters
+
+    db_client = GraphQLClient(config_params["db_url"], False)
+
+    # now wait for run_pipe to finish, and then collect required info
+
     pendflag = True
     dest_state = json.loads(job_state_code(1))['job_state']
     while (pendflag):
         # query the job state
-        state = get_job_state(config_params["db_proc_id"])
+        state = get_job_state(config_params["db_proc_id"], db_client, config_params["db_url"], config_params["db_token"])
         if (state == dest_state):
             pendflag = False
 
-    job_state = psrdb_json_formatter(job_state_code(2))
-    job_id = get_slurm_id(config_params["db_proc_id"])
+    job_state = job_state_code(2)
+    job_id = get_slurm_id(config_params["db_proc_id"], db_client, config_params["db_url"], config_params["db_token"])
     node_name = get_node_name()
-    job_output = psrdb_json_formatter(json.dumps({"job_id": job_id, "job_node": node_name}))
+    job_output = json.dumps({"job_id": job_id, "job_node": node_name})
     
-    # recall info from PSRDB and use it to seed the update
-    proc_query = "%s -l processings list --id %s" % (PSRDB, config_params["db_proc_id"])
-    proc_data = list_psrdb_query(proc_query)
-
-    proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, config_params["db_proc_id"], proc_data[1][1], proc_data[1][2], proc_data[1][3], proc_data[1][4], proc_data[1][5], job_state, job_output, proc_data[1][8])
-    update_psrdb_query(proc_query)
-    logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(config_params["db_proc_id"]))
+    # now update job_state and job_output
+    update_id = update_processing(config_params["db_proc_id"], None, None, None, None, None, job_state, job_output, None, db_client, config_params["db_url"], config_params["db_token"])
+    if (str(update_id) != str(config_params["db_proc_id"])) or (update_id == None):
+        logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(proc_id))
+    else:
+        logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(config_params["db_proc_id"]))
 
 #####
 
@@ -128,26 +136,24 @@ if not config_params["fluxcal"]:
 
 if (config_params["db_flag"]):
 
-    # recall the current state of processing
-    proc_query = "%s -l processings list --id %s" % (PSRDB, config_params["db_proc_id"])
-    proc_data = list_psrdb_query(proc_query)
-
     # specify custom success conditions for various pipeline states
 
     if (config_params["fluxcal"]):
 
-        # TODO: COMPLETE THIS LATER 
-        job_state = psrdb_json_formatter(job_state_code(5))
+        # TODO: COMPLETE THIS LATER IF REQUIRED
+        job_state = job_state_code(5)
 
     elif not (config_params["fluxcal"]):
 
         # check the generated summary file for pass/fail status
         if (check_summary(output_dir, logger)):
-            job_state = psrdb_json_formatter(job_state_code(3))
+            job_state = job_state_code(3)
         else:
-            job_state = psrdb_json_formatter(job_state_code(4))
+            job_state = job_state_code(4)
 
     # and now update the entry in processings
-    proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, config_params["db_proc_id"], proc_data[1][1], proc_data[1][2], proc_data[1][3], proc_data[1][4], proc_data[1][5], job_state, psrdb_json_formatter(proc_data[1][7].replace("'", '"')), psrdb_json_formatter(proc_data[1][8].replace("'", '"')))
-    update_psrdb_query(proc_query)
-    logger.info("Updated PSRDB entry in 'processings' table with final job state, ID = {0}".format(config_params["db_proc_id"]))
+    update_id = update_processing(config_params["db_proc_id"], None, None, None, None, None, job_state, None, None, db_client, config_params["db_url"], config_params["db_token"])
+    if (str(update_id) != str(proc_id)) or (update_id == None):
+        logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(proc_id))
+    else:
+        logger.info("Updated PSRDB entry in 'processings' table with final job state, ID = {0}".format(config_params["db_proc_id"]))

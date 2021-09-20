@@ -38,12 +38,14 @@ from initialize import (parse_config, create_structure, get_outputinfo, setup_lo
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives,
                            calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary, check_summary)
 
-from db_utils import (utc_normal2date, utc_date2psrdb, list_psrdb_query, get_observation_id,
-                      get_project_embargo, get_observation_project_code, get_project_id, job_state_code,
-                      create_psrdb_query, update_psrdb_query, get_node_name, psrdb_json_formatter)
+# PSRDB imports
+from tables import *
+from graphql_client import GraphQLClient
+from db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_observation_id, get_project_embargo,
+                      get_observation_project_code, get_project_id, job_state_code, get_node_name, get_folding_id,
+                      check_pipeline, create_processing, update_processing)
 
-# DB info
-PSRDB = "psrdb.py"
+# PSRDB info
 PTUSE = "1"
 
 #Argument parsing
@@ -58,8 +60,10 @@ parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value.
 parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
 parser.add_argument("-softpath", help="Change software path", default="/fred/oz005/meerpipe/")
 
+# PSRDB arguments
 parser.add_argument("-db", dest="db_flag", help="Toggle PSRDB functionality (e.g. launching from / writing to PSRDB)", action="store_true")
 parser.add_argument("-db_pipe", dest="db_pipe", help="PSRDB ID of the pipeline being launched")
+parser.add_argument("-db_url", dest="db_url", help="Specify custom PSRDB client URL")
 
 args = parser.parse_args()
 
@@ -117,9 +121,34 @@ elif args.batch:
     config_params["batch"] = "batch"
     toggle=True
 
+# Begin configuring PSRDB operations if enabled
 if (args.db_flag):
+    
+    # get token
     env_query = 'echo $PSRDB_TOKEN'
-    PSRDB_TOKEN = str(subprocess.check_output(env_query, shell=True).decode("utf-8"))
+    db_token = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+    config_params["db_token"] = db_token
+
+    # get (and possibly store) url
+    if (args.db_url):
+        # pass the custom url
+        config_params["db_url"] = args.db_url
+        db_url = args.db_url
+    else:
+        # use environment default from psrdb/latest
+        env_query = 'echo $PSRDB_URL'
+        db_url = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+        config_params["db_url"] = db_url
+
+    # client with verbosity turned down
+    db_client = GraphQLClient(db_url, False)
+
+    # check pipeline validity
+    if not (check_pipeline(args.db_pipe, db_client, db_url, db_token)):
+        raise Exception("Invalid pipeline ID (%s), not found in PSRDB table 'pipelines'" % (args.db_pipe))
+    else:
+        config_params["db_pipe_id"] = args.db_pipe
+
     config_params["db_flag"] = True
 else:
     config_params["db_flag"] = False
@@ -150,73 +179,58 @@ if toggle:
 
         # setup the DB processing entry to record results if the DB flag is set
         if (args.db_flag):
-            
-            # - observation ID
+
+            # misc parameters
+            parent_id = PTUSE
+            location = os.path.normpath(output_info[obs_num])
+
+            # retrieve observation ID
             split_path = output_info[obs_num].split("/")
             path_args = len(split_path)
             obs_utc = split_path[path_args - 4]
-            obs_id = get_observation_id(obs_utc, psrnames[obs_num])
-            # - pipeline ID
-            pipe_query = "%s pipelines list --id %s" % (PSRDB, args.db_pipe)
-            pipe_data = list_psrdb_query(pipe_query)
-            if (len(pipe_data) != 2):
-                raise Exception("Invalid pipeline ID (%s), not found in PSRDB table 'pipelines'" % (args.db_pipe))
-            # - parent ID - id of PTUSE pipeline
-            parent_id = PTUSE
-            # - embargo_end - tied to obs_id
-            project_id = get_project_id(get_observation_project_code(obs_id))
-            embargo_period = get_project_embargo(project_id)
-            embargo_end = utc_date2psrdb(utc_normal2date(obs_utc) + embargo_period)
-            # - location - this is just output_info[obs_num]
-            # - job_state
-            job_state = psrdb_json_formatter(job_state_code(0))
-            # - job_output - for the moment an empty JSON string
-            job_output = psrdb_json_formatter({})
-            # - results - for the moment an empty JSON string
-            results = psrdb_json_formatter({})
-
-            # before creating the processing entry, check for a folding entry
-            # if no entry exists, skip this file, report issue, move to next file
-            query = "%s -l processings list --observation %s" % (PSRDB, obs_id)
-            data = list_psrdb_query(query)
-            match_counter = 0
-            if (len(data) > 0):
-                # processings found, scan for PTUSE entries
-                pipe_index = data[0].index("pipeline_id")
-                id_index = data[0].index("id")
-                for x in range (1, len(data)):
-                    if (data[x][pipe_index] == PTUSE):
-                        # get processing ID and check if there is a matching folding entry
-                        fold_query = "%s -l foldings list --processing %s" % (PSRDB, data[x][id_index])
-                        fold_data = list_psrdb_query(fold_query)
-
-                        # check how many entries we got as a match
-                        if (len(fold_data) > 0):
-                            fold_id_index = fold_data[0].index("id")
-                            for y in range (1, len(fold_data)):
-                                match_counter = match_counter + 1
-                                fold_id = fold_data[y][fold_id_index]
-            
-            if (match_counter == 0):
-                logger.error("No 'folding' entries found matching observation ID %s (PTUSE pipeline ID %s)" % (obs_id, PTUSE))
-                logger.error("Discontinuing launch of %s - %s" % (psrnames[obs_num], obs_utc))
+            obs_id = get_observation_id(utc_normal2psrdb(obs_utc), psrnames[obs_num], db_client, db_url, db_token)
+            if (obs_id == None):
+                logger.error("Could not find unique entry in 'observation' matching %s - %s" % (psrnames[obs_num], obs_utc))
+                logger.error("Discontinuing launch of %s - %s and attempting next job" % (psrnames[obs_num], obs_utc))
                 continue
-            elif (match_counter > 1):
-                logger.error("Multiple 'folding' entries found matching observation ID %s (PTUSE pipeline ID %s) - only one should exist" % (obs_id, PTUSE))
-                logger.error("Discontinuing launch of %s - %s" % (psrnames[obs_num], obs_utc))
+            else:
+                logger.info("Found matching entry in 'observations' - ID = %s (%s - %s)" % (str(obs_id), psrnames[obs_num], obs_utc))
+
+            # check for folding entry
+            fold_id = get_folding_id(obs_id, parent_id, db_client, db_url, db_token)
+            if (obs_id == None):
+                logger.error("Could not find unique entry in 'foldings' matching observation ID %s (pipeline ID %s)" % (str(obs_id), str(PTUSE)))
+                logger.error("Discontinuing launch of %s - %s and attempting next job" % (psrnames[obs_num], obs_utc))
                 continue
             else:
                 config_params["db_fold_id"] = fold_id
-                logger.info("Found matching entry in 'foldings' - ID = %s (PTUSE pipeline ID %s)" % (fold_id, PTUSE))
+                logger.info("Found matching entry in 'foldings' - ID = %s (pipeline ID %s)" % (str(fold_id), str(PTUSE)))
 
-            # information has been compiled - seed the database entry and record the resulting ID
-            proc_query = "%s processings create %s %s %s %s %s %s %s %s" % (PSRDB, obs_id, args.db_pipe, parent_id, output_info[obs_num], embargo_end, job_state, job_output, results)
-            proc_id = create_psrdb_query(proc_query)
-            logger.info("Created PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
-            
-            # seed the processing id into the config params
-            config_params["db_proc_id"] = proc_id
-        
+            # get or create processing entry
+            proc_id = create_processing(obs_id, args.db_pipe, parent_id, location, db_client, db_url, db_token, logger)
+            if (proc_id == None):
+                logger.error("Unable to get/create entry in 'processings'")
+                logger.error("Discontinuing launch of %s - %s and attempting next job" % (psrnames[obs_num], obs_utc))
+                continue
+            else:
+                config_params["db_proc_id"] = proc_id
+                logger.info("Processing logged under ID %s in 'processings' table" % (str(proc_id)))
+
+            # create remaining parameters to start processing and update proc entry
+            project_id = get_project_id(get_observation_project_code(obs_id, db_client, db_url, db_token), db_client, db_url, db_token)
+            embargo_period = get_project_embargo(project_id, db_client, db_url, db_token)
+            embargo_end = utc_date2psrdb(utc_normal2date(obs_utc) + embargo_period)
+            job_state = job_state_code(0)
+            job_output = json.dumps({})
+            results = json.dumps({})
+
+            # now update the proc entry with the new information
+            update_id = update_processing(proc_id, obs_id, args.db_pipe, parent_id, embargo_end, location, job_state, job_output, results, db_client, db_url, db_token)
+            if (str(update_id) != str(proc_id)) or (update_id == None):
+                raise Exception("Termination - failure to update 'processings' entry %s prior to launch." % (str(proc_id)))
+
+            # PSRDB now primed - proceed.
+
         if args.slurm:
             logger.info("Creating and submitting pipeline jobs using Slurm")
             logger.info("Observation length is {0}. Using RAM of {1} to process"
@@ -251,8 +265,8 @@ if toggle:
 
                 job_file.write('cd {0} \n'.format(mysoft_path))
                 job_file.write("source env_setup.sh\n")
-                if (args.db_flag):
-                    job_file.write("export PSRDB_TOKEN={0} \n".format(PSRDB_TOKEN))
+                #if (args.db_flag):
+                #    job_file.write("export PSRDB_TOKEN={0} \n".format(db_token))
                 job_file.write("source /home/acameron/virtual-envs/meerpipe_db/bin/activate\n")
                 job_file.write("python slurm_pipe.py -obsname {0}archivelist.npy -outputdir {0}output.npy -psrname {0}psrname.npy".format(output_dir))
 
@@ -270,12 +284,17 @@ if toggle:
                 out = proc_sbatch.stdout.read().decode("utf-8")
                 jobid = out.split("\n")[0].split(" ")[3]
 
+                update_id
+
                 # update the processing entry in PSRDB
-                job_state = psrdb_json_formatter(job_state_code(1))
-                job_output = psrdb_json_formatter(json.dumps({"job_id": jobid, "job_node": "Unallocated"}))
-                proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, proc_id, obs_id, args.db_pipe, parent_id, output_info[obs_num], embargo_end, job_state, job_output, results)
-                update_psrdb_query(proc_query)
-                logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
+                job_state = job_state_code(1)
+                job_output = json.dumps({"job_id": jobid, "job_node": "Unallocated"})
+                
+                update_id = update_processing(proc_id, obs_id, args.db_pipe, parent_id, embargo_end, location, job_state, job_output, results, db_client, db_url, db_token)
+                if (str(update_id) != str(proc_id)) or (update_id == None):
+                    logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(proc_id))
+                else:
+                    logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
 
             else:
                 time.sleep(1)
@@ -296,13 +315,15 @@ if toggle:
             if (args.db_flag):
 
                 # update the processing entry in PSRDB
-                job_state = psrdb_json_formatter(job_state_code(2))
+                job_state = job_state_code(2)
                 # get the name of the current node
                 node_name = get_node_name()
-                job_output = psrdb_json_formatter(json.dumps({"job_id": "N/A", "job_node": node_name}))
-                proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, proc_id, obs_id, args.db_pipe, parent_id, output_info[obs_num], embargo_end, job_state, job_output, results)
-                update_psrdb_query(proc_query)            
-                logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
+                job_output = json.dumps({"job_id": "N/A", "job_node": node_name})
+                update_id = update_processing(proc_id, obs_id, args.db_pipe, parent_id, embargo_end, location, job_state, job_output, results, db_client, db_url, db_token)
+                if (str(update_id) != str(proc_id)) or (update_id == None):
+                    logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(proc_id))
+                else:
+                    logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(proc_id))
 
             #####
 
@@ -358,26 +379,24 @@ if toggle:
 
             if (args.db_flag):
 
-                # recall the current state of processing
-                proc_query = "%s -l processings list --id %s" % (PSRDB, proc_id)
-                proc_data = list_psrdb_query(proc_query)
-
                 # specify custom success conditions for various pipeline states
 
                 if (config_params["fluxcal"]):
 
-                    # TODO: COMPLETE THIS LATER
-                    job_state = psrdb_json_formatter(job_state_code(5))
+                    # TODO: COMPLETE THIS LATER IF REQUIRED
+                    job_state = job_state_code(5)
 
                 elif not (config_params["fluxcal"]):
 
                     # check the generated summary file for pass/fail status
                     if (check_summary(output_dir, logger)):
-                        job_state = psrdb_json_formatter(job_state_code(3))
+                        job_state = job_state_code(3)
                     else:
-                        job_state = psrdb_json_formatter(job_state_code(4))
+                        job_state = job_state_code(4)
 
                 # and now update the entry in processings
-                proc_query = "%s processings update %s %s %s %s %s %s %s %s %s" % (PSRDB, proc_id, proc_data[1][1], proc_data[1][2], proc_data[1][3], proc_data[1][4], proc_data[1][5], job_state, psrdb_json_formatter(proc_data[1][7].replace("'", '"')), psrdb_json_formatter(proc_data[1][8].replace("'", '"')))
-                update_psrdb_query(proc_query)
-                logger.info("Updated PSRDB entry in 'processings' table with final job state, ID = {0}".format(proc_id))
+                update_id = update_processing(proc_id, obs_id, args.db_pipe, parent_id, embargo_end, location, job_state, None, None, db_client, db_url, db_token)
+                if (str(update_id) != str(proc_id)) or (update_id == None):
+                    logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(proc_id))
+                else:
+                    logger.info("Updated PSRDB entry in 'processings' table with final job state, ID = {0}".format(proc_id))
