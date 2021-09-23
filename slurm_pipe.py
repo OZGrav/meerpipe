@@ -80,7 +80,7 @@ if (config_params["db_flag"]):
     # now update job_state and job_output
     update_id = update_processing(config_params["db_proc_id"], None, None, None, None, None, job_state, job_output, None, db_client, config_params["db_url"], config_params["db_token"])
     if (str(update_id) != str(config_params["db_proc_id"])) or (update_id == None):
-        logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(proc_id))
+        logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(config_params["db_proc_id"]))
     else:
         logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(config_params["db_proc_id"]))
 
@@ -128,6 +128,7 @@ if not config_params["fluxcal"]:
     #Generate summary
     generate_summary(output_dir,config_params,psrname,logger)
 
+    
     logger.info ("##############")
 
 #####
@@ -154,6 +155,6 @@ if (config_params["db_flag"]):
     # and now update the entry in processings
     update_id = update_processing(config_params["db_proc_id"], None, None, None, None, None, job_state, None, None, db_client, config_params["db_url"], config_params["db_token"])
     if (str(update_id) != str(proc_id)) or (update_id == None):
-        logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(proc_id))
+        logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(config_params["db_proc_id"]))
     else:
         logger.info("Updated PSRDB entry in 'processings' table with final job state, ID = {0}".format(config_params["db_proc_id"]))

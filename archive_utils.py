@@ -43,7 +43,7 @@ import requests
 from util import ephemeris
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import create_ephemeris, create_template
+from db_utils import create_ephemeris, create_template, create_toa_record, get_results, update_processing
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -501,7 +501,36 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
             cleaned_archives.append(archive)
 
         logger.info("NOTE: The archive_list points to the original uncleaned archives")
-                
+    
+    # if PSRDB activated, record S/N of cleaned archives
+    if cparams["db_flag"]:
+
+        logger.info("PSRDB functionality activated - recording cleaned S/N")
+        
+        # create client
+        db_client = GraphQLClient(cparams["db_url"], False)    
+
+        # extract the maximum snr from the cleaned archives
+        max_snr = 0
+        for x in range(0, len(cleaned_archives)):
+             comm = "psrstat -j FTp -c snr=pdmp -c snr {0}".format(cleaned_archives[x])
+             args = shlex.split(comm)
+             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+             proc.wait()
+             info = proc.stdout.read().decode("utf-8").rstrip().split()
+             snr = info[1].split("=")[1]
+             if (float(snr) > float(max_snr)):
+                 max_snr = snr
+        
+        # recall results field and update
+        results_json = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
+        results_json['snr'] = float(max_snr)
+        update_id = update_processing(cparams["db_proc_id"], None, None, None, None, None, None, None, json.dumps(results_json), db_client, cparams["db_url"], cparams["db_token"])
+        if (str(update_id) != str(cparams["db_proc_id"])) or (update_id == None):
+            logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_proc_id"]))
+        else:
+            logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(cparams["db_proc_id"]))
+            
     return cleaned_archives
 
 
@@ -524,6 +553,8 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
     cleaned_archives.append(glob.glob(os.path.join(str(output_dir),"calibrated/*.calib"))[0])
 
     if not template == None:
+
+        max_rfi_frac = 0.0
 
         for clean_archive in cleaned_archives:
      
@@ -588,8 +619,32 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
             else:
                 logger.info("Dynamic spectra already exists")
 
+            # calculate the RFI fraction
+            if cparams["db_flag"]:
+                rfi_frac = calc_dynspec_zap_fraction(os.path.join(ds_path,"{0}".format(dynspec_name)))
+                if (float(rfi_frac) > max_rfi_frac):
+                    max_rfi_frac = rfi_frac
+
+        # now for some tacked-on PSRDB stuff based on the highest RFI zap fraction
+        if cparams["db_flag"]:
+
+            logger.info("PSRDB functionality activated - recording zapped RFI fraction based on dynamic spectra")
+
+            # create client
+            db_client = GraphQLClient(cparams["db_url"], False)            
+
+            # we've already calculated the maximum RFI zap fraction - recall results field and update
+            results_json = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
+            results_json['zap_frac'] = float(max_rfi_frac)
+            update_id = update_processing(cparams["db_proc_id"], None, None, None, None, None, None, None, json.dumps(results_json), db_client, cparams["db_url"], cparams["db_token"])
+            if (str(update_id) != str(cparams["db_proc_id"])) or (update_id == None):
+                logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_proc_id"]))
+            else:
+                logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(cparams["db_proc_id"]))
+
     else:
         logger.info("Template does not exist. Skipping dynamic spectra generation.")
+
 
 
 def get_extension(commands,chopped):
@@ -1345,43 +1400,70 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 mw_launch = open("{0}/{1}.launch".format(str(output_dir),str(psrname)),"w")
                 mw_launch.write("Launch_MeerWatch. MeerPipe successful")
                 mw_launch.close()
-
-                # create the relevant entries in PSRDB
-                # create / recall the ephemeris and template entries
-                if cparams["db_flag"]:
-                 
-                    # create client
-                    db_client = GraphQLClient(cparams["db_url"], False)
-
-                    if not cparams["fluxcal"]:
-
-                        # load and convert the ephemeris
-                        eph = ephemeris.Ephemeris()
-                        eph.load_from_file(copy_parfile)
-
-                        # recall the DM and RM being used by this file
-                        comm = "vap -c dm,rm {0}".format(proc_archive)
-                        args = shlex.split(comm)
-                        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-                        proc.wait()
-                        info = proc.stdout.read().decode("utf-8").split("\n")
-                        dm = info[1].split()[1]
-                        rm = info[1].split()[2]
-                        
-                        # call the ephemeris and template creation functions
-                        eph_id = create_ephemeris(psrname, eph, dm, rm, cparams, db_client, logger)
-                        template_id = create_template(psrname, template, cparams, db_client, logger)
-                        
-                        # check output and report
-                        
-                        logger.info("Used ephemeris ID {0}.".format(eph_id))
-                        logger.info("Used template ID {0}.".format(template_id))
-
-                        # link via entry in TOA table
-                        
-
             else:
                 logger.info("{0} file exists. Skipping ToA computation.".format(tim_name))
+    
+        # create the relevant entries in PSRDB to summarise the TOA production
+        # create / recall the ephemeris and template entries
+        if cparams["db_flag"]:
+
+            logger.info("TOA PSRDB functionality activated - recording TOA production")
+
+            # create client
+            db_client = GraphQLClient(cparams["db_url"], False)
+            
+            if not cparams["fluxcal"]:
+
+                # load and convert the ephemeris
+                eph = ephemeris.Ephemeris()
+                eph.load_from_file(copy_parfile)
+                
+                # recall the DM, RM and site code being used by this file
+                comm = "vap -c dm,rm,asite {0}".format(proc_archive)
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                proc.wait()
+                info = proc.stdout.read().decode("utf-8").split("\n")
+                dm = info[1].split()[1]
+                rm = info[1].split()[2]
+                #site = info[1].split()[3]                
+                site = 7 # TEMPORARY UNTIL PSRDB IS FIXED TO ALLOW NON-INT SITE CODES
+
+                # call the ephemeris and template creation functions
+                eph_id = create_ephemeris(psrname, eph, dm, rm, cparams, db_client, logger)
+                template_id = create_template(psrname, template, cparams, db_client, logger)
+                
+                # check output and report
+                
+                logger.info("Used ephemeris ID {0}.".format(eph_id))
+                logger.info("Used template ID {0}.".format(template_id))
+                
+                # gather required TOA information
+                quality = True # assumed for the moment
+
+                # ensure this pat comment closely matches the one above
+                comm = 'pat -jFTp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, proc_archive)
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                proc.wait()
+                info = proc.stdout.read().decode("utf-8").split("\n")[1].split()
+                # this deconstruction may change depending on formatting of the pat command
+                freq = info[1]
+                mjd = info[2]
+                uncertainty = info[3]
+                # parse flags
+                flags_dict = {}
+                for x in range(5, len(info), 2):
+                    flags_dict[info[x]] = info[x+1]
+
+                flags_json = json.dumps(flags_dict)
+                flags = json.loads(flags_json)
+
+                # link via entry in TOA table - DISABLED UNTIL THE TOA TABLE GETS FIXED BY AJ
+                #toa_id = create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, db_client, logger)
+                
+                #logger.info("Entry in table 'toas' successfully created - ID {0}".format(toa_id))
+
     else:
         logger.error("Template does not exist or does not have 1024 phase bins. Skipping ToA generation.")
 
@@ -1620,6 +1702,8 @@ def generate_summary(output_dir, cparams, psrname, logger):
         sfile.write("=========== END ========= \n")
         sfile.close()
 
+#--------------------------------------------------- Andrew's utilities -------------------------------
+
 # routine to check the pass/fail status of a processing's summary file
 # returns True or False
 def check_summary(output_dir, logger):
@@ -1659,3 +1743,24 @@ def check_summary(output_dir, logger):
 
     return retval
 
+# calculate the zapped fraction of a file based on the dynspec file
+def calc_dynspec_zap_fraction(dynspec_file):
+
+    if (os.path.isfile(dynspec_file)):
+        # convert the dynspec file into a numpy array
+        data = np.loadtxt(dynspec_file, comments='#')
+
+        # loop through and count
+        zap_lines = 0
+        for x in range(0, len(data)):
+            
+            # check for zap condition
+            if (float(data[x][4]) == 0) and (float(data[x][5]) == 0):
+                zap_lines = zap_lines + 1
+
+        retval = float(zap_lines)/float(len(data))
+        
+    else:
+        raise Exception ("File {0} cannot be found".format(dynspec_file))
+
+    return retval

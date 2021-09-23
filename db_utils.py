@@ -172,7 +172,7 @@ def check_response(response):
 # future checks may need to be added to ensure that the pipeline being called is a MEERPIPE pipeline
 def check_pipeline(pipe_id, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     pipelines = Pipelines(client, url, token)
 
     # query for matching IDs
@@ -192,7 +192,7 @@ def check_pipeline(pipe_id, client, url, token):
 # return a unique observation id given a pulsar name and an exact psrdb-format utc
 def get_observation_id(utc, psr, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     observations = Observations(client, url, token)
     pulsartargets = Pulsartargets(client, url, token)
 
@@ -223,7 +223,7 @@ def get_observation_id(utc, psr, client, url, token):
 # return a unique folding id given an observation ID and a pipeline ID
 def get_folding_id(obs_id, pipe_id, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     processings = Processings(client, url, token)
     pipelines = Pipelines(client, url, token)
     foldings = Foldings(client, url, token)
@@ -258,7 +258,7 @@ def get_folding_id(obs_id, pipe_id, client, url, token):
 # return the psrdb id of a pulsar given a jname
 def get_pulsar_id(psr, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     pulsars = Pulsars(client, url, token)
 
     # query for entries matching the jname
@@ -277,7 +277,7 @@ def get_pulsar_id(psr, client, url, token):
 # return a DB ID for a given formal project code
 def get_project_id(proj_code, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     projects = Projects(client, url, token)
 
     # query for project code
@@ -296,7 +296,7 @@ def get_project_id(proj_code, client, url, token):
 # return a project's formal code given an observation id
 def get_observation_project_code(obs_id, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     observations = Observations(client, url, token)
 
     # query for observation id
@@ -315,7 +315,7 @@ def get_observation_project_code(obs_id, client, url, token):
 # return a timedelta object for an embargo timespan given a project id
 def get_project_embargo(pid, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     projects = Projects(client, url, token)
 
     # query for pid
@@ -334,7 +334,7 @@ def get_project_embargo(pid, client, url, token):
 # returns the job state of a processing entry from PSRDB
 def get_job_state(proc_id, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     processings = Processings(client, url, token)
 
     # query for proc id
@@ -353,7 +353,7 @@ def get_job_state(proc_id, client, url, token):
 # returns the slurm job id of a processing entry from PSRDB
 def get_slurm_id(proc_id, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     processings = Processings(client, url, token)
 
     # query for proc id
@@ -369,12 +369,32 @@ def get_slurm_id(proc_id, client, url, token):
     else:
         return
 
+# returns a JSON object containing the results field matching a particular proc_id
+def get_results(proc_id, client, url, token):
+
+    # set up PSRDB tables
+    processings = Processings(client, url, token)
+
+    # query for proc id
+    response = processings.list_graphql(proc_id, None, None, None)
+    check_response(response)
+    proc_content = json.loads(response.content)
+    proc_data = proc_content['data']['processing']
+
+    # check for valid proc id
+    if not (proc_data == None):
+        results = json.loads(proc_data['results'].replace("'", '"'))
+        return results
+    else:
+        return
+
+
 # ----- CREATE FUNCTIONS -----
 
 # creates a processing entry with the specified parameters, or returns one if it already exists
 def create_processing(obs_id, pipe_id, parent_id, location, client, url, token, logger):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     pipelines = Pipelines(client, url, token)
     processings = Processings(client, url, token)
     processings.set_field_names(True, False)
@@ -448,8 +468,6 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
     eph_content = json.loads(response.content)
     eph_data = eph_content['data']['allEphemerides']['edges']
 
-    # EDIT COMPLETE UP TO HERE - FIX THIS NEXT WEEK
-
     # need to introduce a loop to catch any simultaneous writes to the database to avoid ephemeris duplication
     success = False
     counter = 0
@@ -516,6 +534,59 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
                 retval = eph_id
                 success = True
                 logger.info("No match found, new ephemeris entry created, ID = {0}".format(retval))
+
+    return retval
+
+# creates a TOA record linking a template, folding, ephemeris and processing
+# if one already exists, returns the existing entry's ID
+def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, client, logger):
+
+    logger.info("Checking for linked TOA entries as part of TOA generation...")
+
+    # set up PSRDB tables
+    toas = Toas(client, cparams["db_url"], cparams["db_token"])
+
+    # recall matching entries in TOA table and check for equivalence
+    response = toas.list_graphql(None, cparams["db_proc_id"], cparams["db_fold_id"], eph_id, template_id)
+    check_response(response)
+    toa_content = json.loads(response.content)
+    toa_data = toa_content['data']['allToas']['edges']
+
+    # there should only be either one or zero results
+    if (len(toa_data) == 0):
+        # if no entry exists, create one
+        # in this case, we're taking almost all the parameters from the archive_utils function
+        comment = "Entry created as part of MeerPIPE - Pipeline ID {0} (Project {1})".format(cparams["db_pipe_id"], cparams["pid"])
+        if (quality == True):
+            qual_code = "nominal"
+        else:
+            qual_code = "bad"
+
+        response = toas.create(
+            proc_id,
+            fold_id,
+            eph_id,
+            template_id,
+            json.dumps(flags),
+            freq,
+            mjd,
+            site,
+            uncertainty,
+            qual_code,
+            comment,
+        )
+        toa_content = json.loads(response.content)
+        toa_id = toa_content['data']['createToa']['toa']['id']
+        retval = toa_id
+        logger.info("No match found, new TOA entry created, ID = {0}".format(retval))
+
+    elif (len(toa_data) == 1):
+        # entry already exists - return the correct ID
+        retval = toas.decode_id(toa_data[0]['node']['id'])
+        logger.info("Match found, TOA ID = {0}".format(retval))        
+    else:
+        # Houston, we have a problem
+        raise Exception("Multiple TOA entries found for combination of Proc {0}, Fold {1}, Eph {2}, Template {3}".format(cparams["db_proc_id"], cparams["db_fold_id"], eph_id, template_id))
 
     return retval
 
@@ -626,7 +697,7 @@ def create_template(psrname, template, cparams, client, logger):
 # this is going to be dirty as heck, until AJ specifies if there's a better way to do this
 def update_processing(proc_id, obs_id, pipe_id, parent_id, embargo_end, location, job_state, job_output, results, client, url, token):
 
-    # setup PSRDB tables
+    # set up PSRDB tables
     processings = Processings(client, url, token)
     processings.set_field_names(True, False)
 
