@@ -32,44 +32,61 @@ from graphql_client import GraphQLClient
 # Important paths
 PSRDB = "psrdb.py"
 
+# Important constants
+SIMUL_WRITE_CHECKS = 3
+
 # Function Definitions
 
 # ----- MISC UTILITIES FUNCTIONS -----
 
-# convert a "normal" utc date to a format readable by psrdb
+# ROLE   : Convert a UTC date from "normal" to PSRDB format
+# INPUTS : UTC date string (YYYY-MM-DD-HH:MM:SS)
+# RETURNS: UTC date string (YYYY-MM-DDTHH:MM:SS+00:00)
 def utc_normal2psrdb(d):
 
     dr = utc_normal2date(d)
     return utc_date2psrdb(dr)
 
-# convert a psrdb utc date to the "normal" format
+# ROLE   : Convert a UTC date from PSRDB to "normal" format
+# INPUTS : UTC date string (YYYY-MM-DDTHH:MM:SS+00:00)
+# RETURNS: UTC date string (YYYY-MM-DD-HH:MM:SS)
 def utc_psrdb2normal(d):
 
     dr = utc_psrdb2date(d)
     return utc_date2normal(dr)
 
-# convert a "normal" utc date to a datetime object
+# ROLE   : Convert a "normal" UTC date to a Datetime object
+# INPUTS : UTC date string (YYYY-MM-DD-HH:MM:SS)
+# RETURNS: Datetime object
 def utc_normal2date(d):
 
     return  datetime.datetime.strptime(d, '%Y-%m-%d-%H:%M:%S')
 
-# convert a psrdb utc date to a datetime object
+# ROLE   : Convert a PSRDB UTC date to a Datetime object
+# INPUTS : UTC date string (YYYY-MM-DDTHH:MM:SS+00:00)
+# RETURNS: Datetime object
 def utc_psrdb2date(d):
 
     return datetime.datetime.strptime(d, '%Y-%m-%dT%H:%M:%S+00:00')
 
-# convert a datetime object into a "normal" utc date
+# ROLE   : Convert a Datetime object to a "normal" UTC date
+# INPUTS : Datetime object
+# RETURNS: UTC date string (YYYY-MM-DD-HH:MM:SS)
 def utc_date2normal(d):
 
     return "%s-%s" % (d.date(), d.time())
 
-# convert a datetime object into a psrdb utc date
+# ROLE   : Convert a Datetime object to a PSRDB UTC date
+# INPUTS : Datetime object
+# RETURNS: UTC date string (YYYY-MM-DDTHH:MM:SS+00:00)
 def utc_date2psrdb(d):
 
     return "%sT%s+00:00" % (d.date(), d.time())
 
-# convert short-hand PID to official PID - encoding taken from query_obs.py (Aditya)
-# TODO: May be incomplete! Check official list with Ryan and/or Matthew
+# ROLE   : Convert short-hand project codes to PSRDB/official project codes
+#          Encoding taken from query_obs.py. List may be incomplete.
+# INPUTS : String
+# RETURNS: String
 def pid_getofficial(sp):
 
     if sp == "MB01":
@@ -93,7 +110,10 @@ def pid_getofficial(sp):
 
     return op
 
-# convert official PID to short-hand PID - encoding taken from query_obs.py (Aditya)
+# ROLE   : Convert PSRDB/official project codes to short-hand project codes
+#          Encoding taken from query_obs.py. List may be incomplete.
+# INPUTS : String
+# RETURNS: String
 def pid_getshort(op):
 
     if op == "SCI-20180516-MB-01":
@@ -117,7 +137,9 @@ def pid_getshort(op):
 
     return sp
 
-# shorthand storage for processing job states
+# ROLE   : Create a JSON object representing a given state of a pipeline job
+# INPUTS : Integer
+# RETURNS: JSON object
 def job_state_code(jid):
 
     if jid == 0:
@@ -133,15 +155,11 @@ def job_state_code(jid):
     elif jid == 5:
         state = "Unknown" # cover-all for indeterminate states / outcomes still under development (e.g. "fluxcal")
 
-    #return state
-    return json.dumps({"job_state": state})
+    return json.loads(json.dumps({"job_state": state}))
 
-# formats the output of a JSON dumps command into a PSRDB compatible JSON string
-def psrdb_json_formatter(json_str):
-
-    return """'{0}'""".format(json_str)
-
-# returns the name of the node on which the job is running
+# ROLE   : Return the name of the node on which a given job is operating
+# INPUTS : None
+# RETURNS: String
 def get_node_name():
 
     info = "hostname"
@@ -153,13 +171,14 @@ def get_node_name():
 
 # ----- CHECK FUNCTIONS -----
 
-# check if a PSRDB GraphQL query gave a valid response
-# if not valid, raise exception
+# ROLE   : Checks that a response to a PSRDB query is valid.
+# INPUTS : Response object
+# RETURNS: None (success) | Exception (failure)
 def check_response(response):
 
     valid = False
 
-    # tests for validity
+    # tests for validity - expand as neccessary
     if (response.status_code == 200):
         valid = True
     
@@ -168,18 +187,21 @@ def check_response(response):
 
     return
 
-# check if a pipeline ID is valid
-# future checks may need to be added to ensure that the pipeline being called is a MEERPIPE pipeline
+# ROLE   : Checks if a Pipeline ID is valid, i.e. that it exists.
+#        : May in future also check if pipeline is a MeerPIPE pipeline
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: Boolean
 def check_pipeline(pipe_id, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     pipelines = Pipelines(client, url, token)
 
-    # query for matching IDs
-    response = pipelines.list_graphql(pipe_id, None)
+    # Query for pipe_id
+    response = pipelines.list(pipe_id, None)
     check_response(response)
     pipe_content = json.loads(response.content)
 
+    # Check for validity
     if (pipe_content['data']['pipeline'] == None):
         retval = False
     else:
@@ -189,24 +211,44 @@ def check_pipeline(pipe_id, client, url, token):
 
 # ----- GET FUNCTIONS -----
 
-# return a unique observation id given a pulsar name and an exact psrdb-format utc
+# ROLE   : Returns a unique Observation ID, given a pulsar name and PSRDB UTC
+# INPUTS : String, String, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
 def get_observation_id(utc, psr, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     observations = Observations(client, url, token)
     pulsartargets = Pulsartargets(client, url, token)
 
-    # recall all observations with that UTC
-    response = observations.list_graphql(None, None, None, None, None, None, None, None, None, utc, utc)
+    # Query for matching UTC
+    response = observations.list(
+        None, 
+        None,
+        None,
+        None,
+        None, 
+        None,
+        None,
+        None,
+        None,
+        utc,
+        utc
+    )
     check_response(response)
     obs_content = json.loads(response.content)
     obs_data = obs_content['data']['allObservations']['edges']
 
-    # check if any of these has a target name matching the psrname (should only be one entry if any)
+    # Check for Targets matching the pulsar name
     match_counter = 0
     for x in range(0, len(obs_data)):
         target_name = obs_data[x]['node']['target']['name']
-        response = pulsartargets.list_graphql(None, None, target_name, None, psr)
+        response = pulsartargets.list(
+            None,
+            None,
+            target_name,
+            None,
+            psr
+        )
         check_response(response)
         target_content = json.loads(response.content)
         target_data = target_content['data']['allPulsartargets']['edges']
@@ -214,33 +256,46 @@ def get_observation_id(utc, psr, client, url, token):
         obs_id = observations.decode_id(obs_data[x]['node']['id'])
         match_counter = match_counter + len(target_data)
 
-    # check for valid result
+    # Check for valid result
     if (match_counter == 1):
-        return obs_id
+        return int(obs_id)
     else:
         return
 
-# return a unique folding id given an observation ID and a pipeline ID
+# ROLE   : Returns a unique Folding ID, given an Observation ID and Pipeline ID
+# INPUTS : Integer, Integer, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
 def get_folding_id(obs_id, pipe_id, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     processings = Processings(client, url, token)
+    processings.set_field_names(True, False)
     pipelines = Pipelines(client, url, token)
     foldings = Foldings(client, url, token)
 
-    # recall all processings matching the obs_ID
-    response = processings.list_graphql(None, obs_id, None, None)
+    # Query processings for matching obs_id
+    response = processings.list(
+        None,
+        obs_id,
+        None,
+        None,
+        None
+    )
     check_response(response)
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['allProcessings']['edges']
 
-    # check if any of these has a parent_id name matching the provided pipe_id
+    # Check for matching pipe_id
     match_counter = 0
     for x in range(0, len(proc_data)):
 
-        if (pipelines.decode_id(proc_data[x]['node']['parent']['id']) == pipe_id):
+        if (pipelines.decode_id(proc_data[x]['node']['pipeline']['id']) == str(pipe_id)):
 
-            response = foldings.list_graphql(None, processings.decode_id(proc_data[x]['node']['id']), None)
+            response = foldings.list(
+                None,
+                processings.decode_id(proc_data[x]['node']['id']),
+                None
+            )
             check_response(response)
             fold_content = json.loads(response.content)
             fold_data = fold_content['data']['allFoldings']['edges']
@@ -249,139 +304,195 @@ def get_folding_id(obs_id, pipe_id, client, url, token):
                 match_counter = match_counter + 1
                 fold_id = foldings.decode_id(fold_data[y]['node']['id'])
 
-    # check for valid result
+    # Check for valid result
     if (match_counter == 1):
-        return fold_id
+        return int(fold_id)
     else:
         return
 
-# return the psrdb id of a pulsar given a jname
+# ROLE   : Return a Pulsar ID given a pulsar J-name
+# INPUTS : String, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
 def get_pulsar_id(psr, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     pulsars = Pulsars(client, url, token)
 
-    # query for entries matching the jname
-    response = pulsars.list_graphql(None, psr)
+    # Query for matching jname
+    response = pulsars.list(
+        None,
+        psr
+    )
     check_response(response)
     psr_content = json.loads(response.content)
     psr_data = psr_content['data']['allPulsars']['edges']
 
-    # there should only be one entry - check and confirm, else return None
+    # Check for single matching entry and return ID
     if (len(psr_data) == 1):
         psr_id = pulsars.decode_id(psr_data[0]['node']['id'])
-        return psr_id
+        return int(psr_id)
     else:
         return
 
-# return a DB ID for a given formal project code
+# ROLE   : Return a Project ID given an official project code
+#        : In future, may check for valid project code
+# INPUTS : String, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
 def get_project_id(proj_code, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     projects = Projects(client, url, token)
 
-    # query for project code
-    response = projects.list_graphql(None, proj_code)
+    # Query for project code
+    response = projects.list(
+        None,
+        None,
+        proj_code
+    )
     check_response(response)
     proj_content = json.loads(response.content)
     proj_data = proj_content['data']['allProjects']['edges']
 
-    # there should only be one entry - check and confirm, else return None
+    # Check for single matching entry and return ID
     if (len(proj_data) == 1):
         proj_id = projects.decode_id(proj_data[0]['node']['id'])
-        return proj_id
+        return int(proj_id)
     else:
         return
 
-# return a project's formal code given an observation id
+# ROLE   : Return a Project official code for a given Observation ID
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: String (success) | None (failure)
 def get_observation_project_code(obs_id, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     observations = Observations(client, url, token)
 
-    # query for observation id
-    response = observations.list_graphql(obs_id, None, None, None, None, None, None, None, None, None, None)
+    # Query for obs_id
+    response = observations.list(
+        obs_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None
+    )
     check_response(response)
     obs_content = json.loads(response.content)
     obs_data = obs_content['data']['observation']
 
-    # check the obs_id was valid
+    # Check for valid obs_id
     if not (obs_data == None):
         proj_code = obs_data['project']['code']
         return proj_code
     else:
         return
 
-# return a timedelta object for an embargo timespan given a project id
+# ROLE   : Return an embargo timespan given a Project ID
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: Timedelta object (success) | None (failure)
 def get_project_embargo(pid, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     projects = Projects(client, url, token)
 
-    # query for pid
-    response = projects.list_graphql(pid, None)
+    # Query for project ID
+    response = projects.list(
+        pid,
+        None,
+        None
+    )
     check_response(response)
     proj_content = json.loads(response.content)
     proj_data = proj_content['data']['project']
 
-    # check if pid was valid and return
+    # Check for valid project ID
     if not (proj_data == None):
         embargo_period = proj_data['embargoPeriod']
         return pd.to_timedelta(embargo_period)
     else:
         return
 
-# returns the job state of a processing entry from PSRDB
+# ROLE   : Return the job state of a given Processing ID
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: JSON object (success) | None (failure)
 def get_job_state(proc_id, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     processings = Processings(client, url, token)
 
-    # query for proc id
-    response = processings.list_graphql(proc_id, None, None, None)
+    # Query for proc_id
+    response = processings.list(
+        proc_id,
+        None,
+        None,
+        None,
+        None
+    )
     check_response(response)
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['processing']
 
-    # check for valid proc id
+    # Check for valid proc_id
     if not (proc_data == None):
-        job_state = json.loads(proc_data['jobState'].replace("'", '"'))['job_state']
+        job_state = json.loads(proc_data['jobState'].replace("'", '"'))
         return job_state
     else:
         return
 
-# returns the slurm job id of a processing entry from PSRDB
-def get_slurm_id(proc_id, client, url, token):
+# ROLE   : Return the job output of a given Processing ID
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: JSON object (success) | None (failure)
+def get_job_output(proc_id, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     processings = Processings(client, url, token)
 
-    # query for proc id
-    response = processings.list_graphql(proc_id, None, None, None)
+    # Query for proc_id
+    response = processings.list(
+        proc_id,
+        None,
+        None,
+        None,
+        None
+    )
     check_response(response)
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['processing']
 
-    # check for valid proc id
+    # Check for valid proc_id
     if not (proc_data == None):
-        job_id = json.loads(proc_data['jobOutput'].replace("'", '"'))['job_id']
-        return job_id
+        job_output = json.loads(proc_data['jobOutput'].replace("'", '"'))
+        return job_output
     else:
         return
 
-# returns a JSON object containing the results field matching a particular proc_id
+# ROLE   : Return the results of a given Processing ID
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: JSON object (success) | None (failure)
 def get_results(proc_id, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     processings = Processings(client, url, token)
 
-    # query for proc id
-    response = processings.list_graphql(proc_id, None, None, None)
+    # Query for proc_id
+    response = processings.list(
+        proc_id,
+        None,
+        None,
+        None,
+        None
+    )
     check_response(response)
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['processing']
 
-    # check for valid proc id
+    # Check for valid proc_id
     if not (proc_data == None):
         results = json.loads(proc_data['results'].replace("'", '"'))
         return results
@@ -391,57 +502,84 @@ def get_results(proc_id, client, url, token):
 
 # ----- CREATE FUNCTIONS -----
 
-# creates a processing entry with the specified parameters, or returns one if it already exists
+# ROLE   : Creates a Processing entry with the specified parameters.
+#        : If a matching entry exists, that is returned instead.
+# INPUTS : Integer, Integer, Integer, String, GraphQL client, String, String, Logger object
+# RETURNS: Integer (success) | None (failure)
 def create_processing(obs_id, pipe_id, parent_id, location, client, url, token, logger):
 
-    # set up PSRDB tables
+    # PSRDB setup
     pipelines = Pipelines(client, url, token)
     processings = Processings(client, url, token)
     processings.set_field_names(True, False)
 
+    # Input sanitisation and preparation of defaults
     location = os.path.normpath(location)
+    embargo_end = utc_date2psrdb(datetime.datetime.now().replace(microsecond=0))
+    job_state = json.loads('{}')
+    job_output = json.loads('{}')
+    results = json.loads('{}')
 
-    # recall all observations with matching parameters as best we can
-    response = processings.list_graphql(None, obs_id, location, None)
+    # Query for processings matching input parameters
+    response = processings.list(
+        None,
+        obs_id,
+        parent_id,
+        location,
+        None
+    )
     check_response(response)
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['allProcessings']['edges']
     
-    # check if any of the remaining parameters match
+    # Check for matches of non-query parameters
     match_counter = 0
     for x in range(0, len(proc_data)):
-
-        proc_parent_id = pipelines.decode_id(proc_data[x]['node']['parent']['id'])
-        proc_pipe_id = pipelines.decode_id(proc_data[x]['node']['pipeline']['id'])
-
-        if (proc_pipe_id == pipe_id and proc_parent_id == parent_id):
-
-            proc_id = processings.decode_id(proc_data[x]['node']['id'])
+        proc_pipe_id = int(pipelines.decode_id(proc_data[x]['node']['pipeline']['id']))
+        if (proc_pipe_id == pipe_id):
+            proc_id = int(processings.decode_id(proc_data[x]['node']['id']))
             match_counter = match_counter + 1
 
+    # Take action based on number of matching entries
     if (match_counter == 1):
-        # return existing processing
-        logger.info("Found existing entry in 'processings' matching launch parameters, ID = %s" % (str(proc_id)))
-        retval = proc_id
+        # Update and return existing processing
+        logger.info("Found existing entry in 'processings' matching launch parameters, ID = {0}".format(proc_id))
+        logger.info("Updating to default starting parameters")
+        retval = int(proc_id)
+        update_id = update_processing(
+            proc_id,
+            obs_id,
+            pipe_id,
+            parent_id,
+            embargo_end,
+            location,
+            job_state,
+            job_output,
+            results, 
+            client,
+            url,
+            token
+        )
+        if (update_id != proc_id) or (update_id == None):
+            logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(retval))
+        else:
+            logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(retval))
     elif (match_counter == 0):
-        # create and return new processing with default parameters
+        # Create new processing with default parameters
         response = processings.create(
             obs_id,
             pipe_id,
             parent_id,
-            utc_date2psrdb(datetime.datetime.now().replace(microsecond=0)),
+            embargo_end,
             location,
-            json.dumps({}),
-            json.dumps({}),
-            json.dumps({}),
-            #psrdb_json_formatter({}),
-            #psrdb_json_formatter({}),
-            #psrdb_json_formatter({}),
+            json.dumps(job_state),
+            json.dumps(job_output),
+            json.dumps(results),
         )
         proc_content = json.loads(response.content)
         proc_id = proc_content['data']['createProcessing']['processing']['id']
-        logger.info("Creating new entry in 'processings', ID = %s" % (str(proc_id)))
-        retval = proc_id
+        logger.info("Creating new entry in 'processings', ID = {0}".format(proc_id))
+        retval = int(proc_id)
     else:
         # Houston, we have a problem
         logger.error("Multiple entries in 'processings' matching launch parameters - requires resolution")
@@ -449,37 +587,51 @@ def create_processing(obs_id, pipe_id, parent_id, location, client, url, token, 
 
     return retval
 
-# creates an ephemeris entry in PSRDB, but checks to see if a matching entry already exists
-# and if so, will use the existing entry instead
-# returns the ID of the relevant entry
+# ROLE   : Creates a Ephemeris entry with the specified parameters.
+#        : If a matching entry exists, that is returned instead.
+# INPUTS : String, Ephemeris object, Float, Float, Dictionary, GraphQL client, Logger object
+# RETURNS: Integer (success) | Exception (failure)
 def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
 
     logger.info("Checking for ephemeris for {0} as part of TOA generation...".format(psrname))
 
-    # set up PSRDB tables
+    # PSRDB setup
     ephemerides = Ephemerides(client, cparams["db_url"], cparams["db_token"])
+    psr_id = get_pulsar_id(
+        psrname,
+        client,
+        cparams["db_url"],
+        cparams["db_token"]
+    )
 
-    # set up relevant query parameters
-    psr_id = get_pulsar_id(psrname, client, cparams["db_url"], cparams["db_token"])
+    # Input sanitisation
+    dm = float(dm)
+    rm = float(rm)
 
-    # recall matching entries in Ephemerides table and check for equivalence
-    response = ephemerides.list_graphql(None, psr_id, None, float(dm), float(rm))
+    # Query for matching Ephemerides records and check for equivalence
+    response = ephemerides.list(
+        None,
+        psr_id,
+        None,
+        dm,
+        rm
+    )
     check_response(response)
     eph_content = json.loads(response.content)
     eph_data = eph_content['data']['allEphemerides']['edges']
 
-    # need to introduce a loop to catch any simultaneous writes to the database to avoid ephemeris duplication
+    # Loop to catch simultaneous PSRDB access attempts, thereby avoiding duplication errors
     success = False
     counter = 0
 
-    while not (success) and (counter < 3):
+    while not (success):
 
-        if (counter == 3):
-            raise Exception("Stalement detected in processing ID {0}: unable to access PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
+        if (counter == SIMUL_WRITE_CHECKS):
+            raise Exception("Stalement detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
 
         counter = counter + 1
 
-        # scroll until a match is found
+        # Check for matching eph field
         match = False
         for x in range(0, len(eph_data)):
             check_json = json.loads(eph_data[x]['node']['ephemeris'])
@@ -487,18 +639,18 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
                 match = True
                 break
 
-        # check for match, otherwise create a new entry
+        # Check for match, otherwise create a new entry
         if (match):
-            retval = ephemerides.decode_id(eph_data[x]['node']['id'])
+            retval = int(ephemerides.decode_id(eph_data[x]['node']['id']))
             success = True
             logger.info("Match found, ephemeris ID = {0}".format(retval))
         else:
-            # get the required parameters
+            # Get required parameters
             created_at = util_time.get_current_time()
             created_by = getpass.getuser()
             comment = "Entry created as part of MeerPIPE - Pipeline ID {0} (Project {1})".format(cparams["db_pipe_id"], cparams["pid"])
 
-            # check if the ephemeris has its own start/end fields
+            # Check for ephemeris START/FINISH fields
             if 'START' in eph.ephem and 'FINISH' in eph.ephem:
                 start = astrotime(float(eph.ephem['START']['val']), format='mjd', scale='utc').datetime.replace(microsecond=0)
                 finish = astrotime(float(eph.ephem['FINISH']['val']), format='mjd', scale='utc').datetime.replace(microsecond=0)
@@ -508,15 +660,21 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
                 valid_from = util_time.get_time(0)
                 valid_to = util_time.get_time(4294967295)
 
-            # double check for simultaneous writes
+            # Double check for simultaneous writes
             prev_len = len(eph_data)
-            response = ephemerides.list_graphql(None, psr_id, None, float(dm), float(rm))
+            response = ephemerides.list(
+                None,
+                psr_id,
+                None,
+                dm,
+                rm
+            )
             check_response(response)
             eph_content = json.loads(response.content)
             eph_data = eph_content['data']['allEphemerides']['edges']
 
             if (len(eph_data) == prev_len):
-                # finally, if no new ephemeris has been written by now, create!
+                # No write conflict detected
                 response = ephemerides.create(
                     psr_id,
                     created_at,
@@ -531,7 +689,7 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
                 )
                 eph_content = json.loads(response.content)
                 eph_id = eph_content['data']['createEphemeris']['ephemeris']['id']
-                retval = eph_id
+                retval = int(eph_id)
                 success = True
                 logger.info("No match found, new ephemeris entry created, ID = {0}".format(retval))
 
@@ -539,23 +697,37 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
 
 # creates a TOA record linking a template, folding, ephemeris and processing
 # if one already exists, returns the existing entry's ID
+
+
+# ROLE   : Creates a TOA entry linking a template, folding, ephemeris and processing.
+#        : If a matching entry exists, that is returned instead.
+# INPUTS : Integer, Integer, JSON object, Float, Float, String[1], Float, Boolean, 
+#          Dictionary, GraphQL client, Logger object
+# RETURNS: Integer (success) | Exception (failure)
+
+# STILL WIP
 def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, client, logger):
 
     logger.info("Checking for linked TOA entries as part of TOA generation...")
 
-    # set up PSRDB tables
+    # PSRDB setup
     toas = Toas(client, cparams["db_url"], cparams["db_token"])
 
-    # recall matching entries in TOA table and check for equivalence
-    response = toas.list_graphql(None, cparams["db_proc_id"], cparams["db_fold_id"], eph_id, template_id)
+    # Query for matching TOA records and check for equivalence
+    response = toas.list(
+        None,
+        cparams["db_proc_id"],
+        cparams["db_fold_id"],
+        eph_id,
+        template_id
+    )
     check_response(response)
     toa_content = json.loads(response.content)
     toa_data = toa_content['data']['allToas']['edges']
 
-    # there should only be either one or zero results
+    # Check for number of matching results
     if (len(toa_data) == 0):
-        # if no entry exists, create one
-        # in this case, we're taking almost all the parameters from the archive_utils function
+        # If no entry exists, create one
         comment = "Entry created as part of MeerPIPE - Pipeline ID {0} (Project {1})".format(cparams["db_pipe_id"], cparams["pid"])
         if (quality == True):
             qual_code = "nominal"
@@ -563,10 +735,10 @@ def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, 
             qual_code = "bad"
 
         response = toas.create(
-            proc_id,
-            fold_id,
-            eph_id,
-            template_id,
+            int(cparams["db_proc_id"]),
+            int(cparams["db_fold_id"]),
+            int(eph_id),
+            int(template_id),
             json.dumps(flags),
             freq,
             mjd,
@@ -581,72 +753,106 @@ def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, 
         logger.info("No match found, new TOA entry created, ID = {0}".format(retval))
 
     elif (len(toa_data) == 1):
-        # entry already exists - return the correct ID
-        retval = toas.decode_id(toa_data[0]['node']['id'])
-        logger.info("Match found, TOA ID = {0}".format(retval))        
+        # Entry already exists - update and return
+        retval = int(toas.decode_id(toa_data[0]['node']['id']))
+        logger.info("Match found, TOA ID = {0}".format(retval))
+        logger.info("Updating entry...")
+        comment = "Entry updated as part of MeerPIPE - Pipeline ID {0} (Project {1})".format(cparams["db_pipe_id"], cparams["pid"])
+        update_id = update_toa_record(
+            retval,
+            int(cparams["db_proc_id"]),
+            int(cparams["db_fold_id"]),
+            int(eph_id),
+            int(template_id),
+            flags,
+            freq,
+            mjd,
+            site,
+            uncertainty,
+            quality,
+            comment,
+            client,
+            cparams["db_url"],
+            cparams["db_token"]
+        )
+        if (update_id != retval) or (update_id == None):
+            logger.error("Failure to update 'toa' entry ID {0} - PSRDB cleanup may be required.".format(retval))
+        else:
+            logger.info("Updated PSRDB entry in 'toa' table, ID = {0}".format(retval))
     else:
         # Houston, we have a problem
         raise Exception("Multiple TOA entries found for combination of Proc {0}, Fold {1}, Eph {2}, Template {3}".format(cparams["db_proc_id"], cparams["db_fold_id"], eph_id, template_id))
 
     return retval
 
-# creates a template entry in PSRDB, but checks to see if a matching entry already exists
-# and if so, will use the existing entry instead
-# returns the ID of the relevant entry
+# ROLE   : Creates a Templates entry with the specified parameters.
+#        : If a matching entry exists, that is returned instead.
+# INPUTS : String, String, Dictionary, GraphQL client, Logger object
+# RETURNS: Integer (success) | Exception (failure)
 def create_template(psrname, template, cparams, client, logger):
 
     logger.info("Checking for templates for {0} as part of TOA generation...".format(psrname))
 
-    # set up PSRDB tables
+    # PSRDB setup
     templates = Templates(client, cparams["db_url"], cparams["db_token"])
 
-    # extract relevant template info
+    # Gather template info and sanitise
     comm = "vap -c bw,freq {0}".format(template)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
     info = proc.stdout.read().decode("utf-8").split("\n")
-    bw = info[1].split()[1]
-    freq = info[1].split()[2]
+    bw = float(info[1].split()[1])
+    freq = float(info[1].split()[2])
+    location = os.path.normpath(template)
 
-    # recall matching entries in Templates table and check for equivalence
-    psr_id = get_pulsar_id(psrname, client, cparams["db_url"], cparams["db_token"])
-    response = templates.list_graphql(None, psr_id, float(freq), float(bw))
+    # Query for matching Templates records and check for equivalence
+    psr_id = get_pulsar_id(
+        psrname,
+        client,
+        cparams["db_url"],
+        cparams["db_token"]
+    )
+    response = templates.list(
+        None,
+        psr_id,
+        float(freq),
+        float(bw)
+    )
     check_response(response)
     template_content = json.loads(response.content)
     template_data = template_content['data']['allTemplates']['edges']
 
-    # need to introduced a loop to catch any simultaneous writes to the database to avoid ephemeris duplication
+    # Loop to catch simultaneous PSRDB access attempts, thereby avoiding duplication errors
     success = False
     counter = 0
 
-    while not (success) and (counter < 3):
+    while not (success):
 
-        if (counter == 3):
-            raise Exception("Stalement detected in processing ID {0}: unable to access PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
+        if (counter == SIMUL_WRITE_CHECKS):
+            raise Exception("Stalement detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
 
         counter = counter + 1
 
-        # scroll until a match is found
+        # Check for matching location
         match = False
-        location = os.path.normpath(template)
         for x in range(0, len(template_data)):
             # check for location match
-            if (template_data[x]['node']['location'] == template):
+            if (template_data[x]['node']['location'] == location):
                 match = True
                 break
 
-        # check for match, otherwise create a new entry
+        # Check for match, otherwise create a new entry
         if (match):
-            retval = templates.decode_id(template_data[x]['node']['id'])
+            retval = int(templates.decode_id(template_data[x]['node']['id']))
             success = True
             logger.info("Match found, template ID = {0}".format(retval))
         else:
-            # get the required parameters
+            # Gather required parameters
             created_at = util_time.get_current_time()
             created_by = getpass.getuser()
             temp_method = "Unknown" # (?)
-            # get some extra template info
+            # Extra template info
             ext = template.split(".")[len(template.split(".")) - 1]
             if (ext == "std"):
                 comm = "vap -c nchan,nsub,npol,nbin {0}".format(template)
@@ -663,15 +869,20 @@ def create_template(psrname, template, cparams, client, logger):
                 temp_type = "Unknown"
             comment = "Entry created as part of MeerPIPE - Pipeline ID {0} (Project {1})".format(cparams["db_pipe_id"], cparams["pid"])
 
-            # double check for simultaneous writes
+            # Double check for simultaneous writes
             prev_len = len(template_data)
-            response = templates.list_graphql(None, psr_id, float(freq), float(bw))
+            response = templates.list(
+                None,
+                psr_id,
+                freq,
+                bw
+            )
             check_response(response)
             template_content = json.loads(response.content)
             template_data = template_content['data']['allTemplates']['edges']
 
             if (len(template_data) == prev_len):
-                # finally, if no new ephemeris has been written by now, create!
+                # No write conflict detected
                 response = templates.create(
                     psr_id,
                     freq,
@@ -691,26 +902,105 @@ def create_template(psrname, template, cparams, client, logger):
 
     return retval
 
+# ROLE   : Creates a Pipelineimage entry with the specified parameters.
+#        : If a matching entry exists, that is updated returned instead.
+# INPUTS : String, String, Integer, Dictionary, GraphQL client, Logger object
+# RETURNS: Integer (success) | Exception (failure)
+def create_pipelineimage(image, image_type, rank, cparams, client, logger):
+
+    logger.info("Checking for existing images matching {0} from processing {1}".format(image,cparams["db_proc_id"]))
+
+    # PSRDB setup
+    pipelineimages = Pipelineimages(client, cparams["db_url"], cparams["db_token"])
+    
+    # Sanitise input
+    image = os.path.normpath(image)
+
+    # Query matching Pipelineimages entries and check for equivalence
+    response = pipelineimages.list(
+        None,
+        int(cparams["db_proc_id"])
+    )
+    check_response(response)
+    pipeimage_content = json.loads(response.content)
+    pipeimage_data = pipeimage_content['data']['allPipelineimages']['edges']
+
+    # Check for matches based on image type
+    matches = 0
+    for x in range(0, len(pipeimage_data)):
+        if (pipeimage_data[x]['node']['imageType'] == image_type):
+            matches = matches +1
+            pipeimage_id = pipelineimages.decode_id(pipeimage_data[x]['node']['id'])
+
+    if (matches == 0):
+        # if no entry exists, create one
+        response = pipelineimages.create(
+            image,
+            image_type,
+            int(rank),
+            int(cparams["db_proc_id"]),
+        )
+        pipeimage_content = json.loads(response.content)
+        pipeimage_id = pipeimage_content['data']['createPipelineimage']['pipelineimage']['id']
+        retval = int(pipeimage_id)
+        logger.info("No match found, new pipelineimage entry created, ID = {0}".format(retval))
+
+    elif (matches == 1):
+        # entry already exists - update and return
+        logger.info("Match found, pipelineimage ID = {0}".format(pipeimage_id))
+        retval = int(pipeimage_id)
+        update_id = update_pipelineimage(
+            retval,
+            image,
+            image_type,
+            rank,
+            int(cparams["db_proc_id"]),
+            client,
+            cparams["db_url"],
+            cparams["db_token"]
+        )
+        #logger.info(update_id)
+        if (update_id != retval) or (update_id == None):
+            logger.error("Failure to update 'pipelineimages' entry ID {0} - PSRDB cleanup may be required.".format(retval))
+        else:
+            logger.info("Updated PSRDB entry in 'pipelineimages' table, ID = {0}".format(retval))
+    else:
+        # Houston, we have a problem
+        raise Exception("Multiple 'pipelineimage' entries found for combination of processing ID {0} and filename {1}".format(cparams["db_proc_id"], image))
+        retval = None
+
+    return retval
+
 # ----- UPDATE FUNCTIONS -----
 
-# update the content of a processing entry, using whatever values are provided ('None' if not provided)
-# this is going to be dirty as heck, until AJ specifies if there's a better way to do this
+# ROLE   : Update the content of an existing Processing entry.
+#        : Unspecified parameters should be set to 'None'.
+# INPUTS : Integer, Integer, Integer, Integer, String, String,
+#          JSON object, JSON object, JSON object, GraphQL client, 
+#          String, String
+# RETURNS: Integer (success) | None (failure)
 def update_processing(proc_id, obs_id, pipe_id, parent_id, embargo_end, location, job_state, job_output, results, client, url, token):
 
-    # set up PSRDB tables
+    # PSRDB setup
     processings = Processings(client, url, token)
     processings.set_field_names(True, False)
 
-    # query for proc_id
-    response = processings.list_graphql(proc_id, None, None, None)
+    # Query for proc_id
+    response = processings.list(
+        proc_id,
+        None,
+        None,
+        None,
+        None
+    )
     check_response(response)
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['processing']
 
-    # if valid, update
+    # Check for valid proc_id
     if not (proc_data == None):
         
-        # check for parameters
+        # Check for parameters
         if (obs_id == None):
             obs_id = processings.decode_id(proc_data['observation']['id'])
         if (pipe_id == None):
@@ -722,34 +1012,172 @@ def update_processing(proc_id, obs_id, pipe_id, parent_id, embargo_end, location
         if (location == None):
             location = proc_data['location']
         if (job_state == None):
-            job_state = json.dumps(proc_data['jobState'])
+            job_state = json.loads(proc_data['jobState'].replace("'", '"'))
+            #job_state = json.dumps(proc_data['jobState'])
         if (job_output == None):
-            job_output = json.dumps(proc_data['jobOutput'])
+            job_output = json.loads(proc_data['jobOutput'].replace("'", '"'))
+            #job_output = json.dumps(proc_data['jobOutput'])
         if (results == None):
-            results = json.dumps(proc_data['results'])
+            results = json.loads(proc_data['results'].replace("'", '"'))
+            #results = json.dumps(proc_data['results'])
 
-        # update the entry
-        processings.update_variables = {
-            "id": proc_id,
-            "observation_id": obs_id,
-            "pipeline_id": pipe_id,
-            "parent_id": parent_id,
-            "embargo_end": embargo_end,
-            "location": location,
-            "job_state": job_state,
-            "job_output": job_output,
-            "results": results,
-        }
-        response = processings.update_graphql()
+        # Sanitise
+        location = os.path.normpath(location)
+
+        # Update the entry
+        response = processings.update(
+            proc_id,
+            obs_id,
+            pipe_id,
+            parent_id,
+            embargo_end,
+            location,
+            json.dumps(job_state),
+            json.dumps(job_output),
+            json.dumps(results),
+        )
         check_response(response)
         update_content = json.loads(response.content)
         update_data = update_content['data']['updateProcessing']['processing']
         update_id = update_data['id']
-        return update_id
+        return int(update_id)
+    else:
+        return
+
+# ROLE   : Update the content of an existing TOA entry.
+#        : Unspecified parameters should be set to 'None'.
+# INPUTS : Integer, Integer, Integer, Integer, Integer, JSON object, Float, Float,
+#          String[1], Float, Boolean, String, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
+def update_toa_record(toa_id, proc_id, fold_id, eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, comment, client, url, token):
+
+    # PSRDB setup
+    toas = Toas(client, url, token)
+    toas.set_field_names(True, False)
+
+    # Query for toa_id
+    response = toas.list(
+        toa_id,
+        None,
+        None,
+        None,
+        None
+    )
+    check_response(response)
+    toa_content = json.loads(response.content)
+    toa_data = toa_content['data']['toa']
+
+    # Check for valid toa_id
+    if not (toa_data == None):
+
+        # Check for parameters
+        if (proc_id == None):
+            proc_id = toas.decode_id(toa_data['processing']['id'])
+        if (fold_id == None):
+            fold_id = toas.decode_id(toa_data['inputFolding']['id'])
+        if (eph_id == None):
+            eph_id = toas.decode_id(toa_data['timingEphemeris']['id'])
+        if (template_id == None):
+            template_id = toas.decode_id(toa_data['template']['id'])
+        if (flags == None):
+            flags = json.loads(toa_data['flags'])
+        if (freq == None):
+            freq = toa_data['frequency']
+        if (mjd == None):
+            mjd = toa_data['mjd']
+        if (site == None):
+            site = toa_data['site']
+        if (uncertainty == None):
+            uncertainty = toa_data['uncertainty']
+        if (quality == True):
+            quality = "nominal"
+        elif (quality == False):
+            quality = "bad"
+        elif (quality == None):
+            quality = toa_data['quality']
+        if (comment == None):
+            comment = toa_data['comment']
+
+        # Update the entry
+        response = toas.update(
+            toa_id,
+            proc_id,
+            fold_id,
+            eph_id,
+            template_id,
+            json.dumps(flags),
+            freq,
+            mjd,
+            site,
+            uncertainty,
+            quality,
+            comment
+        )
+        check_response(response)
+        update_content = json.loads(response.content)
+        update_data = update_content['data']['updateToa']['toa']
+        update_id = update_data['id']
+        return int(update_id)
+    else:
+        return
+
+
+# ROLE   : Update the content of an existing Pipelineimage entry.
+#        : Unspecified parameters should be set to 'None'.
+# INPUTS : Integer, String, String, Integer, Integer,
+#          GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
+def update_pipelineimage(image_id, image, image_type, rank, proc_id, client, url, token):
+
+    # PSRDB setup
+    pipelineimages = Pipelineimages(client, url, token)
+    pipelineimages.set_field_names(True, False)
+    processings = Processings(client, url, token)
+
+    # Query for image_id
+    response = pipelineimages.list(
+        image_id,
+        None
+    )
+    check_response(response)
+    pipeimage_content = json.loads(response.content)
+    pipeimage_data = pipeimage_content['data']['pipelineimage']
+
+    # Check for validity and update
+    if not (pipeimage_data == None):
+
+        # Check for parameters
+        if (image == None):
+            image = pipeimage_data['image']
+        if (proc_id == None):
+            proc_id = processings.decode_id(pipeimage_data['processing']['id'])
+        if (image_type == None):
+            image_type = pipeimage_data['imageType']
+        if (rank == None):
+            rank = pipeimage_data['rank']
+
+        # Sanitise
+        image = os.path.normpath(image)
+
+        # Update the entry
+        response = pipelineimages.update(
+            int(image_id),
+            image,
+            image_type,
+            int(rank),
+            int(proc_id)
+        )
+        check_response(response)
+        update_content = json.loads(response.content)
+        update_data = update_content['data']['updatePipelineimage']['pipelineimage']
+        update_id = update_data['id']
+        return int(update_id)
     else:
         return
 
 # ----- UNSORTED / NON-UPDATED FUNCTIONS -----
+# Note - most of these functions will eventually be deprecated once the remainder of the PSRDB
+# code modifications have been overhauled / refined. Do not use these functions in future work.
 
 # translate a database query into a usable array
 # this array WILL have a header entry in the first index by default, unless the provied query somehow removes it

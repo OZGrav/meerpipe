@@ -341,6 +341,7 @@ def create_structure(output_dir,cparams,psrname,logger):
     timing_dir = os.path.join(output_dir,"timing")
     decimated_dir = os.path.join(output_dir,"decimated")
     scintillation_dir = os.path.join(output_dir,"scintillation")
+    images_dir = os.path.join(output_dir,"images")
 
     if cparams["type"] == "caspsr":
         #Creating the Project ID directory
@@ -396,6 +397,14 @@ def create_structure(output_dir,cparams,psrname,logger):
         else:
             logger.info("Scintillation directory exists")
 
+        # PSRDB
+        if (cparams["db_flag"]):
+            if not os.path.exists(images_dir):
+                logger.info("Images directory created")
+                os.makedirs(images_dir)
+            else:
+                logger.info("Images directory exists")
+        
         #if not os.path.exists(project_dir):
         #    logger.info("Project directory created")
         #    os.makedirs(project_dir)

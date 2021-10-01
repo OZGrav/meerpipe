@@ -43,7 +43,7 @@ import requests
 from util import ephemeris
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import create_ephemeris, create_template, create_toa_record, get_results, update_processing
+from db_utils import create_ephemeris, create_template, create_toa_record, create_pipelineimage, get_results, update_processing
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -507,10 +507,10 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
         logger.info("PSRDB functionality activated - recording cleaned S/N")
         
-        # create client
+        # Create client
         db_client = GraphQLClient(cparams["db_url"], False)    
 
-        # extract the maximum snr from the cleaned archives
+        # Extract the maximum snr from the cleaned archives
         max_snr = 0
         for x in range(0, len(cleaned_archives)):
              comm = "psrstat -j FTp -c snr=pdmp -c snr {0}".format(cleaned_archives[x])
@@ -522,11 +522,24 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
              if (float(snr) > float(max_snr)):
                  max_snr = snr
         
-        # recall results field and update
-        results_json = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
-        results_json['snr'] = float(max_snr)
-        update_id = update_processing(cparams["db_proc_id"], None, None, None, None, None, None, None, json.dumps(results_json), db_client, cparams["db_url"], cparams["db_token"])
-        if (str(update_id) != str(cparams["db_proc_id"])) or (update_id == None):
+        # Recall results field and update
+        results = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
+        results['snr'] = float(max_snr)
+        update_id = update_processing(
+            cparams["db_proc_id"],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            results, 
+            db_client,
+            cparams["db_url"],
+            cparams["db_token"]
+        )
+        if (update_id != cparams["db_proc_id"]) or (update_id == None):
             logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_proc_id"]))
         else:
             logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(cparams["db_proc_id"]))
@@ -630,14 +643,27 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
 
             logger.info("PSRDB functionality activated - recording zapped RFI fraction based on dynamic spectra")
 
-            # create client
+            # Create client
             db_client = GraphQLClient(cparams["db_url"], False)            
 
             # we've already calculated the maximum RFI zap fraction - recall results field and update
-            results_json = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
-            results_json['zap_frac'] = float(max_rfi_frac)
-            update_id = update_processing(cparams["db_proc_id"], None, None, None, None, None, None, None, json.dumps(results_json), db_client, cparams["db_url"], cparams["db_token"])
-            if (str(update_id) != str(cparams["db_proc_id"])) or (update_id == None):
+            results = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
+            results['zap_frac'] = float(max_rfi_frac)
+            update_id = update_processing(
+                cparams["db_proc_id"],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                results,
+                db_client,
+                cparams["db_url"],
+                cparams["db_token"]
+            )
+            if (update_id != cparams["db_proc_id"]) or (update_id == None):
                 logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_proc_id"]))
             else:
                 logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(cparams["db_proc_id"]))
@@ -1409,7 +1435,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
 
             logger.info("TOA PSRDB functionality activated - recording TOA production")
 
-            # create client
+            # Create client
             db_client = GraphQLClient(cparams["db_url"], False)
             
             if not cparams["fluxcal"]:
@@ -1424,10 +1450,10 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 proc = subprocess.Popen(args,stdout=subprocess.PIPE)
                 proc.wait()
                 info = proc.stdout.read().decode("utf-8").split("\n")
-                dm = info[1].split()[1]
-                rm = info[1].split()[2]
-                #site = info[1].split()[3]                
-                site = 7 # TEMPORARY UNTIL PSRDB IS FIXED TO ALLOW NON-INT SITE CODES
+                dm = float(info[1].split()[1])
+                rm = float(info[1].split()[2])
+                site = info[1].split()[3]                
+                #site = 7 # TESTING ONLY
 
                 # call the ephemeris and template creation functions
                 eph_id = create_ephemeris(psrname, eph, dm, rm, cparams, db_client, logger)
@@ -1448,9 +1474,9 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 proc.wait()
                 info = proc.stdout.read().decode("utf-8").split("\n")[1].split()
                 # this deconstruction may change depending on formatting of the pat command
-                freq = info[1]
-                mjd = info[2]
-                uncertainty = info[3]
+                freq = float(info[1])
+                mjd = float(info[2])
+                uncertainty = float(info[3])
                 # parse flags
                 flags_dict = {}
                 for x in range(5, len(info), 2):
@@ -1460,9 +1486,9 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 flags = json.loads(flags_json)
 
                 # link via entry in TOA table - DISABLED UNTIL THE TOA TABLE GETS FIXED BY AJ
-                #toa_id = create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, db_client, logger)
+                toa_id = create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, db_client, logger)
                 
-                #logger.info("Entry in table 'toas' successfully created - ID {0}".format(toa_id))
+                logger.info("Entry in table 'toas' successfully created - ID {0}".format(toa_id))
 
     else:
         logger.error("Template does not exist or does not have 1024 phase bins. Skipping ToA generation.")
@@ -1702,7 +1728,7 @@ def generate_summary(output_dir, cparams, psrname, logger):
         sfile.write("=========== END ========= \n")
         sfile.close()
 
-#--------------------------------------------------- Andrew's utilities -------------------------------
+#--------------------------------------------------- Andrew's PSRDB-related utilities -------------------------------
 
 # routine to check the pass/fail status of a processing's summary file
 # returns True or False
@@ -1764,3 +1790,144 @@ def calc_dynspec_zap_fraction(dynspec_file):
         raise Exception ("File {0} cannot be found".format(dynspec_file))
 
     return retval
+
+# produce PSRDB images for website upload
+# WORK IN PROGRESS!
+def generate_images(output_dir, cparams, logger):
+
+    # Note - the functionality of this code is based on the outputs expected by 'generate_summary'
+    # Should these expected outputs change, the conditions of this code should be re-assessed
+
+    logger.info("PSRDB functionality activated - generating pipeline images")
+
+    # set up PSRDB functionality
+    db_client = GraphQLClient(cparams["db_url"], False)
+
+    # produce images based on unscrunched, unchopped, cleaned and flux-calibrated archives
+    output_dir = str(output_dir)
+    cleaned_path = os.path.join(output_dir,"cleaned")
+    images_path = os.path.join(output_dir,"images")
+    cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*fluxcal.ar"))
+    
+    clean_file = None
+    chop_string = ".ch."
+    
+    if (len(cleanedfiles) == 1):
+        clean_file = cleanedfiles[0]
+    elif (len(cleanedfiles) == 2):
+        if (chop_string in cleanedfiles[0]) and (chop_string not in cleanedfiles[1]):
+            clean_file = cleanedfiles[1]
+        elif (chop_string in cleanedfiles[1]) and (chop_string not in cleanedfiles[0]):
+            clean_file = cleanedfiles[0]
+
+    if (clean_file != None):
+
+        # we've got the file we want to analyse, now let's make some pretty pictures
+
+        # create empty array for storing image data
+        image_data = []
+        
+        # basic pav images
+        pav_commands = [
+            {'comm': 'pav -FTDp', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
+            {'comm': 'pav -FTS', 'name': 'profile_fts', 'rank': 2, 'type': 'profile.pol'},
+            {'comm': 'pav -GTdp', 'name': 'phase_freq', 'rank': 3, 'type': 'phase.freq'},
+            {'comm': 'pav -FYdp', 'name': 'phase_time', 'rank': 4, 'type': 'phase.time'}
+        ]
+
+        # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
+        # instead create locally and move
+
+        for x in range(0, len(pav_commands)):
+           
+            # create / overwrite the image
+            image_name = "{0}.png".format(pav_commands[x]['name'])
+            image_file = os.path.join(images_path,image_name)
+            if (os.path.exists(image_file)):
+                os.remove(image_file)
+            comm = "{0} -g {1}/png {2}".format(pav_commands[x]['comm'], image_name, clean_file)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+
+            # move resulting image
+            os.rename(image_name, image_file)
+            
+            # log results to array for later recording
+            image_data.append({'file': image_file, 'rank': pav_commands[x]['rank'], 'type': pav_commands[x]['type']})
+
+        # psrstat images - snr/time
+
+        # make scrunched file for analysis
+        comm = "pam -Fp -e Fp.temp -u {0} {1}".format(images_path, clean_file)
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").rstrip().split()
+        scrunched_file = info[0]
+        # get parameters for looping
+        comm = "vap -c nsub,length {0}".format(scrunched_file)
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+        nsub = int(info[1].split()[1])
+        length = float(info[1].split()[2])
+
+        # collect snr data
+        snr_data = []
+        snr_cumulative = 0
+        for x in range(0, nsub):
+            comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            snr = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
+            snr_cumulative = np.sqrt(snr_cumulative**2 + snr**2)
+            # time (end) | snr (single) | snr (cumulative)
+            snr_data.append([length*x/nsub, snr, snr_cumulative])
+
+
+        # plot results - single subint snr
+        matplot_commands = [
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 5, 'type': 'snr.single'},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR', 'name': 'SNR_cumulative', 'rank': 6, 'type': 'snr.cumul'},
+        ]
+
+        for x in range(0, len(matplot_commands)):
+            # create the plot
+            image_name = "{0}.png".format(matplot_commands[x]['name'])
+            image_file = os.path.join(images_path,image_name)
+            plt.clf()
+            plt.plot(matplot_commands[x]['x-axis'],matplot_commands[x]['y-axis'])
+            plt.xlabel(matplot_commands[x]['xlabel'])
+            plt.ylabel(matplot_commands[x]['ylabel'])
+            plt.title(matplot_commands[x]['title'])
+            plt.savefig(image_file)
+            plt.clf()
+
+            # log the plot
+            image_data.append({'file': image_file, 'rank': matplot_commands[x]['rank'], 'type': matplot_commands[x]['type']})
+
+        # cleanup
+        os.remove(scrunched_file)
+        
+        # write all images to PSRDB
+        for x in range (0, len(image_data)):
+            
+            # test for image creation success and write to PSRDB
+            if (os.path.exists(image_data[x]['file'])):
+                logger.info("Successfully created {0} - recording to PSRDB.".format(image_data[x]['file']))
+                create_pipelineimage(image_data[x]['file'], image_data[x]['type'], image_data[x]['rank'], cparams, db_client, logger)
+            else:
+                logger.error("Unable to create {0} - no output recorded to PSRDB.".format(image_data[x]['file']))
+                
+            
+    else:
+        logger.error("Could not identify single un-scrunched, un-chopped, clean and fluxcalibrated file for image generation.")
+        logger.errror("Skipping generation of relevant images.")
+
+
+    # now link to dynamic spectra images
+
+    return
