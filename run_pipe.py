@@ -445,9 +445,8 @@ if toggle:
                 #Generating summary file
                 generate_summary(output_dir,config_params,psrnames[obs_num],logger)
 
-                # Produce PSRDB images
-                if (args.db_flag):
-                    generate_images(output_dir,config_params,logger)
+                # Produce images
+                generate_images(output_dir,config_params,logger)
 
                 logger.info ("##############")
 

@@ -398,12 +398,12 @@ def create_structure(output_dir,cparams,psrname,logger):
             logger.info("Scintillation directory exists")
 
         # PSRDB
-        if (cparams["db_flag"]):
-            if not os.path.exists(images_dir):
-                logger.info("Images directory created")
-                os.makedirs(images_dir)
-            else:
-                logger.info("Images directory exists")
+        # if (cparams["db_flag"]):
+        if not os.path.exists(images_dir):
+            logger.info("Images directory created")
+            os.makedirs(images_dir)
+        else:
+            logger.info("Images directory exists")
         
         #if not os.path.exists(project_dir):
         #    logger.info("Project directory created")

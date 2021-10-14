@@ -704,8 +704,6 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
 # INPUTS : Integer, Integer, JSON object, Float, Float, String[1], Float, Boolean, 
 #          Dictionary, GraphQL client, Logger object
 # RETURNS: Integer (success) | Exception (failure)
-
-# STILL WIP
 def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, client, logger):
 
     logger.info("Checking for linked TOA entries as part of TOA generation...")

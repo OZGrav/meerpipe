@@ -1798,10 +1798,7 @@ def generate_images(output_dir, cparams, logger):
     # Note - the functionality of this code is based on the outputs expected by 'generate_summary'
     # Should these expected outputs change, the conditions of this code should be re-assessed
 
-    logger.info("PSRDB functionality activated - generating pipeline images")
-
-    # set up PSRDB functionality
-    db_client = GraphQLClient(cparams["db_url"], False)
+    logger.info("Generating pipeline images")
 
     # produce images based on unscrunched, unchopped, cleaned and flux-calibrated archives
     output_dir = str(output_dir)
@@ -1820,13 +1817,13 @@ def generate_images(output_dir, cparams, logger):
         elif (chop_string in cleanedfiles[1]) and (chop_string not in cleanedfiles[0]):
             clean_file = cleanedfiles[0]
 
+    # create empty array for storing image data
+    image_data = []
+
     if (clean_file != None):
 
         # we've got the file we want to analyse, now let's make some pretty pictures
 
-        # create empty array for storing image data
-        image_data = []
-        
         # basic pav images
         pav_commands = [
             {'comm': 'pav -FTDp', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
@@ -1874,9 +1871,10 @@ def generate_images(output_dir, cparams, logger):
         nsub = int(info[1].split()[1])
         length = float(info[1].split()[2])
 
-        # collect snr data
+        # collect and write snr data
         snr_data = []
         snr_cumulative = 0
+        snr_report = os.path.join(images_path, "snr.dat")
         for x in range(0, nsub):
             comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
             args = shlex.split(comm)
@@ -1886,7 +1884,7 @@ def generate_images(output_dir, cparams, logger):
             snr_cumulative = np.sqrt(snr_cumulative**2 + snr**2)
             # time (end) | snr (single) | snr (cumulative)
             snr_data.append([length*x/nsub, snr, snr_cumulative])
-
+        np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
 
         # plot results - single subint snr
         matplot_commands = [
@@ -1912,22 +1910,51 @@ def generate_images(output_dir, cparams, logger):
         # cleanup
         os.remove(scrunched_file)
         
-        # write all images to PSRDB
-        for x in range (0, len(image_data)):
-            
-            # test for image creation success and write to PSRDB
-            if (os.path.exists(image_data[x]['file'])):
-                logger.info("Successfully created {0} - recording to PSRDB.".format(image_data[x]['file']))
-                create_pipelineimage(image_data[x]['file'], image_data[x]['type'], image_data[x]['rank'], cparams, db_client, logger)
-            else:
-                logger.error("Unable to create {0} - no output recorded to PSRDB.".format(image_data[x]['file']))
-                
-            
     else:
         logger.error("Could not identify single un-scrunched, un-chopped, clean and fluxcalibrated file for image generation.")
         logger.errror("Skipping generation of relevant images.")
 
 
     # now link to dynamic spectra images
+    ds_path = os.path.join(output_dir,"scintillation")
+    logger.info("Adding dynamic spectra images found in {0}...".format(ds_path))
+
+    # look for two fixed dynspec images
+    dynspec_commands = [
+        {'ext': 'zap.dynspec', 'rank': 7},
+        {'ext': 'calib.dynspec', 'rank': 8}
+    ]    
+
+    for x in range (0, len(dynspec_commands)):
+
+        # check/recall image and store image_data
+        data = glob.glob(os.path.join(ds_path, "*{0}.png".format(dynspec_commands[x]['ext'])))
+        if (len(data) == 0):
+            logger.error("No matches found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
+        elif (len(data) > 1):
+            logger.error("Non-unique match found in {0} for extension {1} - skipping".format(ds_path, dynspec_commands[x]['ext']))
+        else:
+            # unique match found
+            logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
+            image_data.append({'file': data[0], 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['ext']})
+
+
+    # write all images to PSRDB
+    if (cparams["db_flag"]):
+
+
+        logger.info("PSRDB functionality activated - recording pipeline images to PSRDB")
+
+        # set up PSRDB functionality
+        db_client = GraphQLClient(cparams["db_url"], False)
+
+        for x in range (0, len(image_data)):
+        
+            # test for image creation success and write to PSRDB
+            if (os.path.exists(image_data[x]['file'])):
+                logger.info("Successfully created {0} - recording to PSRDB.".format(image_data[x]['file']))
+                create_pipelineimage(image_data[x]['file'], image_data[x]['type'], image_data[x]['rank'], cparams, db_client, logger)
+            else:
+                logger.error("Unable to create {0} - no output recorded to PSRDB.".format(image_data[x]['file']))
 
     return

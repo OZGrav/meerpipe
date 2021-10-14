@@ -153,9 +153,8 @@ if not config_params["fluxcal"]:
     #Generate summary
     generate_summary(output_dir,config_params,psrname,logger)
 
-    # Produce PSRDB images
-    if (config_params["db_flag"]):    
-        generate_images(output_dir,config_params,logger)
+    # Produce images
+    generate_images(output_dir,config_params,logger)
         
     logger.info ("##############")
 
