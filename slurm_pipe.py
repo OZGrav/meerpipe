@@ -115,48 +115,56 @@ if (config_params["db_flag"]):
 
 #####
 
-#Add the archive files per observation directory into a single file
-added_archives = add_archives(archive_list,output_dir,config_params,psrname,logger)
-logger.info("Added archives: {0}".format(added_archives))
+# bracket the pipeline code with an error-catch statement to check for success / failure
+crash = False
 
-if not config_params["fluxcal"]:
-    #Calibration
-    calibrated_archives = calibrate_data(added_archives,output_dir,config_params,logger)
-    logger.info("Calibrated archives: {0}".format(calibrated_archives))
+try:
+    #Add the archive files per observation directory into a single file
+    added_archives = add_archives(archive_list,output_dir,config_params,psrname,logger)
+    logger.info("Added archives: {0}".format(added_archives))
 
-if not config_params["fluxcal"]:
-    #RFI zapping using coastguard on calibrated archives
-    cleaned_archives = mitigate_rfi(calibrated_archives,output_dir,config_params,psrname,logger)
-    logger.info("Cleaned archives: {0}".format(cleaned_archives))
-elif config_params["fluxcal"]:
-    #RFI zapping using coastguard on added archives
-    cleaned_archives = mitigate_rfi(added_archives,output_dir,config_params,psrname,logger)
-    logger.info("Cleaned archives: {0}".format(cleaned_archives))
+    if not config_params["fluxcal"]:
+        #Calibration
+        calibrated_archives = calibrate_data(added_archives,output_dir,config_params,logger)
+        logger.info("Calibrated archives: {0}".format(calibrated_archives))
 
-if not config_params["fluxcal"]:
-    #Checking flags and creating appropriate data products
-    processed_archives = decimate_data(cleaned_archives,output_dir,config_params,logger)
-    #logger.info("Processed archives: {0}".format(processed_archives))
+    if not config_params["fluxcal"]:
+        #RFI zapping using coastguard on calibrated archives
+        cleaned_archives = mitigate_rfi(calibrated_archives,output_dir,config_params,psrname,logger)
+        logger.info("Cleaned archives: {0}".format(cleaned_archives))
+    elif config_params["fluxcal"]:
+        #RFI zapping using coastguard on added archives
+        cleaned_archives = mitigate_rfi(added_archives,output_dir,config_params,psrname,logger)
+        logger.info("Cleaned archives: {0}".format(cleaned_archives))
 
-    #Generating dynamic spectra from calibrated archives
-    dynamic_spectra(output_dir,config_params,psrname,logger)
+    if not config_params["fluxcal"]:
+        #Checking flags and creating appropriate data products
+        processed_archives = decimate_data(cleaned_archives,output_dir,config_params,logger)
+        #logger.info("Processed archives: {0}".format(processed_archives))
 
-    #Flux calibrating the decimated products
-    fluxcalibrate(output_dir,config_params,psrname,logger)
+        #Generating dynamic spectra from calibrated archives
+        dynamic_spectra(output_dir,config_params,psrname,logger)
 
-    #Cleaning
-    cleanup(output_dir,config_params,psrname,logger)
+        #Flux calibrating the decimated products
+        fluxcalibrate(output_dir,config_params,psrname,logger)
 
-    #Forming ToAs from the processed archives
-    generate_toas(output_dir,config_params,psrname,logger)
+        #Cleaning
+        cleanup(output_dir,config_params,psrname,logger)
 
-    #Generate summary
-    generate_summary(output_dir,config_params,psrname,logger)
+        #Forming ToAs from the processed archives
+        generate_toas(output_dir,config_params,psrname,logger)
 
-    # Produce images
-    generate_images(output_dir,config_params,logger)
+        #Generate summary
+        generate_summary(output_dir,config_params,psrname,logger)
+
+        # Produce images
+        generate_images(output_dir,config_params,logger)
         
-    logger.info ("##############")
+        logger.info ("##############")
+
+except:
+    crash = True
+    logger.error("PIPELINE CRASH DETECTED")
 
 #####
 
@@ -171,11 +179,14 @@ if (config_params["db_flag"]):
 
     elif not (config_params["fluxcal"]):
 
-        # Check summary file for pass/fail status
-        if (check_summary(output_dir, logger)):
-            job_state = job_state_code(3)
+        # Check summary file for pass/fail status, in combination with crash status
+        if (not crash):
+            if (check_summary(output_dir, logger)):
+                job_state = job_state_code(3)
+            else:
+                job_state = job_state_code(4)
         else:
-            job_state = job_state_code(4)
+            job_state = job_state_code(6)
 
     # Update and check for success
     update_id = update_processing(

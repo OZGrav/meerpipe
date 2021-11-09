@@ -151,9 +151,11 @@ def job_state_code(jid):
     elif jid == 3:
         state = "Complete" # job has finished successfully
     elif jid == 4:
-        state = "Failure" # job has finished unsuccessfully
+        state = "Failure" # job has finished without crashing, but unsuccessfully (missing output)
     elif jid == 5:
         state = "Unknown" # cover-all for indeterminate states / outcomes still under development (e.g. "fluxcal")
+    elif jid == 6:
+        state = "Crashed" # job broke down at some point before completing
 
     return json.loads(json.dumps({"job_state": state}))
 
