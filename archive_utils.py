@@ -1825,24 +1825,41 @@ def generate_images(output_dir, cparams, logger):
         # we've got the file we want to analyse, now let's make some pretty pictures
 
         # basic pav images
-        pav_commands = [
-            {'comm': 'pav -FTDp', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
-            {'comm': 'pav -FTS', 'name': 'profile_fts', 'rank': 2, 'type': 'profile.pol'},
-            {'comm': 'pav -GTdp', 'name': 'phase_freq', 'rank': 3, 'type': 'phase.freq'},
-            {'comm': 'pav -FYdp', 'name': 'phase_time', 'rank': 4, 'type': 'phase.time'}
+        #plot_commands = [
+        #    {'comm': 'pav -FTDp', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
+        #    {'comm': 'pav -FTS', 'name': 'profile_fts', 'rank': 2, 'type': 'profile.pol'},
+        #    {'comm': 'pav -GTdp', 'name': 'phase_freq', 'rank': 3, 'type': 'phase.freq'},
+        #    {'comm': 'pav -FYdp', 'name': 'phase_time', 'rank': 4, 'type': 'phase.time'}
+        #]
+
+        # get channel number of cleaned file
+        comm = "vap -c nchan {0}".format(clean_file)
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").split("\n")
+        nchan = int(info[1].split()[1])
+
+        # basic psrplot images - mimicking ingest images
+        plot_commands = [
+            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
+            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'rank': 2, 'type': 'profile.pol'},
+            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 3, 'type': 'phase.freq'},
+            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 4, 'type': 'phase.time'}
         ]
 
         # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
         # instead create locally and move
 
-        for x in range(0, len(pav_commands)):
+        for x in range(0, len(plot_commands)):
            
             # create / overwrite the image
-            image_name = "{0}.png".format(pav_commands[x]['name'])
+            image_name = "{0}.png".format(plot_commands[x]['name'])
             image_file = os.path.join(images_path,image_name)
             if (os.path.exists(image_file)):
                 os.remove(image_file)
-            comm = "{0} -g {1}/png {2}".format(pav_commands[x]['comm'], image_name, clean_file)
+            # comm = "{0} -g {1}/png {2}".format(plot_commands[x]['comm'], image_name, clean_file)
+            comm = "{0} {2} -g 1024x768 -c above:l= -c above:c= -D {1}/png".format(plot_commands[x]['comm'], image_name, clean_file)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
             proc.wait()
@@ -1851,7 +1868,7 @@ def generate_images(output_dir, cparams, logger):
             os.rename(image_name, image_file)
             
             # log results to array for later recording
-            image_data.append({'file': image_file, 'rank': pav_commands[x]['rank'], 'type': pav_commands[x]['type']})
+            image_data.append({'file': image_file, 'rank': plot_commands[x]['rank'], 'type': plot_commands[x]['type']})
 
         # psrstat images - snr/time
 
@@ -1921,8 +1938,8 @@ def generate_images(output_dir, cparams, logger):
 
     # look for two fixed dynspec images
     dynspec_commands = [
-        {'ext': 'zap.dynspec', 'rank': 7},
-        {'ext': 'calib.dynspec', 'rank': 8}
+        {'ext': 'zap.dynspec', 'rank': 8},
+        {'ext': 'calib.dynspec', 'rank': 7}
     ]    
 
     for x in range (0, len(dynspec_commands)):
