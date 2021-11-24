@@ -450,7 +450,7 @@ if toggle:
                     generate_summary(output_dir,config_params,psrnames[obs_num],logger)
 
                     # Produce images
-                    generate_images(output_dir,config_params,logger)
+                    generate_images(output_dir,config_params,psrnames[obs_num],logger)
 
                     logger.info ("##############")
 

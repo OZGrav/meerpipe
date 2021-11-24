@@ -158,7 +158,7 @@ try:
         generate_summary(output_dir,config_params,psrname,logger)
 
         # Produce images
-        generate_images(output_dir,config_params,logger)
+        generate_images(output_dir,config_params,psrname,logger)
         
         logger.info ("##############")
 

@@ -1793,7 +1793,7 @@ def calc_dynspec_zap_fraction(dynspec_file):
 
 # produce PSRDB images for website upload
 # WORK IN PROGRESS!
-def generate_images(output_dir, cparams, logger):
+def generate_images(output_dir, cparams, psrname, logger):
 
     # Note - the functionality of this code is based on the outputs expected by 'generate_summary'
     # Should these expected outputs change, the conditions of this code should be re-assessed
@@ -1926,7 +1926,12 @@ def generate_images(output_dir, cparams, logger):
 
         # cleanup
         os.remove(scrunched_file)
-        
+
+        # generate TOA-based images
+        # generate_image_residuals(output_dir, clean_file, cparams, psrname, logger)
+        # TODO
+
+
     else:
         logger.error("Could not identify single un-scrunched, un-chopped, clean and fluxcalibrated file for image generation.")
         logger.errror("Skipping generation of relevant images.")
@@ -1955,7 +1960,6 @@ def generate_images(output_dir, cparams, logger):
             logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
             image_data.append({'file': data[0], 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['ext']})
 
-
     # write all images to PSRDB
     if (cparams["db_flag"]):
 
@@ -1973,5 +1977,64 @@ def generate_images(output_dir, cparams, logger):
                 create_pipelineimage(image_data[x]['file'], image_data[x]['type'], image_data[x]['rank'], cparams, db_client, logger)
             else:
                 logger.error("Unable to create {0} - no output recorded to PSRDB.".format(image_data[x]['file']))
+
+    return
+
+# produce timing residuals to be used in the production of pipeline images
+# WIP
+def generate_image_residuals(output_dir, clean_file, cparams, psrname, logger):
+
+    # set up paths and filenames
+    images_path = os.path.join(output_dir,"images")
+    timing_path = os.path.join(str(output_dir),"timing")
+    tim_name = os.path.join(images_path, "toas.tim")
+    toa_archive_ext = "temptoa.ar"
+    ryan_script = "/fred/oz005/users/acameron/scripts/flag_script.sh"
+
+    # query file parameters
+    comm = "vap -c length {0}".format(clean_file)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+    length = float(info[1].split()[1])
+
+    # determine desired number of nchans and size of tobs
+    toa_config_success = False
+    
+    # option 1 - the config file included a catalog with parameters for specific pulsars
+    if ("toa_display_list" in cparams and os.path.exists(cparams["toa_display_list"])):
+        # TODO
+        logger.info("TOA display list functionality yet to be implemented!")
+        
+    # option 2 - no catalog, or pulsar not listed in the catalog; revert to a project-based default
+    if (toa_config_success == False and "pid" in cparams):
+        # TODO
+        logger.info("PID-based TOA images yet to be implemented!")
+            
+    # option 3 - no project, no catalog; revert to a global default
+    if (toa_config_success == False):
+        toa_nchan = 4
+        toa_tobs = 300
+
+    # calculate nsub and build temporary toa file
+    toa_nsub = int(np.floor(length/float(toa_tobs)))
+    comm = "pam -p --setnsub={0} --setnchn={1} -e {4} -u {2} {3}".format(toa_nsub, toa_nchan, images_path, clean_file, toa_archive_ext)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    toa_archive= proc.stdout.read().decode("utf-8").rstrip().split()[0]
+
+    # produce toas - need to recall the template used through the toas table
+    logger.info("Obtaining templates and ephemerides for generating TOA images...")
+    template = get_meertimetemplate(psrname,output_path,cparams,logger)
+    parfile = glob.glob(os.path.join(str(timing_path),"{0}.par".format(psrname)))[0]
+    # ensure this pat comment closely matches the one in generate_toas()
+    comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive)
+    args = shlex.split(comm)
+    f = open(tim_name, "w")
+    subprocess.call(args, stdout=f)
+    f.close()
+    logger.info("TOA data generated and stored in {0}".format(tim_name))
 
     return
