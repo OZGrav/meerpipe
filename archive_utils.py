@@ -1928,7 +1928,7 @@ def generate_images(output_dir, cparams, psrname, logger):
         os.remove(scrunched_file)
 
         # generate TOA-based images
-        # generate_image_residuals(output_dir, clean_file, cparams, psrname, logger)
+        generate_image_residuals(output_dir, clean_file, cparams, psrname, logger)
         # TODO
 
 
@@ -2036,5 +2036,7 @@ def generate_image_residuals(output_dir, clean_file, cparams, psrname, logger):
     subprocess.call(args, stdout=f)
     f.close()
     logger.info("TOA data generated and stored in {0}".format(tim_name))
+
+    # obtain the residuals which we can use for plotting
 
     return
