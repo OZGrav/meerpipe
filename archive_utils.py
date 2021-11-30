@@ -39,6 +39,9 @@ from coast_guard import cleaners
 import json
 import requests
 
+#Meerwatch imports
+from meerwatch_tools import get_res_fromtim, plot_toas_fromarr
+
 # PSRDB imports - assumes psrdb/latest module
 from util import ephemeris
 from tables import *
@@ -1928,9 +1931,15 @@ def generate_images(output_dir, cparams, psrname, logger):
         os.remove(scrunched_file)
 
         # generate TOA-based images
-        generate_image_residuals(output_dir, clean_file, cparams, psrname, logger)
-        # TODO
+        image_name = "single_obs_serial_toas.png"
+        image_file = os.path.join(images_path,image_name)
+        check = generate_image_residuals(output_dir, clean_file, image_file, cparams, psrname, logger)
 
+        # check for success
+        if (check):
+            image_data.append({'file': image_file, 'rank': 7, 'type': 'toa.single'})
+        else:
+            logger.error("TOA image generation was unsuccessful!")
 
     else:
         logger.error("Could not identify single un-scrunched, un-chopped, clean and fluxcalibrated file for image generation.")
@@ -1943,8 +1952,8 @@ def generate_images(output_dir, cparams, psrname, logger):
 
     # look for two fixed dynspec images
     dynspec_commands = [
-        {'ext': 'zap.dynspec', 'rank': 8},
-        {'ext': 'calib.dynspec', 'rank': 7}
+        {'ext': 'zap.dynspec', 'rank': 9},
+        {'ext': 'calib.dynspec', 'rank': 8}
     ]    
 
     for x in range (0, len(dynspec_commands)):
@@ -1982,22 +1991,24 @@ def generate_images(output_dir, cparams, psrname, logger):
 
 # produce timing residuals to be used in the production of pipeline images
 # WIP
-def generate_image_residuals(output_dir, clean_file, cparams, psrname, logger):
+def generate_image_residuals(output_dir, clean_file, image_file, cparams, psrname, logger):
 
     # set up paths and filenames
     images_path = os.path.join(output_dir,"images")
     timing_path = os.path.join(str(output_dir),"timing")
-    tim_name = os.path.join(images_path, "toas.tim")
+    timfile = os.path.join(images_path, "toas.tim")
     toa_archive_ext = "temptoa.ar"
     ryan_script = "/fred/oz005/users/acameron/scripts/flag_script.sh"
 
     # query file parameters
-    comm = "vap -c length {0}".format(clean_file)
+    comm = "vap -c length,bw,freq {0}".format(clean_file)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
     info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
     length = float(info[1].split()[1])
+    obs_bw = float(info[1].split()[2])
+    obs_freq = float(info[1].split()[3])
 
     # determine desired number of nchans and size of tobs
     toa_config_success = False
@@ -2018,25 +2029,44 @@ def generate_image_residuals(output_dir, clean_file, cparams, psrname, logger):
         toa_tobs = 300
 
     # calculate nsub and build temporary toa file
-    toa_nsub = int(np.floor(length/float(toa_tobs)))
+    toa_nsub = int(np.round(length/float(toa_tobs)))
+    if (toa_nsub < 1):
+        toa_nsub = 1
+
+    logger.info("Constructing TOA archive with nsub={0} and nchan={1} - storing in {2}".format(toa_nsub, toa_nchan, images_path))
     comm = "pam -p --setnsub={0} --setnchn={1} -e {4} -u {2} {3}".format(toa_nsub, toa_nchan, images_path, clean_file, toa_archive_ext)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
     toa_archive= proc.stdout.read().decode("utf-8").rstrip().split()[0]
+    logger.info("Name of toa_archive = {0}".format(toa_archive))
 
     # produce toas - need to recall the template used through the toas table
     logger.info("Obtaining templates and ephemerides for generating TOA images...")
-    template = get_meertimetemplate(psrname,output_path,cparams,logger)
+    #template = get_meertimetemplate(psrname,output_path,cparams,logger)
+    template = glob.glob(os.path.join(str(timing_path),"{0}.std".format(psrname)))[0]
+    logger.info("Got template {0}".format(template))
     parfile = glob.glob(os.path.join(str(timing_path),"{0}.par".format(psrname)))[0]
+    logger.info("Got parfile {0}".format(parfile))
+    selfile = glob.glob(os.path.join(str(timing_path),"{0}.select".format(psrname)))[0]
+    logger.info("Got select file {0}".format(selfile))
     # ensure this pat comment closely matches the one in generate_toas()
     comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive)
     args = shlex.split(comm)
-    f = open(tim_name, "w")
+    f = open(timfile, "w")
     subprocess.call(args, stdout=f)
     f.close()
-    logger.info("TOA data generated and stored in {0}".format(tim_name))
+    logger.info("TOA data generated and stored in {0}".format(timfile))
 
-    # obtain the residuals which we can use for plotting
+    # use meerwatch functions to produce residual images for this observation
+    logger.info("Calling modified MeerWatch residual generation...")
+    residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=images_path, verb=True)
+    logger.info("Producing single-obs image from modified MeerWatch residuals...")
+    plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
 
-    return
+    # cleanup
+    #os.remove(toa_archive)
+
+    # check if file creation was successful and return
+    return os.path.exists(image_file)
+
