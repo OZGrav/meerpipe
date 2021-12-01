@@ -117,6 +117,7 @@ def plot_toas_fromarr(toas, fs=14, out_file="toas.png", out_dir=None, sequential
     lines = ax.errorbar(xdata, toas['res']*1e6, yerr=1e6*toas['err'], ls='', marker='', ms=1, zorder=0)[2]
     lines[0].set_color(cb.to_rgba(toas['freq']))
 
+    print (xdata)
     spread = xdata.max()-xdata.min()
     xmin = xdata.min()-0.05*spread
     xmax = xdata.max()+0.05*spread
