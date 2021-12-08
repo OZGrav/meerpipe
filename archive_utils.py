@@ -2089,12 +2089,65 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
     f.close()
     logger.info("TOA data generated and stored in {0}".format(timfile))
 
-    # use meerwatch functions to produce residual images for this observation                                                                                                                                                                
+    # use meerwatch functions to produce residual images for this observation
     logger.info("Calling modified MeerWatch residual generation...")
     residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
     logger.info("Producing single-obs image from modified MeerWatch residuals...")
     logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
     plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
 
-    # check if file creation was successful and return                                                                                                                                                                                       
+    # check if file creation was successful and return
+    return os.path.exists(image_file)
+
+
+# produce residual image for all available observations that have completed processing and which match the project code
+# assumes that the TOA files have been dlyfix'd
+# WIP
+def generate_globalres_image(output_dir, toa_name, image_name, image_path, parfile, template, selfile, cparams, psrname, logger):
+
+    # this function will only run if DB mode is active - check
+    if (cparams["db_flag"]):
+
+         # set up paths, filenames and required parameters
+        timfile = os.path.join(image_path, "toas_global.tim")
+        image_file = os.path.join(image_path, image_name)
+
+        # query for all processings run through a specific pipeline
+        
+        # compile a TOA file using only those processings logged as 'complete'
+
+    else:
+        logger.error("PSRDB mode not active - Global TOA residual image will not be generated.")
+
+
+
+
+
+    comm = "vap -c nchan,bw,freq {0}".format(toa_archive)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+    toa_nchan = int(info[1].split()[1])
+    obs_bw = float(info[1].split()[2])
+    obs_freq = float(info[1].split()[3])
+
+    # ensure this pat comment closely matches the one in generate_toas()                                                                                                                                                                     
+    comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive)
+    args = shlex.split(comm)
+    f = open(timfile, "w")
+    subprocess.call(args, stdout=f)
+    f.close()
+    logger.info("TOA data generated and stored in {0}".format(timfile))
+
+    # use meerwatch functions to produce residual images for this observation                                                                                                                                                               \
+                                                                                                                                                                                                                                             
+    logger.info("Calling modified MeerWatch residual generation...")
+    residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
+    logger.info("Producing single-obs image from modified MeerWatch residuals...")
+    logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
+    plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
+
+    # check if file creation was successful and return                                                                                                                                                                                      \
+                                                                                                                                                                                                                                             
     return os.path.exists(image_file)
