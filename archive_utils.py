@@ -1851,8 +1851,12 @@ def generate_images(output_dir, cparams, psrname, logger):
         # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
         # instead create locally and move
 
+        logger.info("Creating psrsplot images...")
+
         for x in range(0, len(plot_commands)):
            
+            logger.info("Creating image type {0}...".format(plot_commands[x]['type']))
+
             # create / overwrite the image
             image_name = "{0}.png".format(plot_commands[x]['name'])
             image_file = os.path.join(images_path,image_name)
@@ -1872,6 +1876,8 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # psrstat images - snr/time
 
+        logger.info("Creating S/N images...")
+
         # make scrunched file for analysis
         comm = "pam -Fp -e Fp.temp -u {0} {1}".format(images_path, clean_file)
         args = shlex.split(comm)
@@ -1888,6 +1894,8 @@ def generate_images(output_dir, cparams, psrname, logger):
         nsub = int(info[1].split()[1])
         length = float(info[1].split()[2])
 
+        logger.info("Beginning S/N analysis...")
+
         # collect and write snr data
         snr_data = []
         snr_cumulative = 0
@@ -1903,6 +1911,8 @@ def generate_images(output_dir, cparams, psrname, logger):
             snr_data.append([length*x/nsub, snr, snr_cumulative])
         np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
 
+        logger.info("Analysis complete.")
+
         # plot results - single subint snr
         matplot_commands = [
             {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 5, 'type': 'snr.single'},
@@ -1910,6 +1920,9 @@ def generate_images(output_dir, cparams, psrname, logger):
         ]
 
         for x in range(0, len(matplot_commands)):
+            
+            logger.info("Creating image type {0}...".format(matplot_commands[x]['type']))
+
             # create the plot
             image_name = "{0}.png".format(matplot_commands[x]['name'])
             image_file = os.path.join(images_path,image_name)
