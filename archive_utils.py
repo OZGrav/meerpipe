@@ -1801,7 +1801,9 @@ def generate_images(output_dir, cparams, psrname, logger):
     # Note - the functionality of this code is based on the outputs expected by 'generate_summary'
     # Should these expected outputs change, the conditions of this code should be re-assessed
 
-    logger.info("Generating pipeline images")
+    logger.info("Generating pipeline images - Pipeline PID = {0}".format(cparams["pid"]))
+    # update - pid now to be included in the naming structure (type)
+    local_pid = cparams["pid"].lower()
 
     # produce images based on unscrunched, unchopped, cleaned and flux-calibrated archives
     output_dir = str(output_dir)
@@ -1846,10 +1848,10 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # basic psrplot images - mimicking ingest images
         plot_commands = [
-            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
-            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'rank': 2, 'type': 'profile.pol'},
-            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 3, 'type': 'phase.freq'},
-            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 4, 'type': 'phase.time'}
+            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'rank': 1, 'type': '{0}.profile.int'.format(local_pid)} ,
+            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'rank': 2, 'type': '{0}.profile.pol'.format(local_pid)},
+            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 3, 'type': '{0}.phase.freq'.format(local_pid)},
+            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 4, 'type': '{0}.phase.time'.format(local_pid)}
         ]
 
         # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
@@ -1909,8 +1911,8 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # plot results - single subint snr
         matplot_commands = [
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 5, 'type': 'snr.single'},
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR', 'name': 'SNR_cumulative', 'rank': 6, 'type': 'snr.cumul'},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 5, 'type': '{0}.snr.single'.format(local_pid)},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR', 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr.cumul'.format(local_pid)},
         ]
 
         for x in range(0, len(matplot_commands)):
@@ -1949,7 +1951,7 @@ def generate_images(output_dir, cparams, psrname, logger):
             
             if (generate_singleres_image(output_dir, toa_archive_file, image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
                 logger.info("Successfully created single observation residual image {0}".format(image_file))
-                image_data.append({'file': image_file, 'rank': 7, 'type': 'toa.single'})
+                image_data.append({'file': image_file, 'rank': 7, 'type': '{0}.toa.single'.format(local_pid)})
             else:
                 logger.error("Single observation residual TOA image generation was unsuccessful!")
         else:
@@ -1981,7 +1983,7 @@ def generate_images(output_dir, cparams, psrname, logger):
         else:
             # unique match found
             logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
-            image_data.append({'file': data[0], 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['ext']})
+            image_data.append({'file': data[0], 'rank': dynspec_commands[x]['rank'], 'type': '{0}.{1}'.format(local_pid,dynspec_commands[x]['ext'])})
 
     # write all images to PSRDB
     if (cparams["db_flag"]):
