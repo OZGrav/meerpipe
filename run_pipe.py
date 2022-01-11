@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 """
-MeerPipe: Processing pipeline for pulsar timing data.
+MeerPipe: Processing pipeline for pulsar timing data - TPAPUM EDITION
 
 __author__ = "Aditya Parthasarathy"
-__copyright__ = "Copyright 2019, MeerTime"
-__credits__ = ["Renee Spiewak", "Daniel Reardon"]
+__copyright__ = "Copyright 2021, TRAPUM/MGPS"
 __license__ = "Public Domain"
-__version__ = "0.2"
+__version__ = "0.1"
 __maintainer__ = "Aditya Parthasarathy"
 __email__ = "adityapartha3112@gmail.com"
 __status__ = "Development"
@@ -18,18 +17,9 @@ Top-level code to execute the pipeline.
 """
 
 #Basic imports
-import os
-import sys
-import subprocess
-import shlex
-import argparse
-import os.path
+import os,sys,subprocess,shlex,argparse,logging,glob,pickle,time
 import numpy as np
-import logging
-import glob
-import time
 import pandas as pd
-import pickle
 
 #Importing pipeline utilities
 from initialize import (parse_config, create_structure, get_outputinfo, setup_logging)
@@ -37,16 +27,19 @@ from initialize import (parse_config, create_structure, get_outputinfo, setup_lo
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives,
                            calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary)
 
+
 #Argument parsing
-parser = argparse.ArgumentParser(description="Run MeerPipe")
-parser.add_argument("-cfile", dest="configfile", help="Path to the configuration file")
-parser.add_argument("-dirname", dest="dirname", help="Process a specified observation")
-parser.add_argument("-utc", dest="utc", help="Process a particular UTC. Should be in conjunction with a pulsar name")
-parser.add_argument("-batch", dest="batch", help="Enable batch processing - multiple files")
+parser = argparse.ArgumentParser(description="Run MeerPipe (TRAPUM/MGPS)")
+parser.add_argument("-cfile", dest="configfile", help="Path to the configuration file",required=True)
+
+parser.add_argument("-pulsar", dest="pulsar", help="Process a specific pulsar",required=True)
+parser.add_argument("-utc", dest="utc", help="Process a particular UTC. Should be in conjunction with a pulsar name",default="*")
+parser.add_argument("-tel", dest="telescope", help="Process observations of a particular telescope",default="*")
+parser.add_argument("-pid", dest="pid", help="Process observations of a particular project ID",default="*")
+parser.add_argument("-cfreq", dest="cfreq", help="Process observations belonging to a particular centre frequency",default="*")
+
 parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm",action="store_true")
-parser.add_argument("-pid",dest="pid",help="Process pulsars as PID (Ignores original PID)")
 parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value. Automatic allocation is ignored")
-parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
 parser.add_argument("-softpath", help="Change software path", default="/fred/oz005/meerpipe/")
 args = parser.parse_args()
 
@@ -63,14 +56,7 @@ if not os.path.exists(config_params["output_path"]):
     sys.exit()
     
 #setting up the logger for this instance of the pipeline run
-if not args.slurm:
-    if args.dirname:
-        logger = setup_logging(os.path.join(config_params["output_path"],str(args.dirname)),args.verbose,False)
-    else:
-        logger = setup_logging(config_params["output_path"],args.verbose,False)
-
-else:
-    logger = setup_logging(config_params["output_path"],args.verbose,False)
+logger = setup_logging(config_params["output_path"])
 
 
 ############ Analysis ##############
@@ -78,41 +64,27 @@ logger.info("Logger setup")
 logger.info ("User:{0}".format(config_params["user"]))
 
 #Adding filename as config_param if specified
-if args.dirname:
-    config_params["batch"] = "none"
-    config_params["dirname"] = str(os.path.join(config_params["input_path"],str(args.dirname)))
-    if not os.path.exists(config_params["dirname"]):
-        logger.info("Specified directory path: {0}, does not exist. Quitting.".format(config_params["dirname"]))
-        sys.exit()
-    else:
-        if args.utc:
-            config_params["utc"] = str(os.path.join(config_params["dirname"],str(args.utc)))
-            if not os.path.exists(config_params["utc"]):
-                logger.info("Specified UTC directory path: {0} does not exist. Quitting.".format(config_params["utc"]))
-                sys.exit()
-            else:
-                logger.info("Processing {0}".format(config_params["utc"]))
-        else:
-            config_params["utc"] = "none"
-            logger.info("Processing {0}".format(config_params["dirname"]))
-        
-        toggle = True 
+try:
+    #Assumes path to be telescope/project/pulsar/utc/cfreq
+    pulsars_dirs = sorted(glob.glob(os.path.join(config_params["input_path"],"{0}/{1}/{2}/{3}/{4}".format(args.telescope,
+        args.pid,args.pulsar,args.utc,args.cfreq))))
+except:
+    sys.exit()
 
-elif args.batch:
-    logger.info("Batch processing enabled")
-    config_params["dirname"]= str(args.batch)
-    config_params["batch"] = "batch"
-    toggle=True
+
+if len(pulsar_dirs) > 0:
+    toggle = True 
 
 
 if toggle:
 
-    logger.info("Toggle set to True")
     #Gather information on directory structures
-    if args.pid:
-        config_params["pid"] = str(args.pid)
-
     output_info,archive_list,psrnames,proposal_ids,required_ram_list,obstime_list = get_outputinfo(config_params,logger)
+    
+    output_info = op_info_list[0]
+    archive_list = op_info_list[1]
+    psrnames = op_info_list[2]
+    proposal_ids = op_info_list[3]
 
     #For each input directory, an equivalent output directory is created using create_MTstructure.
     for obs_num, output_dir in enumerate(output_info):

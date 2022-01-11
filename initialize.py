@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 """
-MeerPipe: Processing pipeline for pulsar timing data.
+MeerPipe: Processing pipeline for pulsar timing data - TPAPUM TIMING EDITION
 
 __author__ = "Aditya Parthasarathy"
-__copyright__ = "Copyright 2019, MeerTime"
-__credits__ = ["Renee Spiewak", "Daniel Reardon"]
+__copyright__ = "Copyright 2021, TRAPUM/MGPS"
 __license__ = "Public Domain"
-__version__ = "0.2"
+__version__ = "0.1"
 __maintainer__ = "Aditya Parthasarathy"
 __email__ = "adityapartha3112@gmail.com"
 __status__ = "Development"
@@ -17,16 +16,10 @@ __status__ = "Development"
 Contains routines that help initialize the pipeline. 
 """
 
-import os
-import sys
-import shlex
-import subprocess
-import argparse
-import os.path
+import os,sys,shlex,subprocess,argparse,logging,glob
 import numpy as np
-import logging
-import glob
 from shutil import copyfile, rmtree
+
 
 def get_obsinfo(obsinfo_path):
     """
@@ -81,30 +74,16 @@ def parse_config(path_cfile):
                 config_params["input_path"] = sline[1].rstrip().lstrip(' ')
             if attr == 'output_path':
                 config_params["output_path"] = sline[1].rstrip().lstrip(' ')
-            if attr == 'flags':
-                config_params["flags"] = sline[1].rstrip().lstrip(' ').split(',')
-            if attr == 'repo_urls':
-                config_params["repos"] = sline[1].rstrip().lstrip(' ').split(',')
-            if attr == 'rfi_alg':
-                config_params["rfi_alg"] = sline[1].rstrip().lstrip(' ')
-            if attr == "type":
-                config_params["type"] = sline[1].rstrip().lstrip(' ')
             if attr == "user":
                 config_params["user"] = sline[1].rstrip().lstrip(' ')
-            if attr == "calibrators_path":
-                config_params["calibrators_path"] = sline[1].rstrip().lstrip(' ')
             if attr == "rm_cat":
                 config_params["rmcat"] = sline[1].rstrip().lstrip(' ')
             if attr == "dm_cat":
                 config_params["dmcat"] = sline[1].rstrip().lstrip(' ')
-            if attr == "pipe":
-                config_params["pipe"] = sline[1].rstrip().lstrip(' ')
             if attr == "decimation_products":
                 config_params["decimation_products"] = sline[1].rstrip().lstrip(' ')
             if attr == "overwrite":
                 config_params["overwrite"] = sline[1].rstrip().lstrip(' ')
-            if attr == "ref_freq_list":
-                config_params["ref_freq_list"] = sline[1].rstrip().lstrip()
             if attr == "meertime_ephemerides":
                 config_params["meertime_ephemerides"] = sline[1].rstrip().lstrip()
             if attr == "meertime_templates":
@@ -115,53 +94,17 @@ def parse_config(path_cfile):
     return config_params
 
 
-def setup_logging(path,verbose,file_log):
+def setup_logging(path):
     """
     Setup log handler - this logs in the terminal (if not run with --slurm).
     For slurm based runs - the logging is done by the job queue system
 
     """
-    log_toggle=False
-     
     # create formatter
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     
-    if file_log == True:
-        logfile = "meerpipe.log"
-        logger = logging.getLogger(logfile)
-        logger.setLevel(logging.INFO)
-
-        if not os.path.exists(path):
-            os.makedirs(path)
-        #Create file logging only if logging file path is specified
-        fh = logging.FileHandler(os.path.join(path,logfile))
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
-        #Check if file already exists, if so, add a demarcator to differentiate among runs
-        if os.path.exists(os.path.join(path, logfile)):
-            with open(os.path.join(path,logfile), 'a') as f:
-                f.write(20*"#")
-                f.write("\n")
-        logger.info("File handler created")
-        log_toggle=True
-
-    if verbose:
-        #Create console handler with a lower log level (INFO)
-        logfile = "meerpipe.log"
-        logger = logging.getLogger(logfile)
-        logger.setLevel(logging.INFO)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        ch.setFormatter(formatter)
-        # add the handlers to the logger
-        logger.addHandler(ch)
-        logger.info("Verbose mode enabled")
-        log_toggle=True
-        
-    """
     #Create console handler with a lower log level (INFO)
-    logfile = "meerpipe.log"
+    logfile = "meerpipe_trap_mgps.log"
     logger = logging.getLogger(logfile)
     logger.setLevel(logging.INFO)
     ch = logging.StreamHandler()
@@ -170,23 +113,20 @@ def setup_logging(path,verbose,file_log):
     # add the handlers to the logger
     logger.addHandler(ch)
     logger.info("Verbose mode enabled")
-    """
-
-    if log_toggle:
-        return logger
-    else:
-        return none
+    log_toggle=True
+        
+    return logger
 
 
-def get_outputinfo(cparams,logger):
+
+def get_outputinfo(cparams,pulsar_dirs,logger):
     """
     Routine to gather information about the directory structure from the input data
-    The input path is assumed to have directories that are pulsarname/UTCs/beamnumber/freq/*ar 
-    Returns a list of output paths that needs to exist for the data products to be stored
     """
-    input_path = cparams["input_path"]
+    
     output_path = cparams["output_path"]
     logger.info("Gathering directory structure information")
+    
     results_path=[]
     all_archives=[]
     psrnames=[]
@@ -195,126 +135,55 @@ def get_outputinfo(cparams,logger):
     required_ram_list = []
     obs_time_list = []
 
-    if cparams["batch"] == "batch":
-        pulsar_dirs = sorted(glob.glob(os.path.join(input_path,cparams["dirname"])))
-    elif cparams["batch"] == "none":
-        pulsar_dirs = sorted(glob.glob(cparams["dirname"]))
 
-    if cparams["type"] == "caspsr":
-        #For CASPSR data
-        pid = str(cparams["pid"])
-        for pulsar in pulsar_dirs:
-            psr_path,psr_name = os.path.split(pulsar)
-            psr_name_split = psr_name.split("_")
-            if not psr_name_split[-1] == "R":
-                obs_dirs = sorted(glob.glob(os.path.join(pulsar,"*")))
-                #logger.info("Number of observations: {0}".format((len(obs_dirs))))
-                for num,observation in enumerate(obs_dirs):
-                    obs_path,obs_name = os.path.split(observation)
-                    if not num > 50:
-                        freq_dirs = sorted(glob.glob(os.path.join(observation,"*")))
-                        for files in freq_dirs:
-                            freq_path,freq_name = os.path.split(files)
-                            archives = sorted(glob.glob(os.path.join(files,"*.ar"))) #TODO: change extension to be generic
-                            results_path.append(str(output_path+"/"+pid+"/"+psr_name+"/"+obs_name+"/"+freq_name+"/"))
-                            psrnames.append(psr_name)
-                            all_archives.append(archives)
-                    else:
-                        logger.info("Number of observations exceeded 50")
-                        break
-            else:
-                print ("Skipping CAL observations : {0}".format(psr_name))
+    #DIRECTORY STRUCTURE (telescope/project/pulsar/utc/cfreq)
+    for pulsar in pulsar_dirs:
 
-    elif cparams["type"] == "ppta_zap":
-        #For PPTA zapping 
-        for pulsar in pulsar_dirs:
-            psr_path,psr_name = os.path.split(pulsar)
-            psrnames.append(psr_name)
-            archives = sorted(glob.glob(os.path.join(pulsar,"*.dzF"))) #TODO: change extension to be generic
-            results_path.append(str(output_path+"/"+psr_name+"/"))
-            all_archives.append(archives)
+        path,cfreq = os.path.split(pulsar)
+        path,utc = os.path.split(path)
+        path,psrname = os.path.split(path)
+        path,pid = os.path.split(path)
+        path,telescope = os.path.split(path)
+        input_path = path
 
-    elif cparams["type"] == "meertime":
-        #For MeerTime data on OzStar
-        #Example: 2018-10-25-05:31:38/J0835-4510/1284/<*.ar>
-        #New directory structure: <psrname>/<UTC>/<beam>/<freq>/<*.ar>
-        """
-        for observation in pulsar_dirs:
+        for observation in observation_dirs:
             obs_path,obs_name = os.path.split(observation)
-            pulsars = sorted(glob.glob(os.path.join(observation,"J*")))
-            logger.info("{0}".format(pulsars))
-            for pulsar in pulsars:
-                psr_path,psr_name = os.path.split(pulsar)
-                psr_name_split = psr_name.split("_")
-                if not psr_name_split[-1] == "R":
-                    freq_dirs = sorted(glob.glob(os.path.join(pulsar,"*")))
-                    for files in freq_dirs:
-                        freq_path,freq_name = os.path.split(files)
-                        archives = sorted(glob.glob(os.path.join(files,"*.ar")))
-                        results_path.append(str(output_path+"/"+obs_name+"/"+psr_name+"/"+freq_name+"/"))
-                        psrnames.append(psr_name)
-                        all_archives.append(archives)
-        """
+            beam_dirs = sorted(glob.glob(os.path.join(observation,"*")))
+            for beam in beam_dirs:
+                beam_path,beam_name = os.path.split(beam)
+                freq_dirs = sorted(glob.glob(os.path.join(beam,"*")))
+                logger.info("{0}".format(freq_dirs))
+                for files in freq_dirs:
+                    freq_path,freq_name = os.path.split(files)
+                    archives = sorted(glob.glob(os.path.join(files,"*.ar")))
+                    info_params = get_obsinfo(glob.glob(os.path.join(files,"obs_info.dat"))[0])
+                    if not "pid" in cparams:
+                        pid_dir = get_pid_dir(info_params["proposal_id"])
+                        proposal_ids.append(str(pid_dir))
+                        results_path.append(str(output_path+"/"+pid_dir+"/"+psr_name+"/"+obs_name+"/"+beam_name+"/"+freq_name+"/"))
+                    elif "pid" in cparams:
+                        pid_dir = str(cparams["pid"])
+                        proposal_ids.append(pid_dir)
+                        results_path.append(str(output_path+"/"+pid_dir+"/"+psr_name+"/"+obs_name+"/"+beam_name+"/"+freq_name+"/"))
+                    psrnames.append(psr_name)
+                    all_archives.append(archives)
 
-        #NEW directory structure
-        for pulsar in pulsar_dirs:
-
-
-            psr_path,psr_name = os.path.split(pulsar)
-            psr_name_split = psr_name.split("_")
-            
-            if psr_name_split[-1] == "R" or psr_name_split[-1] == "N" or psr_name_split[-1] == "O" or psr_name_split[-1] == "S":
-                cparams["fluxcal"] = True
-                logger.info("This is a fluxcal observation")
-            else:
-                cparams["fluxcal"] = False
-
-            observation_dirs = sorted(glob.glob(os.path.join(pulsar,"2*")))
-            if not cparams["utc"] == "none":
-                logger.info("Processing custom UTC")
-                observation_dirs = glob.glob(cparams["utc"])
-
-            for observation in observation_dirs:
-                obs_path,obs_name = os.path.split(observation)
-                beam_dirs = sorted(glob.glob(os.path.join(observation,"*")))
-                for beam in beam_dirs:
-                    beam_path,beam_name = os.path.split(beam)
-                    freq_dirs = sorted(glob.glob(os.path.join(beam,"*")))
-                    logger.info("{0}".format(freq_dirs))
-                    for files in freq_dirs:
-                        freq_path,freq_name = os.path.split(files)
-                        archives = sorted(glob.glob(os.path.join(files,"*.ar")))
-                        info_params = get_obsinfo(glob.glob(os.path.join(files,"obs_info.dat"))[0])
-                        if not "pid" in cparams:
-                            pid_dir = get_pid_dir(info_params["proposal_id"])
-                            proposal_ids.append(str(pid_dir))
-                            results_path.append(str(output_path+"/"+pid_dir+"/"+psr_name+"/"+obs_name+"/"+beam_name+"/"+freq_name+"/"))
-                        elif "pid" in cparams:
-                            pid_dir = str(cparams["pid"])
-                            proposal_ids.append(pid_dir)
-                            results_path.append(str(output_path+"/"+pid_dir+"/"+psr_name+"/"+obs_name+"/"+beam_name+"/"+freq_name+"/"))
-                        psrnames.append(psr_name)
-                        all_archives.append(archives)
-
-                        #Computing RAM requirements for this observation
-                        if float(info_params["target_duration"]) <= 900.0: #Less than 15 mins
-                            reqram = "64g"
-                        elif float(info_params["target_duration"]) > 900.0 and float(info_params["target_duration"]) <= 3600.0: #15 mins to 1 hour
-                            reqram = "128g"
-                        elif float(info_params["target_duration"]) > 3600.0 and float(info_params["target_duration"]) <= 10800.0: #1 to 3 hours
-                            reqram = "256g"
-                        elif float(info_params["target_duration"]) > 10800.0 and float(info_params["target_duration"]) < 18000.0: #3 hours to 5 hours
-                            reqram = "512g"
-                        elif float(info_params["target_duration"]) > 18000.0: #More than 5 hours
-                            reqram = "768g"
-             
-                        obs_time_list.append(info_params["target_duration"])
-                        required_ram_list.append(reqram)
-
-
-
+                    #Computing RAM requirements for this observation
+                    if float(info_params["target_duration"]) <= 900.0: #Less than 15 mins
+                        reqram = "64g"
+                    elif float(info_params["target_duration"]) > 900.0 and float(info_params["target_duration"]) <= 3600.0: #15 mins to 1 hour
+                        reqram = "128g"
+                    elif float(info_params["target_duration"]) > 3600.0 and float(info_params["target_duration"]) <= 10800.0: #1 to 3 hours
+                        reqram = "256g"
+                    elif float(info_params["target_duration"]) > 10800.0 and float(info_params["target_duration"]) < 18000.0: #3 hours to 5 hours
+                        reqram = "512g"
+                    elif float(info_params["target_duration"]) > 18000.0: #More than 5 hours
+                        reqram = "768g"
          
-    return results_path,all_archives,psrnames,proposal_ids,required_ram_list,obs_time_list
+                    obs_time_list.append(info_params["target_duration"])
+                    required_ram_list.append(reqram)
+
+return results_path,all_archives,psrnames,proposal_ids,required_ram_list,obs_time_list
 
 
 def create_structure(output_dir,cparams,psrname,logger):
