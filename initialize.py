@@ -111,6 +111,8 @@ def parse_config(path_cfile):
                 config_params["meertime_templates"] = sline[1].rstrip().lstrip()
             if attr == "toa_display_list":
                 config_params["toa_display_list"] = sline[1].rstrip().lstrip()
+            if attr == "global_toa_path":
+                config_params["global_toa_path"] = sline[1].rstrip().lstrip()
 
     cfile.close()
     

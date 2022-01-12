@@ -1940,20 +1940,37 @@ def generate_images(output_dir, cparams, psrname, logger):
         parfile = glob.glob(os.path.join(str(timing_path),"{0}.par".format(psrname)))[0]
         selfile = glob.glob(os.path.join(str(timing_path),"{0}.select".format(psrname)))[0]
         
-        # start with the single-observation image
         toa_archive_name = "image_toas.ar"
         toa_archive_file = os.path.join(images_path, toa_archive_name)
-        image_name = "toas_single.png"                                                                                                                                                                                           
-        image_file = os.path.join(images_path,image_name)
+        single_image_name = "toas_single.png"
+        single_image_file = os.path.join(images_path,single_image_name)
+        
+        global_image_name = "{0}.{1}_global.png".format(local_pid, psrname)
+        if ("global_toa_path" in cparams):
+            if (os.path.exists(cparams["global_toa_path"]) == False):
+                os.makedirs(cparams["global_toa_path"])
+            global_images_path = cparams["global_toa_path"]                        
+        else:
+            global_images_path = images_pat
+        global_image_file = os.path.join(global_images_path,global_image_name)
 
         if (build_image_toas(output_dir, clean_file, toa_archive_name, images_path, cparams, psrname, logger)):
-            logger.info("Successfully created {0} - now producing residual image for single observation".format(toa_archive_file))
-            
-            if (generate_singleres_image(output_dir, toa_archive_file, image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
-                logger.info("Successfully created single observation residual image {0}".format(image_file))
-                image_data.append({'file': image_file, 'rank': 7, 'type': '{0}.toa.single'.format(local_pid)})
+            logger.info("Successfully created {0} - now producing residual images".format(toa_archive_file))
+
+            # generate single TOA image
+            if (generate_singleres_image(output_dir, toa_archive_file, single_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
+                logger.info("Successfully created single observation residual image {0}".format(single_image_file))
+                image_data.append({'file': single_image_file, 'rank': 7, 'type': '{0}.toa.single'.format(local_pid)})
             else:
                 logger.error("Single observation residual TOA image generation was unsuccessful!")
+
+            # generate global TOA image
+            if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, global_images_path, parfile, template, selfile, cparams, psrname, logger)):
+                logger.info("Successfully created global observation residual image {0}".format(global_image_file))
+                logger.info("THIS IMAGE IS NOT LOGGED IN THE DATABASE DUE TO LIMITATIONS OF PSRDB - TO BE FIXED IN A FUTURE UPDATE.")
+            else:
+                logger.error("Global observation residual TOA image generation was unsuccessful!")
+
         else:
             logger.error("Generation of TOA archive was unsuccessful.")
 
@@ -2008,7 +2025,7 @@ def generate_images(output_dir, cparams, psrname, logger):
 # builds the toas used for the production of TOA image specific to this observation
 def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, cparams, psrname, logger):
 
-    # set up paths and filenames                                                                                                                                                                                                            
+    # set up paths and filenames  
     toa_archive_ext = "temptoa.ar"
     dlyfix_script = "/fred/oz005/users/mkeith/dlyfix/dlyfix"
     toa_archive_file = os.path.join(toa_archive_path,toa_archive_name)
@@ -2105,51 +2122,86 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
 # produce residual image for all available observations that have completed processing and which match the project code
 # assumes that the TOA files have been dlyfix'd
 # WIP
-def generate_globalres_image(output_dir, toa_name, image_name, image_path, parfile, template, selfile, cparams, psrname, logger):
+def generate_globalres_image(output_dir, local_toa_archive, image_name, image_path, parfile, template, selfile, cparams, psrname, logger):
 
+    # ADMISSION OF GUILT: Eventually I want to code this section so that it works with PSRDB properly
+    # Unfortunately, this requires modifications to PSRDB that are not yet available, and I don't want
+    # to wait any longer. Once PSRDB is fixed, I will re-write this section to get the job done correctly.
+
+    # skeleton code for PSRDB
+    
     # this function will only run if DB mode is active - check
-    if (cparams["db_flag"]):
+    #if (cparams["db_flag"]):
 
-         # set up paths, filenames and required parameters
-        timfile = os.path.join(image_path, "toas_global.tim")
-        image_file = os.path.join(image_path, image_name)
+        # set up paths, filenames and required parameters
 
         # query for all processings run through a specific pipeline
         
         # compile a TOA file using only those processings logged as 'complete'
 
-    else:
-        logger.error("PSRDB mode not active - Global TOA residual image will not be generated.")
+    #else:
+        #logger.error("PSRDB mode not active - Global TOA residual image will not be generated.")
 
+    # set up paths, filenames and required parameters
+    timfile = os.path.join(image_path, "{0}.{1}_global.tim".format(cparams["pid"].lower(), psrname))
+    image_file = os.path.join(image_path, image_name)
 
-
-
-
-    comm = "vap -c nchan,bw,freq {0}".format(toa_archive)
+    # scroll through all available observations under the file heirarchy matching the required parameters
+    # if they match, build their TOAs into the file
+    # assumes that the output path of the current config file contains all neccessary observations
+    toa_archives = glob.glob(os.path.join(cparams["output_path"],"{0}/{1}/*/*/*/images/image_toas.ar".format(cparams["pid"], psrname)))
+    # get parameters with reference to the local toa_archive
+    comm = "vap -c telescop,bw,freq {0}".format(local_toa_archive)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
     info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
-    toa_nchan = int(info[1].split()[1])
+    telescope = str(info[1].split()[1])
     obs_bw = float(info[1].split()[2])
     obs_freq = float(info[1].split()[3])
 
-    # ensure this pat comment closely matches the one in generate_toas()                                                                                                                                                                     
-    comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive)
+    # begin the scroll
+    toa_list = ""
+    logger.info("Compiling global TOA list for pulsar {0} and project {1}...".format(psrname, cparams["pid"]))
+    for x in range (0, len(toa_archives)):
+        
+        # get comparison parameters
+        comm = "vap -c telescop,bw,freq {0}".format(toa_archives[x])
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+        telescope_comp = str(info[1].split()[1])
+        obs_bw_comp = float(info[1].split()[2])
+        obs_freq_comp = float(info[1].split()[3])
+
+        if (telescope_comp == telescope) and (obs_bw_comp == obs_bw) and (obs_freq_comp == obs_freq):
+
+            # we have a match - add it to the list
+            logger.info("{0} added to global TOA list".format(toa_archives[x]))
+            toa_list = "{0} {1}".format(toa_list, toa_archives[x])
+
+        else:
+
+            # no match
+            logger.info("{0} excluded from global TOA list".format(toa_archives[x]))
+
+
+    # toa list generation complete - build TOAs
+
+    # ensure this pat comment closely matches the one in generate_toas()
+    comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_list)
     args = shlex.split(comm)
     f = open(timfile, "w")
     subprocess.call(args, stdout=f)
     f.close()
-    logger.info("TOA data generated and stored in {0}".format(timfile))
+    logger.info("Global TOA data generated and stored in {0}".format(timfile))
 
-    # use meerwatch functions to produce residual images for this observation                                                                                                                                                               \
-                                                                                                                                                                                                                                             
+    # use meerwatch functions to produce residual images for this observation
     logger.info("Calling modified MeerWatch residual generation...")
     residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
-    logger.info("Producing single-obs image from modified MeerWatch residuals...")
-    logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
-    plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
+    logger.info("Producing global TOA image from modified MeerWatch residuals...")
+    plot_toas_fromarr(residuals, out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
 
-    # check if file creation was successful and return                                                                                                                                                                                      \
-                                                                                                                                                                                                                                             
+    # check if file creation was successful and return
     return os.path.exists(image_file)
