@@ -2043,17 +2043,65 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
 
     # option 1 - the config file included a catalog with parameters for specific pulsars
     if ("toa_display_list" in cparams and os.path.exists(cparams["toa_display_list"])):
-        # TODO
-        logger.info("TOA display list functionality yet to be implemented!")
+        
+        logger.info("Generating TOA images based on a toa display list: {0}".format(cparams["toa_display_list"]))
+        
+        # find the pulsar in the list and extract the relevant parameters
+        comm = "grep {0} {1}".format(psrname, cparams["toa_display_list"])
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+        # safety checks
+        if (len(info) == 1):
 
+            subinfo = info[0].split()
+            
+            if (subinfo[0] == psrname):
+                # match found
+                logger.info("Unique match found for {0}".format(psrname))
+                toa_nchan = int(subinfo[2])
+                toa_tobs = float(subinfo[1])
+                toa_config_success = True
+            else:
+                logger.error("No list entry match for {0} - diverting to a default method".format(psrname))
+                toa_config_success = False
+
+        else:
+            logger.error("Unable to find a unique list entry for {0} - diverting to a default method".format(psrname))
+            toa_config_success = False
+            
     # option 2 - no catalog, or pulsar not listed in the catalog; revert to a project-based default
     if (toa_config_success == False and "pid" in cparams):
-        # TODO
-        logger.info("PID-based TOA images yet to be implemented!")
+
+        logger.info("PID-based TOA images are implemented, but may need fine tuning for your particular pulsar")
+        logger.info("Please adjust the default settings for your project or provide a toa config catalog as part of the pipeline config file, and then reprocess.")
+        
+        # check for which pid and assign parameters - these may need some fine tuning/expanding for more PIDs
+        if (cparams["pid"] == "TPA"):
+            toa_nchan = 1
+            toa_tobs = 600
+            toa_config_success = True
+        elif (cparams["pid"] == "RelBin"):
+            toa_nchan = 1
+            toa_tobs = 120
+            toa_config_success = True
+        elif (cparams["pid"] == "PTA"):
+            toa_nchan = 4
+            toa_tobs = 300
+            toa_config_success = True
+        else:
+            # redundant but just in case
+            toa_config_success = False
+
     # option 3 - no project, no catalog; revert to a global default
     if (toa_config_success == False):
+
+        logger.info("Using default TOA image parameters - these may need fine tuning for your particular pulsar.")
+        logger.info("Please adjust the default settings for your project or provide a toa config catalog as part of the pipeline config file, and then reprocess.")
         toa_nchan = 4
         toa_tobs = 300
+        toa_config_success = True
 
     # calculate nsub and build temporary toa file
     toa_nsub = int(np.round(length/float(toa_tobs)))
@@ -2121,7 +2169,6 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
 
 # produce residual image for all available observations that have completed processing and which match the project code
 # assumes that the TOA files have been dlyfix'd
-# WIP
 def generate_globalres_image(output_dir, local_toa_archive, image_name, image_path, parfile, template, selfile, cparams, psrname, logger):
 
     # ADMISSION OF GUILT: Eventually I want to code this section so that it works with PSRDB properly
