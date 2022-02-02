@@ -39,6 +39,9 @@ from coast_guard import cleaners
 import json
 import requests
 
+#Meerwatch imports
+from meerwatch_tools import get_res_fromtim, plot_toas_fromarr
+
 # PSRDB imports - assumes psrdb/latest module
 from util import ephemeris
 from tables import *
@@ -1798,12 +1801,15 @@ def generate_images(output_dir, cparams, psrname, logger):
     # Note - the functionality of this code is based on the outputs expected by 'generate_summary'
     # Should these expected outputs change, the conditions of this code should be re-assessed
 
-    logger.info("Generating pipeline images")
+    logger.info("Generating pipeline images - Pipeline PID = {0}".format(cparams["pid"]))
+    # update - pid now to be included in the naming structure (type)
+    local_pid = cparams["pid"].lower()
 
     # produce images based on unscrunched, unchopped, cleaned and flux-calibrated archives
     output_dir = str(output_dir)
     cleaned_path = os.path.join(output_dir,"cleaned")
     images_path = os.path.join(output_dir,"images")
+    timing_path = os.path.join(output_dir, "timing")
     cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*fluxcal.ar"))
     
     clean_file = None
@@ -1842,10 +1848,10 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # basic psrplot images - mimicking ingest images
         plot_commands = [
-            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
-            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'rank': 2, 'type': 'profile.pol'},
-            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 3, 'type': 'phase.freq'},
-            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 4, 'type': 'phase.time'}
+            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'rank': 1, 'type': '{0}.profile.int'.format(local_pid)} ,
+            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'rank': 2, 'type': '{0}.profile.pol'.format(local_pid)},
+            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 3, 'type': '{0}.phase.freq'.format(local_pid)},
+            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 4, 'type': '{0}.phase.time'.format(local_pid)}
         ]
 
         # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
@@ -1915,8 +1921,8 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # plot results - single subint snr
         matplot_commands = [
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 5, 'type': 'snr.single'},
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR', 'name': 'SNR_cumulative', 'rank': 6, 'type': 'snr.cumul'},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 5, 'type': '{0}.snr.single'.format(local_pid)},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR', 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr.cumul'.format(local_pid)},
         ]
 
         for x in range(0, len(matplot_commands)):
@@ -1941,9 +1947,45 @@ def generate_images(output_dir, cparams, psrname, logger):
         os.remove(scrunched_file)
 
         # generate TOA-based images
-        # generate_image_residuals(output_dir, clean_file, cparams, psrname, logger)
-        # TODO
+        # produce toas - need to recall the template used through the toas table
+        logger.info("Obtaining templates and ephemerides for generating TOA images...")
+        template = glob.glob(os.path.join(str(timing_path),"{0}.std".format(psrname)))[0]
+        parfile = glob.glob(os.path.join(str(timing_path),"{0}.par".format(psrname)))[0]
+        selfile = glob.glob(os.path.join(str(timing_path),"{0}.select".format(psrname)))[0]
+        
+        toa_archive_name = "image_toas.ar"
+        toa_archive_file = os.path.join(images_path, toa_archive_name)
+        single_image_name = "toas_single.png"
+        single_image_file = os.path.join(images_path,single_image_name)
+        
+        global_image_name = "{0}.{1}_global.png".format(local_pid, psrname)
+        if ("global_toa_path" in cparams):
+            if (os.path.exists(cparams["global_toa_path"]) == False):
+                os.makedirs(cparams["global_toa_path"])
+            global_images_path = cparams["global_toa_path"]                        
+        else:
+            global_images_path = images_pat
+        global_image_file = os.path.join(global_images_path,global_image_name)
 
+        if (build_image_toas(output_dir, clean_file, toa_archive_name, images_path, cparams, psrname, logger)):
+            logger.info("Successfully created {0} - now producing residual images".format(toa_archive_file))
+
+            # generate single TOA image
+            if (generate_singleres_image(output_dir, toa_archive_file, single_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
+                logger.info("Successfully created single observation residual image {0}".format(single_image_file))
+                image_data.append({'file': single_image_file, 'rank': 7, 'type': '{0}.toa.single'.format(local_pid)})
+            else:
+                logger.error("Single observation residual TOA image generation was unsuccessful!")
+
+            # generate global TOA image
+            if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, global_images_path, parfile, template, selfile, cparams, psrname, logger)):
+                logger.info("Successfully created global observation residual image {0}".format(global_image_file))
+                logger.info("THIS IMAGE IS NOT LOGGED IN THE DATABASE DUE TO LIMITATIONS OF PSRDB - TO BE FIXED IN A FUTURE UPDATE.")
+            else:
+                logger.error("Global observation residual TOA image generation was unsuccessful!")
+
+        else:
+            logger.error("Generation of TOA archive was unsuccessful.")
 
     else:
         logger.error("Could not identify single un-scrunched, un-chopped, clean and fluxcalibrated file for image generation.")
@@ -1956,8 +1998,8 @@ def generate_images(output_dir, cparams, psrname, logger):
 
     # look for two fixed dynspec images
     dynspec_commands = [
-        {'ext': 'zap.dynspec', 'rank': 8},
-        {'ext': 'calib.dynspec', 'rank': 7}
+        {'ext': 'zap.dynspec', 'rank': 9},
+        {'ext': 'calib.dynspec', 'rank': 8}
     ]    
 
     for x in range (0, len(dynspec_commands)):
@@ -1971,7 +2013,7 @@ def generate_images(output_dir, cparams, psrname, logger):
         else:
             # unique match found
             logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
-            image_data.append({'file': data[0], 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['ext']})
+            image_data.append({'file': data[0], 'rank': dynspec_commands[x]['rank'], 'type': '{0}.{1}'.format(local_pid,dynspec_commands[x]['ext'])})
 
     # write all images to PSRDB
     if (cparams["db_flag"]):
@@ -1993,16 +2035,13 @@ def generate_images(output_dir, cparams, psrname, logger):
 
     return
 
-# produce timing residuals to be used in the production of pipeline images
-# WIP
-def generate_image_residuals(output_dir, clean_file, cparams, psrname, logger):
+# builds the toas used for the production of TOA image specific to this observation
+def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, cparams, psrname, logger):
 
-    # set up paths and filenames
-    images_path = os.path.join(output_dir,"images")
-    timing_path = os.path.join(str(output_dir),"timing")
-    tim_name = os.path.join(images_path, "toas.tim")
+    # set up paths and filenames  
     toa_archive_ext = "temptoa.ar"
-    ryan_script = "/fred/oz005/users/acameron/scripts/flag_script.sh"
+    dlyfix_script = "/fred/oz005/users/mkeith/dlyfix/dlyfix"
+    toa_archive_file = os.path.join(toa_archive_path,toa_archive_name)
 
     # query file parameters
     comm = "vap -c length {0}".format(clean_file)
@@ -2014,40 +2053,215 @@ def generate_image_residuals(output_dir, clean_file, cparams, psrname, logger):
 
     # determine desired number of nchans and size of tobs
     toa_config_success = False
-    
+
     # option 1 - the config file included a catalog with parameters for specific pulsars
     if ("toa_display_list" in cparams and os.path.exists(cparams["toa_display_list"])):
-        # TODO
-        logger.info("TOA display list functionality yet to be implemented!")
         
+        logger.info("Generating TOA images based on a toa display list: {0}".format(cparams["toa_display_list"]))
+        
+        # find the pulsar in the list and extract the relevant parameters
+        comm = "grep {0} {1}".format(psrname, cparams["toa_display_list"])
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+        # safety checks
+        if (len(info) == 1):
+
+            subinfo = info[0].split()
+            
+            if (subinfo[0] == psrname):
+                # match found
+                logger.info("Unique match found for {0}".format(psrname))
+                toa_nchan = int(subinfo[2])
+                toa_tobs = float(subinfo[1])
+                toa_config_success = True
+            else:
+                logger.error("No list entry match for {0} - diverting to a default method".format(psrname))
+                toa_config_success = False
+
+        else:
+            logger.error("Unable to find a unique list entry for {0} - diverting to a default method".format(psrname))
+            toa_config_success = False
+            
     # option 2 - no catalog, or pulsar not listed in the catalog; revert to a project-based default
     if (toa_config_success == False and "pid" in cparams):
-        # TODO
-        logger.info("PID-based TOA images yet to be implemented!")
-            
+
+        logger.info("PID-based TOA images are implemented, but may need fine tuning for your particular pulsar")
+        logger.info("Please adjust the default settings for your project or provide a toa config catalog as part of the pipeline config file, and then reprocess.")
+        
+        # check for which pid and assign parameters - these may need some fine tuning/expanding for more PIDs
+        if (cparams["pid"] == "TPA"):
+            toa_nchan = 1
+            toa_tobs = 600
+            toa_config_success = True
+        elif (cparams["pid"] == "RelBin"):
+            toa_nchan = 1
+            toa_tobs = 120
+            toa_config_success = True
+        elif (cparams["pid"] == "PTA"):
+            toa_nchan = 4
+            toa_tobs = 300
+            toa_config_success = True
+        else:
+            # redundant but just in case
+            toa_config_success = False
+
     # option 3 - no project, no catalog; revert to a global default
     if (toa_config_success == False):
+
+        logger.info("Using default TOA image parameters - these may need fine tuning for your particular pulsar.")
+        logger.info("Please adjust the default settings for your project or provide a toa config catalog as part of the pipeline config file, and then reprocess.")
         toa_nchan = 4
         toa_tobs = 300
+        toa_config_success = True
 
     # calculate nsub and build temporary toa file
-    toa_nsub = int(np.floor(length/float(toa_tobs)))
-    comm = "pam -p --setnsub={0} --setnchn={1} -e {4} -u {2} {3}".format(toa_nsub, toa_nchan, images_path, clean_file, toa_archive_ext)
+    toa_nsub = int(np.round(length/float(toa_tobs)))
+    if (toa_nsub < 1):
+        toa_nsub = 1
+
+    logger.info("Constructing TOA archive with nsub={0} and nchan={1} - storing in {2}".format(toa_nsub, toa_nchan, toa_archive_path))
+    comm = "pam -p --setnsub={0} --setnchn={1} -e {4} -u {2} {3}".format(toa_nsub, toa_nchan, toa_archive_path, clean_file, toa_archive_ext)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
-    toa_archive= proc.stdout.read().decode("utf-8").rstrip().split()[0]
+    toa_archive_temp = proc.stdout.read().decode("utf-8").rstrip().split()[0]
 
-    # produce toas - need to recall the template used through the toas table
-    logger.info("Obtaining templates and ephemerides for generating TOA images...")
-    template = get_meertimetemplate(psrname,output_path,cparams,logger)
-    parfile = glob.glob(os.path.join(str(timing_path),"{0}.par".format(psrname)))[0]
+    # rename the file to desired name
+    logger.info("Renaming the archive to {0}".format(toa_archive_file))
+    comm = "mv {0} {1}".format(toa_archive_temp, toa_archive_file)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+
+    # correct the delays
+    logger.info("Applying delay corrections via {0}".format(dlyfix_script))
+    comm = "{0} -u {1} {2}".format(dlyfix_script, toa_archive_path, toa_archive_file)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+
+    # check if file creation was successful and return
+    return os.path.exists(toa_archive_file)
+
+# produce residual image for a single observation
+def generate_singleres_image(output_dir, toa_archive, image_name, image_path, parfile, template, selfile, cparams, psrname, logger):
+
+    # set up paths, filenames and required parameters
+    timfile = os.path.join(image_path, "toas_single.tim")
+    image_file = os.path.join(image_path, image_name)
+
+    comm = "vap -c nchan,bw,freq {0}".format(toa_archive)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+    toa_nchan = int(info[1].split()[1])
+    obs_bw = float(info[1].split()[2])
+    obs_freq = float(info[1].split()[3])    
+
     # ensure this pat comment closely matches the one in generate_toas()
     comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive)
     args = shlex.split(comm)
-    f = open(tim_name, "w")
+    f = open(timfile, "w")
     subprocess.call(args, stdout=f)
     f.close()
-    logger.info("TOA data generated and stored in {0}".format(tim_name))
+    logger.info("TOA data generated and stored in {0}".format(timfile))
 
-    return
+    # use meerwatch functions to produce residual images for this observation
+    logger.info("Calling modified MeerWatch residual generation...")
+    residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
+    logger.info("Producing single-obs image from modified MeerWatch residuals...")
+    logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
+    plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
+
+    # check if file creation was successful and return
+    return os.path.exists(image_file)
+
+
+# produce residual image for all available observations that have completed processing and which match the project code
+# assumes that the TOA files have been dlyfix'd
+def generate_globalres_image(output_dir, local_toa_archive, image_name, image_path, parfile, template, selfile, cparams, psrname, logger):
+
+    # ADMISSION OF GUILT: Eventually I want to code this section so that it works with PSRDB properly
+    # Unfortunately, this requires modifications to PSRDB that are not yet available, and I don't want
+    # to wait any longer. Once PSRDB is fixed, I will re-write this section to get the job done correctly.
+
+    # skeleton code for PSRDB
+    
+    # this function will only run if DB mode is active - check
+    #if (cparams["db_flag"]):
+
+        # set up paths, filenames and required parameters
+
+        # query for all processings run through a specific pipeline
+        
+        # compile a TOA file using only those processings logged as 'complete'
+
+    #else:
+        #logger.error("PSRDB mode not active - Global TOA residual image will not be generated.")
+
+    # set up paths, filenames and required parameters
+    timfile = os.path.join(image_path, "{0}.{1}_global.tim".format(cparams["pid"].lower(), psrname))
+    image_file = os.path.join(image_path, image_name)
+
+    # scroll through all available observations under the file heirarchy matching the required parameters
+    # if they match, build their TOAs into the file
+    # assumes that the output path of the current config file contains all neccessary observations
+    toa_archives = glob.glob(os.path.join(cparams["output_path"],"{0}/{1}/*/*/*/images/image_toas.ar".format(cparams["pid"], psrname)))
+    # get parameters with reference to the local toa_archive
+    comm = "vap -c telescop,bw,freq {0}".format(local_toa_archive)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+    telescope = str(info[1].split()[1])
+    obs_bw = float(info[1].split()[2])
+    obs_freq = float(info[1].split()[3])
+
+    # begin the scroll
+    toa_list = ""
+    logger.info("Compiling global TOA list for pulsar {0} and project {1}...".format(psrname, cparams["pid"]))
+    for x in range (0, len(toa_archives)):
+        
+        # get comparison parameters
+        comm = "vap -c telescop,bw,freq {0}".format(toa_archives[x])
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+        telescope_comp = str(info[1].split()[1])
+        obs_bw_comp = float(info[1].split()[2])
+        obs_freq_comp = float(info[1].split()[3])
+
+        if (telescope_comp == telescope) and (obs_bw_comp == obs_bw) and (obs_freq_comp == obs_freq):
+
+            # we have a match - add it to the list
+            logger.info("{0} added to global TOA list".format(toa_archives[x]))
+            toa_list = "{0} {1}".format(toa_list, toa_archives[x])
+
+        else:
+
+            # no match
+            logger.info("{0} excluded from global TOA list".format(toa_archives[x]))
+
+
+    # toa list generation complete - build TOAs
+
+    # ensure this pat comment closely matches the one in generate_toas()
+    comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_list)
+    args = shlex.split(comm)
+    f = open(timfile, "w")
+    subprocess.call(args, stdout=f)
+    f.close()
+    logger.info("Global TOA data generated and stored in {0}".format(timfile))
+
+    # use meerwatch functions to produce residual images for this observation
+    logger.info("Calling modified MeerWatch residual generation...")
+    residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
+    logger.info("Producing global TOA image from modified MeerWatch residuals...")
+    plot_toas_fromarr(residuals, out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
+
+    # check if file creation was successful and return
+    return os.path.exists(image_file)
