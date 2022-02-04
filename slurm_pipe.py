@@ -62,21 +62,40 @@ logger=setup_logging(config_params["output_path"],True,False)
 # Check to make sure there is no write-access conflict first
 if (config_params["db_flag"]):
 
+    # testing
+    #logger.info("URL = {0}".format(config_params["db_url"]))
+    #logger.info("Token = {0}".format(config_params["db_token"]))
+    #logger.info("Proc ID = {0}".format(config_params["db_proc_id"]))
+
     # PSRDB client setup
     db_client = GraphQLClient(config_params["db_url"], False)
+
+    # testing
+    #logger.info("DB Client initialised.")
 
     # Wait for run_pipe.py to finish
     pendflag = True
     dest_state = job_state_code(1)
     while (pendflag):
+
+        # testing
+        #logger.info("About to query job state")
+
         state = get_job_state(
             config_params["db_proc_id"],
             db_client,
             config_params["db_url"],
             config_params["db_token"]
         )
+
+        # testing
+        #logger.info("Query complete")
+
         if (state == dest_state):
             pendflag = False
+
+    # testing
+    #logger.info("Pendflag loop escaped")
 
     # run_pipe.py has finished - prepare update parameters
     job_state = job_state_code(2)
@@ -89,6 +108,9 @@ if (config_params["db_flag"]):
     node_name = get_node_name()
     job_output['job_node'] = node_name
     
+    # testing
+    # logger.info("About to update job state")
+
     # Complete the update and check for success
     update_id = update_processing(
         config_params["db_proc_id"], 
