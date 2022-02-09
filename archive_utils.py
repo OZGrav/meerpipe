@@ -1964,7 +1964,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 os.makedirs(cparams["global_toa_path"])
             global_images_path = cparams["global_toa_path"]                        
         else:
-            global_images_path = images_pat
+            global_images_path = images_path
         global_image_file = os.path.join(global_images_path,global_image_name)
 
         if (build_image_toas(output_dir, clean_file, toa_archive_name, images_path, cparams, psrname, logger)):

@@ -1,145 +1,346 @@
 #!/usr/bin/env python
+"""
 
-# Andrew Cameron, May 2021
-# Python wrapper script to launch MeerPipe using PSRDB functionality
-# PSRDB written and maintained by Andrew Jameson & Stefan Oslowski
-# Intention is to mimic the function of query_obs.py & reprocessing.py but in a single script
+Python wrapper script to launch MeerPipe using PSRDB functionality
+Intention is to mimic the function of query_obs.py & reprocessing.py but in a single script 
 
-# Basic Imports
+__author__ = "Andrew Cameron"
+__copyright__ = "Copyright (C) 2022 Andrew Cameron"
+__credits__ = ["Aditya Parthasarathy", "Andrew Jameson", "Stefan Oslowski"]                                                                                                                                                                 
+__license__ = "Public Domain"
+__version__ = "0.2"
+__maintainer__ = "Andrew Cameron"
+__email__ = "andrewcameron@swin.edu.au"
+__status__ = "Development"
+"""
+
+# Import packages
 import os,sys
 import argparse
+from argparse import RawTextHelpFormatter
 import datetime
 import subprocess
 import shlex
 import json
 import time
 
-# Custom Imports
-from db_utils import utc_normal2psrdb,utc_psrdb2normal,utc_normal2date,utc_psrdb2date,pid_getofficial,pid_getshort,list_psrdb_query,write_obs_list,get_pulsar_id
-
+# PSRDB imports
+from tables import *
+from joins import *
 from graphql_client import GraphQLClient
+from db_utils import (utc_normal2psrdb, utc_psrdb2normal, utc_normal2date, utc_psrdb2date, pid_getofficial, check_response,
+                      pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config)
 
 # Important paths
 PSRDB = "psrdb.py"
 
-# Parse incoming arguments
-parser = argparse.ArgumentParser(description="Launches specific observations to be processed by MeerPipe. Provide either a set of searchable parameters (primary input) or a list of observations (secondary input). If both inputs are provided, only the primary input will be used.")
-parser.add_argument("-utc1", dest="utc1", help="(Primary: required) - Start UTC for DB search - return only observations after this UTC timestamp.")
-parser.add_argument("-utc2", dest="utc2", help="(Primary: required) - End UTC for DB search - return only observations before this UTC timestamp.")
-parser.add_argument("-psr", dest="pulsar", help="(Primary: optional) - Pulsar name for DB search - return only observations with this pulsar name.")
-parser.add_argument("-pid", dest="pid", help="(Primary: optional) - Project ID for DB search - return only observations matching this Project ID.")
+# Argument parsing
+parser = argparse.ArgumentParser(description="Launches specific observations to be processed by MeerPipe. Provide either a set of searchable parameters (primary input) or a list of observations (secondary input). If both inputs are provided, only the primary input will be used.", formatter_class=RawTextHelpFormatter)
+parser.add_argument("-utc1", dest="utc1", help="(Primary: required) - Start UTC for PSRDB search - returns only observations after this UTC timestamp.")
+parser.add_argument("-utc2", dest="utc2", help="(Primary: required) - End UTC for PSRDB search - returns only observations before this UTC timestamp.")
+parser.add_argument("-psr", dest="pulsar", help="(Primary: optional) - Pulsar name for PSRDB search - returns only observations with this pulsar name. If not provided, returns all pulsars.", default=None)
+parser.add_argument("-obs_pid", dest="pid", help="(Primary: optional) - Project ID for PSRDB search - return only observations matching this Project ID. If not provided, returns all observations.", default=None)
 parser.add_argument("-list_out", dest="list_out", help="(Primary: optional) - Output file name to write the list of observations submitted by this particular search. Does not work in secondary mode as it would simply duplicate the input list.")
-parser.add_argument("-list_in", dest="list_in", help="(Secondary: required) - List of observations to process, given in standard format. These will be crossmatched against the DB before job submission.")
-parser.add_argument("-runas", dest="runas", help="(Optional) - Specify an override PID to use in processing the observations. Other options: 'PIPE' - use pipeline PID (default); 'OBS' - use observation PID.")
+parser.add_argument("-list_in", dest="list_in", help="(Secondary: required) - List of observations to process, given in standard format. These will be crossmatched against PSRDB before job submission.")
+parser.add_argument("-runas", dest="runas", help="(Optional) - Specify an override pipeline to use in processing the observations. \nOptions:\n'PIPE' - launch each observation through multiple pipelines as defined by the 'launches' PSRDB table (default).\n'OBS' - use the observation PID to define pipeline selection.\n<int> - specify a specific PSRDB pipeline ID.\n<pid> - specify a MeerTIME project code (e.g. 'PTA', 'RelBin'), which will launch a default pipeline.", default="PIPE")
+parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm.",action="store_true")
 args = parser.parse_args()
 
-# for a given array of psrdb observations and argpase arguments, determine which pipelines should be launched for each entry and then launch them
-def array_launcher(arr, ag):
 
-    # get the index of the psr name, pid, observation UTC and file location
-    psr_index = arr[0].index("processing_observation_target_name")
-    pid_index = arr[0].index("processing_observation_project_code")
-    utc_index = arr[0].index("processing_observation_utcStart")
-    obs_index = arr[0].index("processing_location")
+# -- FUNCTIONS --
 
-    # set up PSRDB (temp fix until we can rewrite this!)
-    env_query = 'echo $PSRDB_TOKEN'
-    token = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
-    env_query = 'echo $PSRDB_URL'
-    url = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+# ROLE   : Returns a list of folded observations matching the queried parameters
+#          UTC should be in PSRDB format, PID should be official code
+# INPUTS : String, String, String, String, GraphQL client, String, String
+# RETURNS: Array (success) | None (failure) 
+def get_foldedobservation_list(utc1, utc2, pulsar, pcode, client, url, token):
 
-    client = GraphQLClient(url, False)
+    # PSRDB setup                                                                                                                                                                                                                           
+    foldedobs = FoldedObservations(client, url, token)
 
-    # begin scrolling through the array
-    for x in range (1, len(arr)):
+    # Query based on provided parameters                                                                                                                                                                                                    
+    response = foldedobs.list(
+        None,
+        pulsar,
+        None,
+        None,
+        None,
+        pcode,
+        None,
+        None,
+        utc1,
+        utc2
+    )
+    check_response(response)
+    foldobs_content = json.loads(response.content)
+    foldobs_data = foldobs_content['data']['allFoldings']['edges']
 
-        # get the pulsar name, observation UTC and file location
-        psr_name = arr[x][psr_index]
-        utc = utc_psrdb2normal(arr[x][utc_index])
-        obs_location = arr[x][obs_index]
-        # get the pulsar id
-        psr_id = get_pulsar_id(psr_name, client, url, token)
-        
-        # now lookup which pipelines have to be run from the launches table
-        launch_query = "%s -l launches list --pulsar_id %s" % (PSRDB, psr_id)
-        launch_data = list_psrdb_query(launch_query) 
+    # check for a valid result                                                                                                                                                                                                               
+    if (len(foldobs_data) > 0):
+        return foldobs_data
+    else:
+        return
 
-        # get the index of the pipeline name and id
-        pipe_id_index = launch_data[0].index("pipeline_id")
-        
-        # now we need to run through the array of launch data and launch every pipeline for this pulsar
-        for y in range (1, len(launch_data)):
-            
-            # query the pipeline name from the pipelines table
-            pipe_id = launch_data[y][pipe_id_index]
-            pipe_query = "%s pipelines list --id %s" % (PSRDB, pipe_id)
-            pipe_data = list_psrdb_query(pipe_query)
 
-            # only one pipeline should have been recalled - check this and raise exception if failure
-            if (len(pipe_data) != 2):
-                raise Exception("Pipeline launch query on PSR %s returned multiple pipelines with the same ID (%s). Please check PSRDB for internal consistency." % (psr_name, pipe_id))
+# ROLE   : Returns the name of a pulsar associated with a single entry of folded obs data
+# INPUTS : PSRDB JSON data, GraphQL client, String, String
+# RETURNS: String | None (failure)
+def get_pulsarname(dbdata, client, url, token):
 
-            # assuming success, extract the configuration data
-            config_index = pipe_data[0].index("configuration")
-            config_data = pipe_data[1][config_index]
-            # convert the config data into a JSON object
-            config_json = json.loads(config_data.replace("'", '"'))
-            
-            # NOW WE HAVE TO RUN SOME SANITY CHECKS
-            # 1. Check that the config file will look for observations in the PSRDB location
-            # get the input_path from the config file
-            in_path_query = "grep input_path %s" % (config_json['config'])
-            proc_query = shlex.split(in_path_query)
-            proc = subprocess.Popen(proc_query, stdout=subprocess.PIPE)
-            out = proc.stdout.read().decode("utf-8")
-            linearray = out.split("\n")[0].split(" ")
-            # check that the result matches expectations
-            if (len(linearray) != 3):
-                raise Exception("Config file (%s) parameter 'input_path' is not the correct length." % (config_json['config']))
-                
-            in_path = linearray[2]
+    # check for valid input
+    if (isinstance(dbdata, list)):
+        raise Exception("Passed array to function expecting non-array input - aborting.")
 
-            # check if the paths are self-consistent
-            if (not ((in_path in obs_location) or (obs_location in in_path))):
-                raise Exception("Config file (%s) parameter 'input_path' is inconsistent with database file locations." % (config_json['config']))
+    # PSRDB setup
+    pulsars = Pulsars(client, url, token)
+    pulsartargets = Pulsartargets(client, url, token)
 
-            # 2. Check for PID override
-            if (ag.runas):
-                # if runas is specified
-                if (ag.runas == "OBS"):
-                    launch_pid = pid_getshort(arr[x][pid_index])
-                elif (ag.runas == "PIPE"):
-                    launch_pid = pid_getshort(config_json['pid'])
+    # get the name of the target
+    target_name = dbdata['node']['processing']['observation']['target']['name']
+
+    # check that this is a valid pulsar name
+    response = pulsars.list(
+        None,
+        target_name
+    )
+    check_response(response)
+    psr_content = json.loads(response.content)
+    psr_data = psr_content['data']['allPulsars']['edges']
+
+    # check output
+    retval = None
+    if (len(psr_data) == 1):
+        # success
+        retval = target_name
+    elif (len(psr_data) > 1):
+        raise Exception("Multiple entries in table 'pulsars' found with the same JNAME - PSRDB integrity checks required.")
+    elif (len(psr_data) == 0):
+        # no records found for pulsars matching the target - check for cross matches with pulsarTargets
+        eph_name = dbdata['node']['foldingEphemeris']['pulsar']['jname']
+
+        response = pulsartargets.list(
+            None,
+            None,
+            target_name,
+            None,
+            eph_name
+        )
+        check_response(response)
+        tgt_content = json.loads(response.content)
+        tgt_data = tgt_content['data']['allPulsartargets']['edges']
+
+        # check for valid result
+        if (len(tgt_data) == 1):
+            # success
+            retval = eph_name
+
+    return retval
+
+# ROLE   : Returns the UTC associated with a single entry of folded obs data
+# INPUTS : PSRDB JSON data, GraphQL client, String, String
+# RETURNS: String | None (failure)
+def get_utc(dbdata, client, url, token):
+
+    # check for valid input
+    if (isinstance(dbdata, list)):
+        raise Exception("Passed array to function expecting non-array input - aborting.")
+
+    return dbdata['node']['processing']['observation']['utcStart']
+
+# ROLE   : Returns the data location associated with a single entry of folded obs data
+# INPUTS : PSRDB JSON data, GraphQL client, String, String
+# RETURNS: String | None (failure)
+def get_location(dbdata, client, url, token):
+
+    # check for valid input
+    if (isinstance(dbdata, list)):
+        raise Exception("Passed array to function expecting non-array input - aborting.")
+
+    return dbdata['node']['processing']['location']
+
+# ROLE   : Determines which pipeline should be run based on the scheme outlined in the help menu
+# INPUTS : Arg dictionary, Int
+# RETURNS: Array (ints)
+def determine_pipelines(dbdata, ag, psr_id, client, url, token):
+
+    # check for valid input
+    if (isinstance(dbdata, list)):
+        raise Exception("Passed array to function expecting non-array input - aborting.")
+
+    # PSRDB setup
+    launches = Launches(client, url, token)
+    launches.set_field_names(True, False)
+    pipelines = Pipelines(client, url, token)
+
+    success = False
+    pipe_list = []
+    if (ag.runas == "PIPE"):
+
+        print ("Recalling pipelines from PSRDB launches table...")
+
+        # check the launches table for entries matching the pulsar id
+        response = launches.list(
+            None,
+            None,
+            None,
+            psr_id
+        )
+        check_response(response)
+        launch_content = json.loads(response.content)
+        launch_data = launch_content['data']['allLaunches']['edges']
+
+        # all pipeline entries here should be valid by virtue of PSRDB integrity checks - assume correctness and copy through
+        if (len(launch_data) > 0):
+            success = True
+            for x in range(0, len(launch_data)):
+                next_id = launches.decode_id(launch_data[x]['node']['pipeline']['id'])
+                pipe_list.append(next_id)
+
+    else:
+        if (ag.runas == "OBS"):
+
+            # determine the pipeline based on the obs project code
+            project_code = dbdata['node']['processing']['observation']['project']['code']
+            print ("Using default pipeline for observation's project code {0}".format(project_code))
+            pipe_id = pid_getdefaultpipe(project_code)
+            print ("Default pipeline is {0}".format(pipe_id))
+
+        else:
+            # manual specification of a single pipeline by int or project
+            try:
+                pipe_id = int(ag.runas)
+            except:
+                # it's not an int, try a PID
+                try:
+                    project_code = pid_getofficial(ag.runas)
+                except:
+                    # failure
+                    pipe_id = None
                 else:
-                    launch_pid = ag.runas
+                    # we have a project code - get a default pipeline
+                    print ("Using default pipeline for project code {0}".format(ag.runas))
+                    pipe_id = pid_getdefaultpipe(project_code)
+                    print ("Default pipeline is {0}".format(pipe_id))
             else:
-                # default option
-                launch_pid = pid_getshort(config_json['pid'])
+                # it is an int
+                print ("User-specified pipeline ID ({0}) identified".format(pipe_id))
                     
-            # NOW LAUNCH THE DAMN THING
-            pipeline_launch_instruction = "%s -cfile %s -dirname %s -utc %s -verbose -pid %s -slurm -db -db_pipe %s" % (config_json['path'], config_json['config'], psr_name, utc, launch_pid, pipe_id)
-            #pipeline_launch_instruction = "%s -cfile %s -dirname %s -utc %s -verbose -pid %s -db -db_pipe %s" % (config_json['path'], config_json['config'], psr_name, utc, launch_pid, pipe_id)
-            proc_query = shlex.split(pipeline_launch_instruction)
-            proc = subprocess.Popen(proc_query)
-            # wait until jobs are finished launching before returning the command line
-            proc.wait()
+        # check result for validity
+        if (pipe_id):
+            response = pipelines.list(
+                pipe_id,
+                None
+            )
+            check_response(response)
+            pipe_content = json.loads(response.content)
+            pipe_data = pipe_content['data']['pipeline']
+            if not (pipe_data == None):
+                success = True
+                pipe_list.append(pipe_id)
+
+    # check for success
+    if not (success):
+        return
+    else:
+        return pipe_list
+
+# ROLE   : Write observations being processed to a file in a similar format to query_obs.py
+# INPUTS : File handle | JSON Array
+# RETURNS: Nothing
+def write_list(fh, arr, client, url, token):
+
+    for x in range(0, len(arr)):
+
+        fh.write("%s\t%s\t%s\n" % (get_pulsarname(arr[x], client, url, token), utc_psrdb2normal(get_utc(arr[x], client, url, token)), pid_getshort(arr[x]['node']['processing']['observation']['project']['code'])))
 
     return
 
-# TODO LIST
-# Check for which arguments got submitted and if they meet the minimum amount required to continue
-# If primary:
-#     * processes the arguments into the correct format
-#     * use them to search the database
-#     * write the entries to an output list (if specified)
-#     * for each entry, query which pipelines it is to be run through
-#     * check that the filepath from the DB matches that given in the config file
-#     * run the job using run_pipe.py
-# If secondary:
-#     * search each observation from the database one at a time
-# work this out later, it's of secondary importance. Get primary up and running first.
+# for a given array of psrdb observations and argpase arguments, determine which pipelines should be launched for each entry and then launch them
+def array_launcher(arr, ag, client, url, token):
+
+    # begin scrolling through the array
+    for x in range (0, len(arr)):
+
+        # get the pulsar name, observation UTC and file location associated with the provided folding id
+        psr_name = get_pulsarname(arr[x], client, url, token)
+        if (psr_name):
+
+            # continue execution
+            utc = get_utc(arr[x], client, url, token)
+            obs_location = get_location(arr[x], client, url, token)
+            psr_id = get_pulsar_id(psr_name, client, url, token)
+
+            # determine which pipelines get launched
+            pipeline_list = determine_pipelines(arr[x], ag, psr_id, client, url, token)
+            if (pipeline_list):
+        
+                # set of pipelines determined - scroll through and launch
+                for y in range(0, len(pipeline_list)):
+
+                    # need to get the configuration data
+                    config_data = get_pipe_config(pipeline_list[y], client, url, token)
+
+                    # run some sanity checks
+                    
+                    # check if config data actually exists
+                    # there may be a better way to handle this case, but for now...
+                    if (len(config_data) == 0):
+                        raise Exception ("Attempted to run pipeline with no config information - aborting. Please inspect execution parameters and try again")
+
+                    # check for file path consistency for the raw data location
+                    config_query = "grep input_path {0}".format(config_data['config'])
+                    proc_query = shlex.split(config_query)
+                    proc = subprocess.Popen(proc_query, stdout=subprocess.PIPE)
+                    out = proc.stdout.read().decode("utf-8")
+                    linearray = out.split("\n")[0].split(" ")
+
+                    if (len(linearray) != 3):
+                        raise Exception("Config file ({0}) parameter 'input_path' is not the correct length.".format(config_data['config']))
+                        
+                    in_path = linearray[2]
+                        
+                    # check if the paths are self-consistent
+                    if (not ((in_path in obs_location) or (obs_location in in_path))):
+                        raise Exception("Config file ({0}) parameter 'input_path' is inconsistent with database file locations.".format(config_json['config']))
+                            
+                    # get the launch project code from the config data
+                    launch_project_code = pid_getshort(config_data['pid'])
+
+                    # finally, launch
+                    print ("Launching: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
+                    pipeline_launch_instruction = "{0} -cfile {1} -dirname {2} -utc {3} -verbose -pid {4} -db -db_pipe {5}".format(config_data['path'], config_data['config'], psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y])
+                    # check for slurm
+                    if (args.slurm):
+                        pipeline_launch_instruction = "{0} -slurm".format(pipeline_launch_instruction)
+
+                    #print (pipeline_launch_instruction)
+                    proc_query = shlex.split(pipeline_launch_instruction)
+                    proc = subprocess.Popen(proc_query)
+                    # wait until jobs are finished launching before returning the command line
+                    proc.wait()
+
+            else:
+
+                print ("Unable to identify any valid pipelines to launch on the following entry")
+                print (arr[x])
+                print ("\nSkipping...\n")
+
+        else:
+ 
+            print ("Unable to identify a unique pulsar name matching the following entry")
+            print (arr[x])
+            print ("\nSkipping...\n")
+
+    return
 
 # -- MAIN PROGRAM --
+
+# PSRDB setup
+env_query = 'echo $PSRDB_TOKEN'
+db_token = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+env_query = 'echo $PSRDB_URL'
+db_url = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+db_client = GraphQLClient(db_url, False)
 
 # Work out which inputs we have, and whether we have enough to complete execution
 if (args.utc1 and args.utc2):
@@ -152,38 +353,35 @@ if (args.utc1 and args.utc2):
 
     # verify that the dates are in the correct order
     if (utc_normal2date(args.utc1) > utc_normal2date(args.utc2)):
-        raise Exception("UTC1 (%s) is not before UTC2 (%s)." % (args.utc1, args.utc2))
+        raise Exception("UTC1 ({0}) is not before UTC2 ({1}).".format(args.utc1, args.utc2))
     else:
-        print ("Selected UTC range (%s - %s) is valid." % (args.utc1, args.utc2))
+        print ("Selected UTC range ({0} - {1}) is valid.".format(args.utc1, args.utc2))
 
-    # build a database query string, conditional on what other arguments have been passed
-    dbquery = "%s foldedobservations list --utc_start_gte %s --utc_start_lte %s" % (PSRDB, utc1_psrdb, utc2_psrdb)
+    # query the database for the relevant folding ids after checking for extra input
     if (args.pulsar):
-        dbquery = "%s --pulsar_jname %s" % (dbquery, args.pulsar)
         print ("Querying for observations of pulsar %s." % (args.pulsar))
     if (args.pid):
-        # first convert the pid into the format PSRDB understands
-        dbquery = "%s --project_code %s" % (dbquery, pid_getofficial(args.pid))
         print ("Querying for observations matching PID %s." % (args.pid))
-
-    # run the query
-    dbdata = list_psrdb_query(dbquery)
     
-    print("PSRDB query complete.")
+    dbdata = get_foldedobservation_list(utc_normal2psrdb(args.utc1), utc_normal2psrdb(args.utc2), args.pulsar, pid_getofficial(args.pid), db_client, db_url, db_token)
+
+    # check for valid output
+    if (dbdata):
+        print("PSRDB query complete - {0} matching records found".format(len(dbdata)))
+    else:
+        raise Exception("No records found matching specified parameters - aborting.")
+
+    # now run the jobs
+    print("Launching requested processing jobs.")
+    array_launcher(dbdata, args, db_client, db_url, db_token)
 
     # write the resulting array of data to a file (if specified)
     if (args.list_out):
         outfile = open(args.list_out, "w")
-        write_obs_list(outfile, dbdata)
+        write_list(outfile, dbdata, db_client, db_url, db_token)
         outfile.close()
-        print("List of observations to process written to %s." % (args.list_out))
-
-    # now comes the part where we start launching things. We need to go through the entries in the array, line by line, to work out out which pipelines need to be launched for which pulsar
-    # as this will also need to be done for the secondary input option, abstract this to a function
+        print("List of observations to process written to {0}.".format(args.list_out))
     
-    print("Launching requested processing jobs.")
-    array_launcher(dbdata, args)
-
 elif (args.list_in):
 
     print("Secondary mode engaged.")
@@ -195,22 +393,29 @@ elif (args.list_in):
 
     for x in infile:
         linearray = shlex.split(x)
-        query_date = utc_normal2psrdb(linearray[1])
-        query_PID = pid_getofficial(linearray[2])
 
-        print("Querying PSRDB for: PSR = %s, DATE = %s, PID = %s." % (linearray[0], linearray[1], linearray[2]))
-        # now we need to query PSRDB for the entry in foldedobservations which matches the exact parameters of the line
-        dbquery = "%s foldedobservations list  --utc_start_gte %s --utc_start_lte %s --pulsar_jname %s --project_code %s" % (PSRDB, query_date, query_date, linearray[0], query_PID)
+        # check for valid input
+        if (len(linearray) > 1):
+            query_date = utc_normal2psrdb(linearray[1])
+        else:
+            raise Exception("Input file contains insufficient number of fields.")
 
-        # run the query
-        dbdata = list_psrdb_query(dbquery)
+        print ("Querying PSRDB for:\nPSR = {0}\nDATE = {1}".format(linearray[0], linearray[1]))
+
+        if (len(linearray) > 2):
+            query_PID = pid_getofficial(linearray[2])
+            print ("Observation PID = {0}".format(linearray[2]))
+        else:
+            query_PID = None
+
+        dbdata = get_foldedobservation_list(query_date, query_date, linearray[0], query_PID, db_client, db_url, db_token)
         print("PSRDB query complete.")
 
-        # print(dbdata)
-
-        print("Launching requested processing job.")
-        array_launcher(dbdata, args)
+        if (dbdata):
+            print("PSRDB query complete - {0} matching records found".format(len(dbdata)))
+            print("Launching requested processing job.")
+            array_launcher(dbdata, args, db_client, db_url, db_token)
 
 else:
     # we do not have enough arguments to complete the script - abort
-    raise Exception("Insufficient arguments provided. Must provide either UTC1 and UTC2, or LIST_IN.")
+    raise Exception("Insufficient arguments provided. Must provide at least UTC1 and UTC2, or LIST_IN.")

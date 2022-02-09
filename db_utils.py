@@ -27,6 +27,7 @@ import getpass
 from astropy.time import Time as astrotime
 
 from tables import *
+from joins import *
 from graphql_client import GraphQLClient
 
 # Important paths
@@ -105,6 +106,8 @@ def pid_getofficial(sp):
         op = "SCI-20180516-MB-99"
     elif sp == "None":
         op = "None"
+    elif sp == None:
+        op = None
     else:
         raise Exception("Unknown PID (%s)." % (sp))
 
@@ -132,10 +135,27 @@ def pid_getshort(op):
         sp = "fluxcal"
     elif op == "None":
         sp = "None"
+    elif op == None:
+        sp = None
     else:
         sp = "Rogue"
 
     return sp
+
+# ROLE   : Return the default PSRDB pipeline ID for a given project code
+#          WARNING: This must be well maintained to ensure correct pipeline performance
+# INPUTS : String
+# RETURNS: Integer (success) | None (failure)
+def pid_getdefaultpipe(op):
+
+    if op == "SCI-20180516-MB-03":
+        pipe = 7
+    elif op == "SCI-20180516-MB-05":
+        pipe = 6
+    else:
+        pipe = None
+
+    return pipe
 
 # ROLE   : Create a JSON object representing a given state of a pipeline job
 # INPUTS : Integer
@@ -501,6 +521,26 @@ def get_results(proc_id, client, url, token):
     else:
         return
 
+# ROLE   : Return the config JSON of a pipeline entry
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: JSON object (success) | None (failure)
+def get_pipe_config(pipe_id, client, url, token):
+
+    # PSRDB setup
+    pipelines = Pipelines(client, url, token)
+
+    # query for pipe id
+    response = pipelines.list(pipe_id)
+    check_response(response)
+    pipe_content = json.loads(response.content)
+    pipe_data = pipe_content['data']['pipeline']
+    
+    # Check for valid proc_id
+    if not (pipe_data == None):
+        results = json.loads(pipe_data['configuration'].replace("'", '"'))
+        return results
+    else:
+        return
 
 # ----- CREATE FUNCTIONS -----
 
