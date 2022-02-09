@@ -100,11 +100,11 @@ def get_radec_new(parfile):
     # try grabbing RAJ and DECJ directly first
     ra_args = shlex.split(all_args.format("RAJ"))
     proc1 = subprocess.Popen(ra_args, stdout=subprocess.PIPE)
-    ra_str = str(proc1.communicate()[0]).split()[1]
+    ra_str = str(proc1.communicate()[0].decode("utf-8")).split()[1]
     if ra_str != "":
         dec_args = shlex.split(all_args.format("DECJ"))
         proc2 = subprocess.Popen(dec_args, stdout=subprocess.PIPE)
-        dec_str = str(proc2.communicate()[0]).split()[1]
+        dec_str = str(proc2.communicate()[0].decode("utf-8")).split()[1]
         pos = SkyCoord(Longitude(ra_str, unit='hourangle'),
                        Latitude(dec_str, unit='deg'))
         rajd = pos.ra.to('deg').value
@@ -113,7 +113,7 @@ def get_radec_new(parfile):
     else: # coords in par file are not RA and Dec
         elong_args = shlex.split(all_args.format("ELONG"))
         proc1 = subprocess.Popen(elong_args, stdout=subprocess.PIPE)
-        info = proc1.communicate()[0]
+        info = proc1.communicate()[0].decode("utf-8")
         if len(info.split('\n')) > 1:
             for line in info.split('\n'):
                 if line.split()[0] == "ELONG":
@@ -127,7 +127,7 @@ def get_radec_new(parfile):
 
         elat_args = shlex.split(all_args.format("ELAT"))
         proc2 = subprocess.Popen(elat_args, stdout=subprocess.PIPE)
-        info = proc2.communicate()[0]
+        info = proc2.communicate()[0].decode("utf-8")
         if len(info.split('\n')) > 1:
             for line in info.split('\n'):
                 if line.split()[0] == "ELAT":
