@@ -100,8 +100,9 @@ def get_radec_new(parfile):
     # try grabbing RAJ and DECJ directly first
     ra_args = shlex.split(all_args.format("RAJ"))
     proc1 = subprocess.Popen(ra_args, stdout=subprocess.PIPE)
-    ra_str = str(proc1.communicate()[0].decode("utf-8")).split()[1]
-    if ra_str != "":
+    inb_str = str(proc1.communicate()[0].decode("utf-8"))
+    if inb_str != "":
+        ra_str = inb_str.split()[1]
         dec_args = shlex.split(all_args.format("DECJ"))
         proc2 = subprocess.Popen(dec_args, stdout=subprocess.PIPE)
         dec_str = str(proc2.communicate()[0].decode("utf-8")).split()[1]
