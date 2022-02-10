@@ -16,6 +16,16 @@ import psrchive as ps
 from scipy import stats
 
 import getopt
+
+# WARNING - This next instruction is horrible code and I don't condone ever doing it again
+# Unfortunately, my hand is forced by a lack of other apparent options
+# Andrew Cameron - 10/02/2022
+
+sys.path.insert(1, sys.path[len(sys.path)-1])
+import astropy
+
+# end horrible code
+
 from astropy.io import fits
 from astropy.coordinates import (SkyCoord, Longitude, Latitude)
 
@@ -138,8 +148,8 @@ def get_radec_new(parfile):
             elat_val = float(info.split()[1])
 
         # convert ecliptic to J2000
-        pos = SkyCoord(elong_val, elat_val, unit='deg', frame='GeocentricMeanEcliptic')
-        pos.transform_to('ICRS')
+        pos = SkyCoord(elong_val, elat_val, unit='deg', frame='geocentricmeanecliptic')
+        pos = pos.transform_to('icrs')
         rajd = pos.ra.to('deg').value
         decjd = pos.dec.to('deg').value
 
