@@ -198,6 +198,7 @@ def get_outputinfo(cparams,logger):
     proposal_ids = []
     required_ram_list = []
     obs_time_list = []
+    required_time_list = []
 
     if cparams["batch"] == "batch":
         pulsar_dirs = sorted(glob.glob(os.path.join(input_path,cparams["dirname"])))
@@ -315,10 +316,26 @@ def get_outputinfo(cparams,logger):
                         obs_time_list.append(info_params["target_duration"])
                         required_ram_list.append(reqram)
 
+                        # Computing time requirements for this observation to be processed
+                        # This is WIP - may need additional tweaking
+                        
+                        time_factor = 2.0
+                        effective_time = float(info_params["target_duration"])*time_factor
+                        
+                        if ( effective_time <= 14400 ): # 4 hours
+                            # minimum time
+                            reqtime = 14400
+                        elif ( effective_time >= 86400): #24 hours
+                            # maximum time
+                            reqtime = 86399
+                        else:
+                            # dynamic time
+                            reqtime = effective_time 
 
+                        required_time_list.append(int(reqtime))
 
          
-    return results_path,all_archives,psrnames,proposal_ids,required_ram_list,obs_time_list
+    return results_path,all_archives,psrnames,proposal_ids,required_ram_list,obs_time_list,required_time_list
 
 
 def create_structure(output_dir,cparams,psrname,logger):

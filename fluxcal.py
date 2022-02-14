@@ -110,12 +110,12 @@ def get_radec_new(parfile):
     # try grabbing RAJ and DECJ directly first
     ra_args = shlex.split(all_args.format("RAJ"))
     proc1 = subprocess.Popen(ra_args, stdout=subprocess.PIPE)
-    inb_str = str(proc1.communicate()[0].decode("utf-8"))
+    inb_str = str(proc1.communicate()[0].decode("utf-8")).strip()
     if inb_str != "":
         ra_str = inb_str.split()[1]
         dec_args = shlex.split(all_args.format("DECJ"))
         proc2 = subprocess.Popen(dec_args, stdout=subprocess.PIPE)
-        dec_str = str(proc2.communicate()[0].decode("utf-8")).split()[1]
+        dec_str = str(proc2.communicate()[0].decode("utf-8")).strip().split()[1]
         pos = SkyCoord(Longitude(ra_str, unit='hourangle'),
                        Latitude(dec_str, unit='deg'))
         rajd = pos.ra.to('deg').value

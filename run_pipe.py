@@ -31,6 +31,7 @@ import time
 import pandas as pd
 import pickle
 import json
+from datetime import timedelta
 
 #Importing pipeline utilities
 from initialize import (parse_config, create_structure, get_outputinfo, setup_logging)
@@ -161,7 +162,7 @@ if toggle:
     if args.pid:
         config_params["pid"] = str(args.pid)
 
-    output_info,archive_list,psrnames,proposal_ids,required_ram_list,obstime_list = get_outputinfo(config_params,logger)
+    output_info,archive_list,psrnames,proposal_ids,required_ram_list,obstime_list,required_time_list = get_outputinfo(config_params,logger)
 
     #For each input directory, an equivalent output directory is created using create_MTstructure.
     for obs_num, output_dir in enumerate(output_info):
@@ -170,6 +171,7 @@ if toggle:
         config_params["pid"] = proposal_ids[obs_num]
         obstime = obstime_list[obs_num]
         required_ram = required_ram_list[obs_num]
+        required_time = required_time_list[obs_num]
 
         if args.forceram:
             required_ram = int(args.forceram)
@@ -278,8 +280,8 @@ if toggle:
 
         if args.slurm:
             logger.info("Creating and submitting pipeline jobs using Slurm")
-            logger.info("Observation length is {0}. Using RAM of {1} to process"
-                        .format(obstime, required_ram))
+            logger.info("Observation length is {0}. Using RAM of {1} and time of {2} seconds to process"
+                        .format(obstime, required_ram, required_time))
             np.save(os.path.join(output_dir,"archivelist"), archive_list[obs_num])
             np.save(os.path.join(output_dir,"output"), output_info[obs_num])
             np.save(os.path.join(output_dir,"psrname"), psrnames[obs_num])
@@ -302,7 +304,8 @@ if toggle:
                 job_file.write("#SBATCH --output={0}meerpipe_out_{1}_{2} \n".format(str(output_dir),psrnames[obs_num],obs_num))
                 job_file.write("#SBATCH --ntasks=1 \n")
                 job_file.write("#SBATCH --mem={0} \n".format(required_ram))
-                job_file.write("#SBATCH --time=04:00:00 \n")
+                job_file.write("#SBATCH --time={0} \n".format(timedelta(seconds=required_time)))
+                #job_file.write("#SBATCH --time=4:00:00 \n")
                 #job_file.write("#SBATCH --reservation=oz005_obs \n")
                 #job_file.write("#SBATCH --account=oz005 \n")
 

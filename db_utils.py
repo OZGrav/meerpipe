@@ -149,9 +149,11 @@ def pid_getshort(op):
 def pid_getdefaultpipe(op):
 
     if op == "SCI-20180516-MB-03":
-        pipe = 7
+        pipe = 2
     elif op == "SCI-20180516-MB-05":
-        pipe = 6
+        pipe = 4
+    elif op == "SCI-20180516-MB-02":
+        pipe = 8
     else:
         pipe = None
 
