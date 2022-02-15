@@ -1367,6 +1367,45 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
         if len(fluxcal_obs) == len(archives_indecimated):
             logger.info("All decimated observations of {0}:{1} are flux calibrated".format(psrname, obsname))
 
+            # Add flux estimation to PSRDB
+            if cparams["db_flag"] and len(fluxcal_obs) > 0:
+                
+                logger.info("PSRDB functionality activated - recording flux density estimate")
+
+                # Create client
+                db_client = GraphQLClient(cparams["db_url"], False)
+
+                # calculate the fully scrunched flux density - any decimated product should do
+                comm = "pdv -FTp -f {0}".format(fluxcal_obs[0])
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                proc.wait()
+                info = proc.stdout.read().decode("utf-8")
+                flux = info.split("\n")[1].split()[6]
+
+                # Recall results field and update
+                results = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
+                results['flux'] = float(flux)
+                update_id = update_processing(
+                    cparams["db_proc_id"],
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    results,
+                    db_client,
+                    cparams["db_url"],
+                    cparams["db_token"]
+                )
+                if (update_id != cparams["db_proc_id"]) or (update_id == None):
+                    logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_proc_id"]))
+                else:
+                    logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(cparams["db_proc_id"]))
+                
+
             if pid == "TPA" or pid == "PTA":
                 logger.info("Removing non-flux calibrated archives from the decimated directory...") #change this in future
                 for archive in archives_indecimated:
