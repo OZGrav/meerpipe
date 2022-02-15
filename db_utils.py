@@ -211,6 +211,34 @@ def check_response(response):
 
     return
 
+# ROLE   : Checks if a match exists between a pulsar ID and a target ID
+# INPUTS : Int, int, GraphQL client, String, String
+# RETURNS: Boolean
+def check_pulsar_target(pulsar_id, target_id, client, url, token):
+
+    # PSRDB setup
+    pulsartargets = Pulsartargets(client, url, token)
+    
+    # query
+    response = pulsartargets.list(
+        None,
+        int(target_id),
+        None,
+        int(pulsar_id),
+        None
+    )
+    check_response(response)
+    pt_content = json.loads(response.content)
+    pt_data = pt_content['data']['allPulsartargets']['edges']
+    
+    # check for validity
+    if (len(pt_data) == 1):
+        retval = True
+    else:
+        retval = False
+
+    return retval
+
 # ROLE   : Checks if a Pipeline ID is valid, i.e. that it exists.
 #        : May in future also check if pipeline is a MeerPIPE pipeline
 # INPUTS : Integer, GraphQL client, String, String
@@ -232,6 +260,8 @@ def check_pipeline(pipe_id, client, url, token):
         retval = True
 
     return retval
+
+
 
 # ----- GET FUNCTIONS -----
 
@@ -358,6 +388,56 @@ def get_pulsar_id(psr, client, url, token):
     else:
         return
 
+# ROLE   : Return the name of a target given an ID
+# INPUTS : Int, GraphQL client, String, String
+# RETURNS: String (success) | None (failure)
+def get_target_name(target_id, client, url, token):
+
+    # PSRDB setup
+    targets = Targets(client, url, token)
+
+    # Query for ID
+    response = targets.list(target_id)
+    check_response(response)
+    target_content = json.loads(response.content)
+    target_data = target_content['data']['target']
+
+    # Check for single matching entry and return name
+    if not (target_data == None):
+        name = target_data['name']
+        return name
+    else:
+        return
+
+    return
+
+
+# ROLE   : Return a unique Launch ID given query parameters
+# INPUTS : Int, Int, Int, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
+def get_launch_id(pipe_id, parent_id, pulsar_id, client, url, token):
+
+    # PSRDB setup
+    launches = Launches(client, url, token)
+    
+    # Query for launch parameters
+    response = launches.list(
+        None,
+        int(pipe_id),
+        int(parent_id),
+        int(pulsar_id)
+    )
+    check_response(response)
+    launch_content = json.loads(response.content)
+    launch_data = launch_content['data']['allLaunches']['edges']
+
+    # Check for single matching entry and return ID
+    if (len(launch_data) == 1):
+        launch_id = launches.decode_id(launch_data[0]['node']['id'])
+        return int(launch_id)
+    else:
+        return
+
 # ROLE   : Return a Project ID given an official project code
 #        : In future, may check for valid project code
 # INPUTS : String, GraphQL client, String, String
@@ -384,6 +464,27 @@ def get_project_id(proj_code, client, url, token):
     else:
         return
 
+# ROLE   : Return an observation's UTC in PSRDB format given an ID
+# INPUTS : Int, GraphQL client, String, String
+# RETURNS: UTC date string (YYYY-MM-DDTHH:MM:SS+00:00) (success) | None (failure)
+def get_observation_utc(obs_id, client, url, token):
+
+    # PSRDB setup
+    observations = Observations(client, url, token)
+    
+    # query for obs_id
+    response = observations.list(obs_id)
+    check_response(response)
+    obs_content = json.loads(response.content)
+    obs_data = obs_content['data']['observation']
+
+    # Check for valid obs_id
+    if not (obs_data == None):
+        utc = obs_data['utcStart']
+        return utc
+    else:
+        return
+
 # ROLE   : Return a Project official code for a given Observation ID
 # INPUTS : Integer, GraphQL client, String, String
 # RETURNS: String (success) | None (failure)
@@ -393,19 +494,7 @@ def get_observation_project_code(obs_id, client, url, token):
     observations = Observations(client, url, token)
 
     # Query for obs_id
-    response = observations.list(
-        obs_id,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None
-    )
+    response = observations.list(obs_id)
     check_response(response)
     obs_content = json.loads(response.content)
     obs_data = obs_content['data']['observation']
@@ -466,6 +555,28 @@ def get_job_state(proc_id, client, url, token):
     if not (proc_data == None):
         job_state = json.loads(proc_data['jobState'].replace("'", '"'))
         return job_state
+    else:
+        return
+
+# ROLE   : Return an observation's target ID
+# INPUTS : Int, GraphQL client, String, String
+# RETURNS: Int (success) | None (failure)
+def get_observation_target_id(obs_id, client, url, token):
+
+    # PSRDB setup
+    observations = Observations(client, url, token)
+    observations.set_field_names(True, False)
+
+    # query for obs_id
+    response = observations.list(obs_id)
+    check_response(response)
+    obs_content = json.loads(response.content)
+    obs_data = obs_content['data']['observation']
+
+    # check for valid obs_id
+    if not (obs_data == None):
+        target_id = observations.decode_id(obs_data['target']['id'])
+        return target_id
     else:
         return
 
@@ -545,6 +656,34 @@ def get_pipe_config(pipe_id, client, url, token):
         return
 
 # ----- CREATE FUNCTIONS -----
+
+# ROLE   : Creates a Launch entry with the specified parameters.
+#        : If a matching entry exists, that is returned instead.
+# INPUTS : Integer, Integer, Integer, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
+def create_launch(pipe_id, parent_id, pulsar_id, client, url, token):
+
+    # PSRDB setup
+    launches = Launches(client, url, token)
+
+    # check for existing launch entry
+    retval = get_launch_id(pipe_id, parent_id, pulsar_id, client, url, token)
+    if not (retval == None):
+        print ("Existing launch entry found matching PIPE = {0}, PARENT = {1}, PULSAR = {2}".format(pipe_id, parent_id, pulsar_id))
+        print ("Skipping...")
+    else:
+        # no prior entry found - let's make a new one
+        response = launches.create(
+            int(pipe_id),
+            int(parent_id),
+            int(pulsar_id),
+        )
+        launch_content = json.loads(response.content)
+        launch_id = launch_content['data']['createLaunch']['launch']['id']
+        print("Creating new entry in 'launches', ID = {0}".format(launch_id))
+        retval = int(launch_id)
+
+    return retval
 
 # ROLE   : Creates a Processing entry with the specified parameters.
 #        : If a matching entry exists, that is returned instead.
@@ -1216,6 +1355,7 @@ def update_pipelineimage(image_id, image, image_type, rank, proc_id, client, url
         return int(update_id)
     else:
         return
+
 
 # ----- UNSORTED / NON-UPDATED FUNCTIONS -----
 # Note - most of these functions will eventually be deprecated once the remainder of the PSRDB

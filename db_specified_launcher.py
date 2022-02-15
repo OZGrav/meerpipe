@@ -29,7 +29,7 @@ from tables import *
 from joins import *
 from graphql_client import GraphQLClient
 from db_utils import (utc_normal2psrdb, utc_psrdb2normal, utc_normal2date, utc_psrdb2date, pid_getofficial, check_response,
-                      pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config)
+                      pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config, check_pipeline)
 
 # Important paths
 PSRDB = "psrdb.py"
@@ -227,14 +227,8 @@ def determine_pipelines(dbdata, ag, psr_id, client, url, token):
                     
         # check result for validity
         if (pipe_id):
-            response = pipelines.list(
-                pipe_id,
-                None
-            )
-            check_response(response)
-            pipe_content = json.loads(response.content)
-            pipe_data = pipe_content['data']['pipeline']
-            if not (pipe_data == None):
+            pipe_test = check_pipeline(pipe_id, client, url, token)
+            if (pipe_test):
                 success = True
                 pipe_list.append(pipe_id)
 
