@@ -30,8 +30,8 @@ PSRDB = "psrdb.py"
 
 # Argument parsing
 parser = argparse.ArgumentParser(description="Reports the job state of all processings matching the specified criteria.")
-parser.add_argument("-outdir", dest="outdir", help="Directory in which to store the output fle", default=None)
-parser.add_argument("-outfile", dest="outfile", type=str, help="File in which to store the recalled results.", default=None)
+parser.add_argument("-outdir", dest="outdir", help="Directory in which to store the output file.", default=None)
+parser.add_argument("-outfile", dest="outfile", type=str, help="File in which to store the recalled job state results.", default=None)
 parser.add_argument("-state", dest="state", type=str, help="Return processings matching this state.", default = None)
 parser.add_argument("-pipe_id", dest="pipe_id", type=int, help="Return only those processings matching this pipeline ID.", default=None)
 parser.add_argument("-parent_id", dest="parent_id", type=int, help="Return only those processings matching this parent pipeline ID.", default=None)

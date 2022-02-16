@@ -1915,7 +1915,7 @@ def generate_images(output_dir, cparams, psrname, logger):
 
             # move resulting image
             os.rename(image_name, image_file)
-            
+
             # log results to array for later recording
             image_data.append({'file': image_file, 'rank': plot_commands[x]['rank'], 'type': plot_commands[x]['type']})
 
@@ -2027,8 +2027,8 @@ def generate_images(output_dir, cparams, psrname, logger):
             logger.error("Generation of TOA archive was unsuccessful.")
 
     else:
-        logger.error("Could not identify single un-scrunched, un-chopped, clean and fluxcalibrated file for image generation.")
-        logger.errror("Skipping generation of relevant images.")
+        logger.error("Could not identify suitable file for image generation.")
+        logger.error("Skipping generation of relevant images.")
 
 
     # now link to dynamic spectra images
@@ -2211,12 +2211,17 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
     # use meerwatch functions to produce residual images for this observation
     logger.info("Calling modified MeerWatch residual generation...")
     residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
-    logger.info("Producing single-obs image from modified MeerWatch residuals...")
-    logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
-    plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
+    # check for valid output
+    if (len(residuals) > 0):
+        logger.info("Producing single-obs image from modified MeerWatch residuals...")
+        logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
+        plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
 
-    # check if file creation was successful and return
-    return os.path.exists(image_file)
+        # check if file creation was successful and return
+        return os.path.exists(image_file)
+    else:
+        logger.error("Insufficient TOAs to generate single-obs image - skipping...")
+        return False
 
 
 # produce residual image for all available observations that have completed processing and which match the project code

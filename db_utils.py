@@ -1102,6 +1102,7 @@ def create_pipelineimage(image, image_type, rank, cparams, client, logger):
         None,
         int(cparams["db_proc_id"])
     )
+
     check_response(response)
     pipeimage_content = json.loads(response.content)
     pipeimage_data = pipeimage_content['data']['allPipelineimages']['edges']
