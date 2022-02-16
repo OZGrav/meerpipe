@@ -409,8 +409,26 @@ def get_target_name(target_id, client, url, token):
     else:
         return
 
-    return
+# ROLE   : Get the parent processing ID given a fold ID
+# INPUTS : Int, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
+def get_fold_parent_procid(fold_id, client, url, token):
 
+    # PSRDB setup
+    foldings = Foldings(client, url, token)
+    
+    # query for fold ID
+    response = foldings.list(fold_id)
+    check_response(response)
+    fold_content = json.loads(response.content)
+    fold_data = fold_content['data']['folding']
+
+    # Check for single matching entry and return parent processing id
+    if not (fold_data == None):
+        parent_id = foldings.decode_id(fold_data['processing']['id'])
+        return parent_id
+    else:
+        return
 
 # ROLE   : Return a unique Launch ID given query parameters
 # INPUTS : Int, Int, Int, GraphQL client, String, String

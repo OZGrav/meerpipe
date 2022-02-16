@@ -45,7 +45,7 @@ from tables import *
 from graphql_client import GraphQLClient
 from db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_observation_id, get_project_embargo,
                       get_observation_project_code, get_project_id, job_state_code, get_node_name, get_folding_id,
-                      check_pipeline, create_processing, update_processing)
+                      check_pipeline, create_processing, update_processing, get_fold_parent_procid)
 
 # PSRDB info
 PTUSE = 1
@@ -184,7 +184,7 @@ if toggle:
         if (args.db_flag):
 
             # misc parameters
-            parent_id = PTUSE
+            parent_pipe_id = PTUSE
             location = os.path.normpath(output_info[obs_num])
 
             # retrieve observation ID
@@ -208,7 +208,7 @@ if toggle:
             # check for folding entry
             fold_id = get_folding_id(
                 obs_id,
-                parent_id,
+                parent_pipe_id,
                 db_client,
                 db_url,
                 db_token
@@ -220,6 +220,15 @@ if toggle:
             else:
                 config_params["db_fold_id"] = fold_id
                 logger.info("Found matching entry in 'foldings' - ID = {0} (pipeline ID {1})".format(fold_id, PTUSE))
+
+            # get parent processing ID
+            parent_id = get_fold_parent_procid(fold_id, db_client, db_url, db_token)
+            if (parent_id == None):
+                logger.error("Could not find a parent_id for folding ID {0}".format(fold_id))
+                logger.error("Discontinuing launch of {0} - {1} and attempting next job".format(psrnames[obs_num], obs_utc))
+                continue
+            else:
+                logger.info("Found parent_id {1} from  matching entry in 'foldings' - ID = {0}".format(fold_id, parent_id))
 
             # get or create processing entry
             proc_id = create_processing(
