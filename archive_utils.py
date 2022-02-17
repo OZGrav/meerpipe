@@ -1849,18 +1849,30 @@ def generate_images(output_dir, cparams, psrname, logger):
     cleaned_path = os.path.join(output_dir,"cleaned")
     images_path = os.path.join(output_dir,"images")
     timing_path = os.path.join(output_dir, "timing")
-    cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*fluxcal.ar"))
+    cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
+    fluxcleanedfiles = glob.glob(os.path.join(cleaned_path,"J*fluxcal.ar"))
     
     clean_file = None
     chop_string = ".ch."
     
-    if (len(cleanedfiles) == 1):
-        clean_file = cleanedfiles[0]
-    elif (len(cleanedfiles) == 2):
-        if (chop_string in cleanedfiles[0]) and (chop_string not in cleanedfiles[1]):
-            clean_file = cleanedfiles[1]
-        elif (chop_string in cleanedfiles[1]) and (chop_string not in cleanedfiles[0]):
+    # try for a fluxcal file first
+    if (len(fluxcleanedfiles) == 1):
+        clean_file = fluxcleanedfiles[0]
+    elif (len(fluxcleanedfiles) == 2):
+        if (chop_string in fluxcleanedfiles[0]) and (chop_string not in fluxcleanedfiles[1]):
+            clean_file = fluxcleanedfiles[1]
+        elif (chop_string in fluxcleanedfiles[1]) and (chop_string not in fluxcleanedfiles[0]):
+            clean_file = fluxcleanedfiles[0]
+
+    # if none is available, go for a regular file (e.g. if we have UHF obs)
+    if (clean_file == None):
+        if (len(cleanedfiles) == 1):
             clean_file = cleanedfiles[0]
+        elif (len(cleanedfiles) == 2):
+            if (chop_string in cleanedfiles[0]) and (chop_string not in cleanedfiles[1]):
+                clean_file = cleanedfiles[1]
+            elif (chop_string in cleanedfiles[1]) and (chop_string not in cleanedfiles[0]):
+                clean_file = cleanedfiles[0]
 
     # create empty array for storing image data
     image_data = []
@@ -1887,10 +1899,11 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # basic psrplot images - mimicking ingest images
         plot_commands = [
-            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'rank': 1, 'type': '{0}.profile.int'.format(local_pid)} ,
-            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'rank': 2, 'type': '{0}.profile.pol'.format(local_pid)},
-            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 3, 'type': '{0}.phase.freq'.format(local_pid)},
-            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 4, 'type': '{0}.phase.time'.format(local_pid)}
+            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'rank': 1, 'type': '{0}.profile-int.hi'.format(local_pid)} ,
+            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'rank': 2, 'type': '{0}.profile-pol.hi'.format(local_pid)},
+            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 3, 'type': '{0}.phase-freq.hi'.format(local_pid)},
+            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 4, 'type': '{0}.phase-time.hi'.format(local_pid)},
+            {'comm': 'psrplot -p b -x -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'rank': 11, 'type': '{0}.bandpass.hi'.format(local_pid)},
         ]
 
         # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
@@ -1960,8 +1973,8 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # plot results - single subint snr
         matplot_commands = [
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 5, 'type': '{0}.snr.single'.format(local_pid)},
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR', 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr.cumul'.format(local_pid)},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 5, 'type': '{0}.snr-single.hi'.format(local_pid)},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR', 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr-cumul.hi'.format(local_pid)},
         ]
 
         for x in range(0, len(matplot_commands)):
@@ -1996,35 +2009,55 @@ def generate_images(output_dir, cparams, psrname, logger):
         toa_archive_file = os.path.join(images_path, toa_archive_name)
         single_image_name = "toas_single.png"
         single_image_file = os.path.join(images_path,single_image_name)
-        
         global_image_name = "{0}.{1}_global.png".format(local_pid, psrname)
-        if ("global_toa_path" in cparams):
-            if (os.path.exists(cparams["global_toa_path"]) == False):
-                os.makedirs(cparams["global_toa_path"])
-            global_images_path = cparams["global_toa_path"]                        
-        else:
-            global_images_path = images_path
-        global_image_file = os.path.join(global_images_path,global_image_name)
+        global_image_file = os.path.join(images_path,global_image_name)
 
-        if (build_image_toas(output_dir, clean_file, toa_archive_name, images_path, cparams, psrname, logger)):
-            logger.info("Successfully created {0} - now producing residual images".format(toa_archive_file))
+        # slight hack for central frequency
+        path_dir = os.path.normpath(str(output_dir))
+        split_path = path_dir.split("/")
+        path_args = len(split_path)
+        path_freq = str(split_path[path_args - 1])
 
-            # generate single TOA image
-            if (generate_singleres_image(output_dir, toa_archive_file, single_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
-                logger.info("Successfully created single observation residual image {0}".format(single_image_file))
-                image_data.append({'file': single_image_file, 'rank': 7, 'type': '{0}.toa.single'.format(local_pid)})
+        logger.info("Path freq = {0}".format(path_freq))
+
+        # only build TOAs for L-band data so far - fix this later!
+        if (path_freq == "1284"):
+            if ("global_toa_path" in cparams):
+                if (os.path.exists(cparams["global_toa_path"]) == False):
+                    os.makedirs(cparams["global_toa_path"])
+                share_path = cparams["global_toa_path"]                        
             else:
-                logger.error("Single observation residual TOA image generation was unsuccessful!")
+                share_path = images_path
+            share_file = os.path.join(share_path,global_image_name)
 
-            # generate global TOA image
-            if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, global_images_path, parfile, template, selfile, cparams, psrname, logger)):
-                logger.info("Successfully created global observation residual image {0}".format(global_image_file))
-                logger.info("THIS IMAGE IS NOT LOGGED IN THE DATABASE DUE TO LIMITATIONS OF PSRDB - TO BE FIXED IN A FUTURE UPDATE.")
+            if (build_image_toas(output_dir, clean_file, toa_archive_name, images_path, cparams, psrname, logger)):
+                logger.info("Successfully created {0} - now producing residual images".format(toa_archive_file))
+
+                # generate single TOA image
+                if (generate_singleres_image(output_dir, toa_archive_file, single_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
+                    logger.info("Successfully created single observation residual image {0}".format(single_image_file))
+                    image_data.append({'file': single_image_file, 'rank': 7, 'type': '{0}.toa-single.hi'.format(local_pid)})
+                else:
+                    logger.error("Single observation residual TOA image generation was unsuccessful!")
+
+                # generate global TOA image
+                if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
+                    logger.info("Successfully created global observation residual image {0}".format(global_image_file))
+                    image_data.append({'file': global_image_file, 'rank': 10, 'type': '{0}.toa-global.hi'.format(local_pid)})
+                    #logger.info("THIS IMAGE IS NOT LOGGED IN THE DATABASE DUE TO LIMITATIONS OF PSRDB - TO BE FIXED IN A FUTURE UPDATE.")
+
+                    # copy the global TOA image to the shared path
+                    if not (global_image_file == share_file):
+                        copyfile(global_image_file, share_file)
+
+                else:
+                    logger.error("Global observation residual TOA image generation was unsuccessful!")
+
             else:
-                logger.error("Global observation residual TOA image generation was unsuccessful!")
+                logger.error("Generation of TOA archive was unsuccessful.")
 
         else:
-            logger.error("Generation of TOA archive was unsuccessful.")
+            logger.info("TOA plot generation only currently enabled for L-Band observations.")
 
     else:
         logger.error("Could not identify suitable file for image generation.")
@@ -2037,8 +2070,8 @@ def generate_images(output_dir, cparams, psrname, logger):
 
     # look for two fixed dynspec images
     dynspec_commands = [
-        {'ext': 'zap.dynspec', 'rank': 9},
-        {'ext': 'calib.dynspec', 'rank': 8}
+        {'ext': 'zap.dynspec', 'rank': 9, 'type': '{0}.zap-dynspec.hi'.format(local_pid)},
+        {'ext': 'calib.dynspec', 'rank': 8, 'type': '{0}.calib-dynspec.hi'.format(local_pid)}
     ]    
 
     for x in range (0, len(dynspec_commands)):
@@ -2052,7 +2085,7 @@ def generate_images(output_dir, cparams, psrname, logger):
         else:
             # unique match found
             logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
-            image_data.append({'file': data[0], 'rank': dynspec_commands[x]['rank'], 'type': '{0}.{1}'.format(local_pid,dynspec_commands[x]['ext'])})
+            image_data.append({'file': data[0], 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['type']})
 
     # write all images to PSRDB
     if (cparams["db_flag"]):
@@ -2105,7 +2138,7 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
         proc.wait()
         info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
         # safety checks
-        if (len(info) == 1):
+        if ((len(info) == 1) and not (info[0] == '')):
 
             subinfo = info[0].split()
             
@@ -2276,20 +2309,17 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
         proc.wait()
         info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
         telescope_comp = str(info[1].split()[1])
-        obs_bw_comp = float(info[1].split()[2])
-        obs_freq_comp = float(info[1].split()[3])
+        #obs_bw_comp = float(info[1].split()[2])
+        #obs_freq_comp = float(info[1].split()[3])
 
-        if (telescope_comp == telescope) and (obs_bw_comp == obs_bw) and (obs_freq_comp == obs_freq):
-
+        #if (telescope_comp == telescope) and (obs_bw_comp == obs_bw) and (obs_freq_comp == obs_freq):
+        if (telescope_comp == telescope):
             # we have a match - add it to the list
             logger.info("{0} added to global TOA list".format(toa_archives[x]))
             toa_list = "{0} {1}".format(toa_list, toa_archives[x])
-
         else:
-
             # no match
             logger.info("{0} excluded from global TOA list".format(toa_archives[x]))
-
 
     # toa list generation complete - build TOAs
 
@@ -2304,8 +2334,12 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     # use meerwatch functions to produce residual images for this observation
     logger.info("Calling modified MeerWatch residual generation...")
     residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
-    logger.info("Producing global TOA image from modified MeerWatch residuals...")
-    plot_toas_fromarr(residuals, out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
+    if (len(residuals) > 0):
+        logger.info("Producing global TOA image from modified MeerWatch residuals...")
+        plot_toas_fromarr(residuals, out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
 
-    # check if file creation was successful and return
-    return os.path.exists(image_file)
+        # check if file creation was successful and return
+        return os.path.exists(image_file)
+    else:
+        logger.error("Insufficient TOAs to generate global-obs image - skipping...")
+        return False

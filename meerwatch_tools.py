@@ -38,12 +38,13 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
         if verb:
             print("Running tempo2 command: {}".replace("\n", "\\n").format(tempo2_call.format(par_file, tim_file)))
 
+        # re-writing to accommodate large PIPE sizes
         p1 = sproc.Popen(shplit(tempo2_call.format(par_file, tim_file)), stdout=sproc.PIPE)
-        p1.wait()
-        p2 = sproc.Popen(shplit("grep BLAH"), stdin=p1.stdout,stdout=sproc.PIPE)
-        p2.wait()
-        p3 = sproc.Popen(shplit(awk_cmd), stdin=p2.stdout, stdout=f)
-        p3.wait()
+        p1_data = p1.communicate()[0]
+        p2 = sproc.Popen(shplit("grep BLAH"), stdin=sproc.PIPE,stdout=sproc.PIPE)
+        p2_data = p2.communicate(input=p1_data)[0]
+        p3 = sproc.Popen(shplit(awk_cmd), stdin=sproc.PIPE, stdout=f)
+        p3.communicate(input=p2_data)
 
     if verb:
         print("Finished running tempo2")
