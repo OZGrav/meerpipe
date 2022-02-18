@@ -29,7 +29,7 @@ PSRDB = "psrdb.py"
 
 # Argument parsing
 parser = argparse.ArgumentParser(description="Fix parent associations in the processings table. USE WITH CAUTION.")
-parser.add_argument("-infile", dest="infile", type=str, help="List of processing IDs to fix.", default=None)
+parser.add_argument("-infile", dest="infile", type=str, help="List of processing IDs to fix.", required=True)
 args = parser.parse_args()
 
 
@@ -52,7 +52,7 @@ if not (os.path.isfile(args.infile)):
 processings = Processings(client, url, token)
 
 # read list
-proc_list = np.loadtxt(args.infile, dtype=int)
+proc_list = np.loadtxt(args.infile, dtype=int, ndmin=1)
 
 # scroll list
 for x in range(0, len(proc_list)):
