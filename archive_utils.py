@@ -1770,6 +1770,58 @@ def generate_summary(output_dir, cparams, psrname, logger):
         sfile.write("=========== END ========= \n")
         sfile.close()
 
+# secondary cleanup to remove redundant products at the very end of the pipeline for space saving
+# similar structure to generate_summary, except now we're deleting things
+def secondary_cleanup(output_dir, cparams, psrname, logger):
+
+    logger.info("Now beginning secondary cleanup (if requested)")
+
+    output_dir = str(output_dir)
+
+    # check if this has been requested
+    if "red_prod" in cparams:
+
+        # check if the parameter is set to skip
+        if not "none" in cparams["red_prod"]:
+
+            # check which files have been requested for deletion
+
+            if "add" in cparams["red_prod"]:
+                # delete add file
+                add_file = glob.glob(os.path.join(output_dir,"*add"))
+                for x in range(0, len(add_file)):
+                    logger.info("Removing {}...".format(add_file[x]))
+                    os.remove(add_file[x])
+
+            if "calib" in cparams["red_prod"]:
+                # delete the calibrated file
+                calibrated_path = os.path.join(output_dir,"calibrated")
+                calibfile = glob.glob(os.path.join(calibrated_path,"*.calib"))
+                for x in range(0, len(calibfile)):
+                    logger.info("Removing {}...".format(calibfile[x]))
+                    os.remove(calibfile[x])
+
+            if "zap_noflux" in cparams["red_prod"]:
+                # delete the cleaned but not flux calibrated files
+                # safeguard - if there aren't matching fluxcal files, these files will not be deleted
+                cleaned_path = os.path.join(output_dir,"cleaned")
+                cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
+                fluxfiles = glob.glob(os.path.join(cleaned_path,"J*.fluxcal.ar"))
+                
+                # only delete files for which a matching fluxcal file exists
+                for x in range(0, len(fluxfiles)):
+                    noflux_file = fluxfiles[x].replace('.fluxcal','')
+                    if noflux_file in cleanedfiles:
+                        logger.info("Removing {}...".format(noflux_file))
+                        os.remove(noflux_file)
+
+        else:
+            logger.info("No secondary cleanup performed")
+
+    else:
+        logger.info("No secondary cleanup performed")
+
+
 #--------------------------------------------------- Andrew's PSRDB-related utilities -------------------------------
 
 # routine to check the pass/fail status of a processing's summary file
@@ -2104,6 +2156,8 @@ def generate_images(output_dir, cparams, psrname, logger):
                 create_pipelineimage(image_data[x]['file'], image_data[x]['type'], image_data[x]['rank'], cparams, db_client, logger)
             else:
                 logger.error("Unable to create {0} - no output recorded to PSRDB.".format(image_data[x]['file']))
+
+    logger.info("Image generation & logging complete.")
 
     return
 

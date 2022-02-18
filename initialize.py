@@ -113,6 +113,8 @@ def parse_config(path_cfile):
                 config_params["toa_display_list"] = sline[1].rstrip().lstrip()
             if attr == "global_toa_path":
                 config_params["global_toa_path"] = sline[1].rstrip().lstrip()
+            if attr == "redundant_products":
+                config_params["red_prod"] = sline[1].rstrip().lstrip(' ').split(',')
 
     cfile.close()
     
