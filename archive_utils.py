@@ -1953,9 +1953,9 @@ def generate_images(output_dir, cparams, psrname, logger):
         plot_commands = [
             {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'rank': 1, 'type': '{0}.profile-int.hi'.format(local_pid)} ,
             {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'rank': 2, 'type': '{0}.profile-pol.hi'.format(local_pid)},
-            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 3, 'type': '{0}.phase-freq.hi'.format(local_pid)},
-            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 4, 'type': '{0}.phase-time.hi'.format(local_pid)},
-            {'comm': 'psrplot -p b -x -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'rank': 11, 'type': '{0}.bandpass.hi'.format(local_pid)},
+            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 4, 'type': '{0}.phase-freq.hi'.format(local_pid)},
+            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 3, 'type': '{0}.phase-time.hi'.format(local_pid)},
+            {'comm': 'psrplot -p b -x -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'rank': 8, 'type': '{0}.bandpass.hi'.format(local_pid)},
         ]
 
         # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
@@ -2025,7 +2025,7 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # plot results - single subint snr
         matplot_commands = [
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 5, 'type': '{0}.snr-single.hi'.format(local_pid)},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 7, 'type': '{0}.snr-single.hi'.format(local_pid)},
             {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR', 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr-cumul.hi'.format(local_pid)},
         ]
 
@@ -2088,14 +2088,14 @@ def generate_images(output_dir, cparams, psrname, logger):
                 # generate single TOA image
                 if (generate_singleres_image(output_dir, toa_archive_file, single_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
                     logger.info("Successfully created single observation residual image {0}".format(single_image_file))
-                    image_data.append({'file': single_image_file, 'rank': 7, 'type': '{0}.toa-single.hi'.format(local_pid)})
+                    image_data.append({'file': single_image_file, 'rank': 5, 'type': '{0}.toa-single.hi'.format(local_pid)})
                 else:
                     logger.error("Single observation residual TOA image generation was unsuccessful!")
 
                 # generate global TOA image
                 if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
                     logger.info("Successfully created global observation residual image {0}".format(global_image_file))
-                    image_data.append({'file': global_image_file, 'rank': 10, 'type': '{0}.toa-global.hi'.format(local_pid)})
+                    image_data.append({'file': global_image_file, 'rank': 11, 'type': '{0}.toa-global.hi'.format(local_pid)})
                     #logger.info("THIS IMAGE IS NOT LOGGED IN THE DATABASE DUE TO LIMITATIONS OF PSRDB - TO BE FIXED IN A FUTURE UPDATE.")
 
                     # copy the global TOA image to the shared path
@@ -2123,7 +2123,7 @@ def generate_images(output_dir, cparams, psrname, logger):
     # look for two fixed dynspec images
     dynspec_commands = [
         {'ext': 'zap.dynspec', 'rank': 9, 'type': '{0}.zap-dynspec.hi'.format(local_pid)},
-        {'ext': 'calib.dynspec', 'rank': 8, 'type': '{0}.calib-dynspec.hi'.format(local_pid)}
+        {'ext': 'calib.dynspec', 'rank': 10, 'type': '{0}.calib-dynspec.hi'.format(local_pid)}
     ]    
 
     for x in range (0, len(dynspec_commands)):
@@ -2219,15 +2219,15 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
         # check for which pid and assign parameters - these may need some fine tuning/expanding for more PIDs
         if (cparams["pid"] == "TPA"):
             toa_nchan = 1
-            toa_tobs = 600
+            toa_tobs = 1200
             toa_config_success = True
         elif (cparams["pid"] == "RelBin"):
             toa_nchan = 1
-            toa_tobs = 120
+            toa_tobs = 240
             toa_config_success = True
         elif (cparams["pid"] == "PTA"):
             toa_nchan = 4
-            toa_tobs = 300
+            toa_tobs = 600
             toa_config_success = True
         else:
             # redundant but just in case
