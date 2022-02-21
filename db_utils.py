@@ -161,7 +161,7 @@ def pid_getdefaultpipe(op):
 
 # ROLE   : Create a JSON object representing a given state of a pipeline job
 # INPUTS : Integer
-# RETURNS: JSON object
+# RETURNS: JSON object (success) | None (failure)
 def job_state_code(jid):
 
     if jid == 0:
@@ -178,8 +178,13 @@ def job_state_code(jid):
         state = "Unknown" # cover-all for indeterminate states / outcomes still under development (e.g. "fluxcal")
     elif jid == 6:
         state = "Crashed" # job broke down at some point before completing
+    else:
+        state = None
 
-    return json.loads(json.dumps({"job_state": state}))
+    if not (state == None):
+        return json.loads(json.dumps({"job_state": state}))
+    else:
+        return state
 
 # ROLE   : Return the name of the node on which a given job is operating
 # INPUTS : None

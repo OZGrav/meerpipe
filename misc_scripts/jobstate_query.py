@@ -24,7 +24,7 @@ from tables import *
 from joins import *
 from graphql_client import GraphQLClient
 from db_utils import (check_response, check_pipeline, get_pulsar_id, get_observation_target_id, check_pulsar_target,
-                      get_job_state, get_target_name, utc_psrdb2normal, get_observation_utc)
+                      get_job_state, get_target_name, utc_psrdb2normal, get_observation_utc, job_state_code)
 
 # Important paths
 PSRDB = "psrdb.py"
@@ -34,6 +34,8 @@ parser = argparse.ArgumentParser(description="Reports the job state of all proce
 parser.add_argument("-outdir", dest="outdir", help="Directory in which to store the output file.", default=None)
 parser.add_argument("-outfile", dest="outfile", type=str, help="File in which to store the recalled job state results.", default=None)
 parser.add_argument("-state", dest="state", type=str, help="Return processings matching this state.", default = None)
+parser.add_argument("-allStates", dest="allStates", action="store_true", help="Reports the states of all jobs. Overrides '-state' and requires an output file, output will not be displayed on screen.")
+
 #parser.add_argument("-pipe_id", dest="pipe_id", type=int, help="Return only those processings matching this pipeline ID.", default=None)
 #parser.add_argument("-psr", dest="pulsar", type=str, help="Return only those processings matching this PSR J-name.", default=None)
 args = parser.parse_args()
@@ -52,6 +54,13 @@ client = GraphQLClient(url, False)
 if not (args.outdir == None or args.outfile == None):
     if not (os.path.isdir(args.outdir)):
         os.makedirs(args.outdir)
+
+# check for allState requirements
+if (args.allStates):
+    if (args.outfile == None):
+        raise Exception("Cannot run with -allStates enabled without providing an output file - aborting...")
+elif (args.state == None):
+    raise Exception("Must select either -allStates or -state when running this script - aborting...")
 
 # input verification
 #if not (args.pipe_id == None):
@@ -98,9 +107,11 @@ for x in range(0, len(proc_data)):
     else:
         job_state = None
 
-    if not (args.state == None):
-        if not (job_state == args.state):
+    if not (job_state == None):
+        if not (args.allStates) and not (job_state == args.state):
             continue
+    else:
+        continue
 
     # check if the pipeline matches
     #if not (args.pipe_id == None):
@@ -132,32 +143,65 @@ for x in range(0, len(proc_data)):
 if (len(results_list) > 0):
 
     #header = "# ProcID Target ObsID ObsUTC JobState"
-    header = "# ProcID JobState"
+    #header = "# ProcID JobState"
     header = "# ProcID Target ObsUTC JobState"
     arr = results_list
 
     # check file or screen output
-    if not (args.outfile == None):
-        if not (args.outdir == None):
-            outpath = os.path.join(args.outdir, args.outfile)
-        else:
-            outpath = args.outfile
+    if not (args.allStates):
+        
+        if not (args.outfile == None):
+            if not (args.outdir == None):
+                outpath = os.path.join(args.outdir, args.outfile)
+            else:
+                outpath = args.outfile
 
-        outfile = open(outpath, "w")
-        outfile.write("{0}\n".format(header))
-        for x in range(0, len(arr)):
-            #outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
-            #outfile.write("{0}\t{1}\n".format(arr[x][0], arr[x][1]))
-            outfile.write("{0}\t{1}\t{2}\t{3}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3]))
-        outfile.close()
-        print("{0} matching processing entries written to {1}.".format(len(arr), outpath))
+            outfile = open(outpath, "w")
+            outfile.write("{0}\n".format(header))
+            for x in range(0, len(arr)):
+                #outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
+                #outfile.write("{0}\t{1}\n".format(arr[x][0], arr[x][1]))
+                outfile.write("{0}\t{1}\t{2}\t{3}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3]))
+            outfile.close()
+            print("{0} matching processing entries written to {1}.".format(len(arr), outpath))
+        else:
+            print (header)
+            for x in range(0, len(arr)):
+                #print ("{0}\t{1}\t{2}\t{3}\t{4}".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
+                #print ("{0}\t{1}".format(arr[x][0], arr[x][1]))
+                print ("{0}\t{1}\t{2}\t{3}".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3]))
+            print("{0} matching processing entries found.".format(len(arr)))
+
     else:
-        print (header)
-        for x in range(0, len(arr)):
-            #print ("{0}\t{1}\t{2}\t{3}\t{4}".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
-            #print ("{0}\t{1}".format(arr[x][0], arr[x][1]))
-            print ("{0}\t{1}\t{2}\t{3}".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3]))
-        print("{0} matching processing entries found.".format(len(arr)))
+
+        print ("Writing each collection of job states to an individual file...")
+
+        job_code = 0
+        while not (job_state_code(job_code) == None):
+
+            ref_job_state = job_state_code(job_code)['job_state']
+
+            # set up the filename
+            outname = "{0}_{1}".format(ref_job_state.replace(" ", "_"), args.outfile)
+            if not (args.outdir == None):
+                outpath = os.path.join(args.outdir, outname)
+            else:
+                outpath = outname
+
+            outfile = open(outpath, "w")
+            outfile.write("{0}\n".format(header))
+
+            # check through the array
+            count = 0
+            for x in range(0, len(arr)):
+                if (ref_job_state == arr[x][3]):
+                    outfile.write("{0}\t{1}\t{2}\t{3}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3]))
+                    count += 1
+                    
+            outfile.close()
+            print ("{0} written with {1} entries...".format(outpath, count))
+
+            job_code += 1
 
 else:
     

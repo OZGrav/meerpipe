@@ -30,6 +30,7 @@ PSRDB = "psrdb.py"
 # Argument parsing
 parser = argparse.ArgumentParser(description="Wipe all pipelineimage entries associated with a given list of processing IDs. Used in the event of changes to the image creation structure which would cause conflicts with existing entries, which will need to be regenerated. USE WITH EXTREME CAUTION.")
 parser.add_argument("-infile", dest="infile", type=str, help="List of processing IDs to fix.", required=True)
+parser.add_argument("-testmode", dest="testmode", action="store_true", help="Disables the script's deletion command for a test run.")
 args = parser.parse_args()
 
 
@@ -59,6 +60,7 @@ if not safety_response == "Y":
     exit()
 
 # scroll list
+count = 0
 for x in range(0, len(proc_list)):
     
     print ("Deleting images for processing ID {0}".format(proc_list[x]))
@@ -75,5 +77,12 @@ for x in range(0, len(proc_list)):
         pimage_id = pipelineimages.decode_id(pimage_data[y]['node']['id'])
 
         # and now delete
-        pipelineimages.delete(pimage_id)
-        print ("... Pipeline image ID {0} deleted.".format(pimage_id))
+        if not (args.testmode):
+            pipelineimages.delete(pimage_id)
+            print ("... Pipeline image ID {0} deleted.".format(pimage_id))
+        else:
+            print ("... Pipeline image ID {0} (not really) deleted.".format(pimage_id))
+        count += 1
+
+
+print ("{0} images deleted.".format(count))
