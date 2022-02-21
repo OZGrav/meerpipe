@@ -441,8 +441,6 @@ elif (args.list_in):
         if not (query_PID == None):
             print ("Observation PID = {0}".format(query_PID))
 
-        print ("Querying PSRDB for:\nPSR = {0}\nDATE = {1}".format(linearray[0], linearray[1]))
-
         dbdata = get_foldedobservation_list(query_date, query_date, query_pulsar, query_PID, db_client, db_url, db_token)
         print("PSRDB query complete.")
 

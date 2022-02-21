@@ -1965,24 +1965,30 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         for x in range(0, len(plot_commands)):
            
-            logger.info("Creating image type {0}...".format(plot_commands[x]['type']))
+            # need to protect against unexpected image crashes
+            try:
 
-            # create / overwrite the image
-            image_name = "{0}.png".format(plot_commands[x]['name'])
-            image_file = os.path.join(images_path,image_name)
-            if (os.path.exists(image_file)):
-                os.remove(image_file)
-            # comm = "{0} -g {1}/png {2}".format(plot_commands[x]['comm'], image_name, clean_file)
-            comm = "{0} {2} -g 1024x768 -c above:l= -c above:c= -D {1}/png".format(plot_commands[x]['comm'], image_name, clean_file)
-            args = shlex.split(comm)
-            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            proc.wait()
+                logger.info("Creating image type {0}...".format(plot_commands[x]['type']))
 
-            # move resulting image
-            os.rename(image_name, image_file)
+                # create / overwrite the image
+                image_name = "{0}.png".format(plot_commands[x]['name'])
+                image_file = os.path.join(images_path,image_name)
+                if (os.path.exists(image_file)):
+                    os.remove(image_file)
+                # comm = "{0} -g {1}/png {2}".format(plot_commands[x]['comm'], image_name, clean_file)
+                comm = "{0} {2} -g 1024x768 -c above:l= -c above:c= -D {1}/png".format(plot_commands[x]['comm'], image_name, clean_file)
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                proc.wait()
 
-            # log results to array for later recording
-            image_data.append({'file': image_file, 'rank': plot_commands[x]['rank'], 'type': plot_commands[x]['type']})
+                # move resulting image
+                os.rename(image_name, image_file)
+
+                # log results to array for later recording
+                image_data.append({'file': image_file, 'rank': plot_commands[x]['rank'], 'type': plot_commands[x]['type']})
+
+            except:
+                logger.error("Attempt to create image type {0} failed - skipping...".format(plot_commands[x]['type']))
 
         # psrstat images - snr/time
 

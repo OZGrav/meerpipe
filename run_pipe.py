@@ -166,21 +166,6 @@ if toggle:
 
     output_info,archive_list,psrnames,proposal_ids,required_ram_list,obstime_list,required_time_list = get_outputinfo(config_params,logger)
 
-    #print ("GO")
-    
-    #print (output_info)
-    #print (archive_list)
-    #print (psrnames)
-    #print (proposal_ids)
-    #print (required_ram_list)
-    #print (obstime_list)
-    #print (required_time_list)
-
-    #print ("STOP")
-
-    #sys.exit()
-
-
     #For each input directory, an equivalent output directory is created using create_MTstructure.
     for obs_num, output_dir in enumerate(output_info):
         logger.info ("############")
