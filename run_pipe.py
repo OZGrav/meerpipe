@@ -43,9 +43,10 @@ from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archi
 # PSRDB imports
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_observation_id, get_project_embargo,
-                      get_observation_project_code, get_project_id, job_state_code, get_node_name, get_folding_id,
-                      check_pipeline, create_processing, update_processing, get_fold_parent_procid)
+from db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_foldedobservation_obsid, 
+                      get_project_embargo, get_observation_project_code, get_project_id, job_state_code, 
+                      get_node_name, get_folding_id, check_pipeline, create_processing, update_processing,
+                      get_fold_parent_procid)
 
 # PSRDB info
 PTUSE = 1
@@ -66,6 +67,7 @@ parser.add_argument("-softpath", help="Change software path", default="/fred/oz0
 parser.add_argument("-db", dest="db_flag", help="Toggle PSRDB functionality (e.g. launching from / writing to PSRDB)", action="store_true")
 parser.add_argument("-db_pipe", type=int, dest="db_pipe", help="PSRDB ID of the pipeline being launched")
 parser.add_argument("-db_url", dest="db_url", help="Specify custom PSRDB client URL")
+parser.add_argument("-db_obsid", dest="db_obsid", type=int, help="Specify a single PSRDB Observation ID for a targeted launch.", default = None)
 
 args = parser.parse_args()
 
@@ -164,10 +166,49 @@ if toggle:
 
     output_info,archive_list,psrnames,proposal_ids,required_ram_list,obstime_list,required_time_list = get_outputinfo(config_params,logger)
 
+    #print ("GO")
+    
+    #print (output_info)
+    #print (archive_list)
+    #print (psrnames)
+    #print (proposal_ids)
+    #print (required_ram_list)
+    #print (obstime_list)
+    #print (required_time_list)
+
+    #print ("STOP")
+
+    #sys.exit()
+
+
     #For each input directory, an equivalent output directory is created using create_MTstructure.
     for obs_num, output_dir in enumerate(output_info):
         logger.info ("############")
 
+        # need to step in and check for observation ID PSRDB conflict before things
+        # start getting overwritten in create_structure()
+        if (args.db_flag):
+
+            # retrieve observation ID
+            split_path = output_info[obs_num].split("/")
+            path_args = len(split_path)
+            obs_utc = split_path[path_args - 4]
+            obs_id = get_foldedobservation_obsid(
+                utc_normal2psrdb(obs_utc),
+                psrnames[obs_num],
+                os.path.dirname(archive_list[obs_num][0]), # this is a complete hack - come back to fix this in version 2
+                db_client,
+                db_url,
+                db_token
+            )
+
+            # compare this against the provided obs_id if it exists
+            if not (args.db_obsid == None):
+                if not (int(args.db_obsid) == int(obs_id)):
+                    print ("Aborting launch of {0} - {1} (OBSID {2} due to PSRDB specifications.)".format(psrnames[obs_num], obs_utc, obs_id))
+                    continue
+
+        # resume normal operations
         config_params["pid"] = proposal_ids[obs_num]
         obstime = obstime_list[obs_num]
         required_ram = required_ram_list[obs_num]
@@ -188,16 +229,8 @@ if toggle:
             location = os.path.normpath(output_info[obs_num])
 
             # retrieve observation ID
-            split_path = output_info[obs_num].split("/")
-            path_args = len(split_path)
-            obs_utc = split_path[path_args - 4]
-            obs_id = get_observation_id(
-                utc_normal2psrdb(obs_utc),
-                psrnames[obs_num],
-                db_client,
-                db_url, 
-                db_token
-            )
+            # now already done at the start of the loop - proceed
+
             if (obs_id == None):
                 logger.error("Could not find unique entry in 'observation' matching {0} - {1}" .format(psrnames[obs_num], obs_utc))
                 logger.error("Discontinuing launch of {0} - {1} and attempting next job".format(psrnames[obs_num], obs_utc))

@@ -23,13 +23,15 @@ import subprocess
 import shlex
 import json
 import time
+import datetime
 
 # PSRDB imports
 from tables import *
 from joins import *
 from graphql_client import GraphQLClient
-from db_utils import (utc_normal2psrdb, utc_psrdb2normal, utc_normal2date, utc_psrdb2date, pid_getofficial, check_response,
-                      pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config, check_pipeline)
+from db_utils import (utc_normal2psrdb, utc_psrdb2normal, utc_normal2date, utc_psrdb2date, pid_getofficial, 
+                      check_response, pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config, 
+                      check_pipeline, get_foldedobservation_obsid)
 
 # Important paths
 PSRDB = "psrdb.py"
@@ -41,9 +43,10 @@ parser.add_argument("-utc2", dest="utc2", help="(Primary: required) - End UTC fo
 parser.add_argument("-psr", dest="pulsar", help="(Primary: optional) - Pulsar name for PSRDB search - returns only observations with this pulsar name. If not provided, returns all pulsars.", default=None)
 parser.add_argument("-obs_pid", dest="pid", help="(Primary: optional) - Project ID for PSRDB search - return only observations matching this Project ID. If not provided, returns all observations.", default=None)
 parser.add_argument("-list_out", dest="list_out", help="(Primary: optional) - Output file name to write the list of observations submitted by this particular search. Does not work in secondary mode as it would simply duplicate the input list.")
-parser.add_argument("-list_in", dest="list_in", help="(Secondary: required) - List of observations to process, given in standard format. These will be crossmatched against PSRDB before job submission.")
+parser.add_argument("-list_in", dest="list_in", help="(Secondary: required) - List of observations to process, given in standard format. These will be crossmatched against PSRDB before job submission. List format must be:\n* Column 1 - Pulsar name\n* Column 2 - UTC\n* Column 3 - Observation PID\nTrailing columns may be left out if needed, but at a minimum the pulsar name must be provided.")
 parser.add_argument("-runas", dest="runas", help="(Optional) - Specify an override pipeline to use in processing the observations. \nOptions:\n'PIPE' - launch each observation through multiple pipelines as defined by the 'launches' PSRDB table (default).\n'OBS' - use the observation PID to define pipeline selection.\n<int> - specify a specific PSRDB pipeline ID.\n<pid> - specify a MeerTIME project code (e.g. 'PTA', 'RelBin'), which will launch a default pipeline.", default="PIPE")
 parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm.",action="store_true")
+parser.add_argument("-job_limit", dest="joblimit", type=int, help="Max number of jobs to accept to the queue at any given time - script will wait and monitor for queue to reduce below this number before sending more.", default=1000)
 args = parser.parse_args()
 
 
@@ -300,14 +303,35 @@ def array_launcher(arr, ag, client, url, token):
                     # get the launch project code from the config data
                     launch_project_code = pid_getshort(config_data['pid'])
 
+                    # get the obs_id to prevent duplicate job launching
+                    obs_id = get_foldedobservation_obsid(utc, psr_name, obs_location, client, url, token)
+
                     # finally, launch
                     print ("Launching: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
-                    pipeline_launch_instruction = "{0} -cfile {1} -dirname {2} -utc {3} -verbose -pid {4} -db -db_pipe {5}".format(config_data['path'], config_data['config'], psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y])
+                    pipeline_launch_instruction = "{0} -cfile {1} -dirname {2} -utc {3} -verbose -pid {4} -db -db_pipe {5} -db_obsid {6}".format(config_data['path'], config_data['config'], psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y], obs_id)
                     # check for slurm
-                    if (args.slurm):
+                    if (ag.slurm):
                         pipeline_launch_instruction = "{0} -slurm".format(pipeline_launch_instruction)
 
-                    #print (pipeline_launch_instruction)
+                    # launch the jobs - check for SLURM limit if required and wait
+                    if (ag.slurm):
+                        queue_flag = False
+                        while not (queue_flag):
+
+                            # get the slurm queue size
+                            comm = "slurm queue"
+                            args = shlex.split(comm)
+                            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                            slurm_data = proc.communicate()[0].decode("utf-8").rstrip().split("\n")
+
+                            if ((len(slurm_data) - 1) < ag.joblimit):
+                                queue_flag = True
+                            else:
+                                delay = 60 #seconds
+                                print ("Script-imposed SLURM queue limit of {0} exceeded.".format(ag.joblimit))
+                                print ("Current time is {0} - waiting {1} seconds...".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), delay))
+                                time.sleep(delay)
+                                
                     proc_query = shlex.split(pipeline_launch_instruction)
                     proc = subprocess.Popen(proc_query)
                     # wait until jobs are finished launching before returning the command line
@@ -389,20 +413,37 @@ elif (args.list_in):
         linearray = shlex.split(x)
 
         # check for valid input
+        if (len(linearray) == 0 or len(linearray) > 3):
+            raise Exception("Input file has an incorrect number of fields (line {0})".format(x))
+
+        # check input for query parameters
+        query_pulsar = None
+        query_date = None
+        query_PID = None
+
+        if (len(linearray) > 0):
+            # first column is pulsar name
+            query_pulsar = str(linearray[0])
+
         if (len(linearray) > 1):
+            # second column is UTC of the observation
             query_date = utc_normal2psrdb(linearray[1])
-        else:
-            raise Exception("Input file contains insufficient number of fields.")
+
+        if (len(linearray) > 2):
+            # third column is PID
+            query_PID = pid_getofficial(linearray[2])
+
+        print ("Querying PSRDB for:")
+        if not (query_pulsar == None):
+            print ("PSR = {0}".format(query_pulsar))
+        if not (query_date == None):
+            print ("DATE = {0}".format(query_date))
+        if not (query_PID == None):
+            print ("Observation PID = {0}".format(query_PID))
 
         print ("Querying PSRDB for:\nPSR = {0}\nDATE = {1}".format(linearray[0], linearray[1]))
 
-        if (len(linearray) > 2):
-            query_PID = pid_getofficial(linearray[2])
-            print ("Observation PID = {0}".format(linearray[2]))
-        else:
-            query_PID = None
-
-        dbdata = get_foldedobservation_list(query_date, query_date, linearray[0], query_PID, db_client, db_url, db_token)
+        dbdata = get_foldedobservation_list(query_date, query_date, query_pulsar, query_PID, db_client, db_url, db_token)
         print("PSRDB query complete.")
 
         if (dbdata):

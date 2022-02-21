@@ -270,23 +270,26 @@ def check_pipeline(pipe_id, client, url, token):
 
 # ----- GET FUNCTIONS -----
 
-# ROLE   : Returns a unique Observation ID, given a pulsar name and PSRDB UTC
-# INPUTS : String, String, GraphQL client, String, String
+# ROLE   : Returns a unique Observation ID, given a pulsar name, PSRDB UTC, and a full-path location
+# INPUTS : String, String, String, GraphQL client, String, String
 # RETURNS: Integer (success) | None (failure)
-def get_observation_id(utc, psr, client, url, token):
+def get_foldedobservation_obsid(utc, psr, loc, client, url, token):
+
+    # sanitise input
+    location = os.path.normpath(loc)
 
     # PSRDB setup
-    observations = Observations(client, url, token)
+    foldedobservations = FoldedObservations(client, url, token)
     pulsartargets = Pulsartargets(client, url, token)
+    processings = Processings(client, url, token)
 
     # Query for matching UTC
-    response = observations.list(
+    response = foldedobservations.list(
         None, 
-        None,
+        psr,
         None,
         None,
         None, 
-        None,
         None,
         None,
         None,
@@ -294,13 +297,14 @@ def get_observation_id(utc, psr, client, url, token):
         utc
     )
     check_response(response)
-    obs_content = json.loads(response.content)
-    obs_data = obs_content['data']['allObservations']['edges']
+    foldobs_content = json.loads(response.content)
+    foldobs_data = foldobs_content['data']['allFoldings']['edges']
 
     # Check for Targets matching the pulsar name
+    # Also check for location matches
     match_counter = 0
-    for x in range(0, len(obs_data)):
-        target_name = obs_data[x]['node']['target']['name']
+    for x in range(0, len(foldobs_data)):
+        target_name = foldobs_data[x]['node']['processing']['observation']['target']['name']
         response = pulsartargets.list(
             None,
             None,
@@ -311,9 +315,17 @@ def get_observation_id(utc, psr, client, url, token):
         check_response(response)
         target_content = json.loads(response.content)
         target_data = target_content['data']['allPulsartargets']['edges']
-
-        obs_id = observations.decode_id(obs_data[x]['node']['id'])
-        match_counter = match_counter + len(target_data)
+        
+        # if we have a target match, check location
+        if (len(target_data) > 0):
+            foldobs_location = os.path.normpath(foldobs_data[x]['node']['processing']['location'])
+            if (foldobs_location == location):
+                proc_id = processings.decode_id(foldobs_data[x]['node']['processing']['id'])
+                response = processings.list(proc_id)
+                proc_content = json.loads(response.content)
+                proc_data = proc_content['data']['processing']
+                obs_id = foldedobservations.decode_id(proc_data['observation']['id'])
+                match_counter = match_counter + len(target_data)
 
     # Check for valid result
     if (match_counter == 1):
