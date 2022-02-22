@@ -47,6 +47,7 @@ parser.add_argument("-list_in", dest="list_in", help="(Secondary: required) - Li
 parser.add_argument("-runas", dest="runas", help="(Optional) - Specify an override pipeline to use in processing the observations. \nOptions:\n'PIPE' - launch each observation through multiple pipelines as defined by the 'launches' PSRDB table (default).\n'OBS' - use the observation PID to define pipeline selection.\n<int> - specify a specific PSRDB pipeline ID.\n<pid> - specify a MeerTIME project code (e.g. 'PTA', 'RelBin'), which will launch a default pipeline.", default="PIPE")
 parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm.",action="store_true")
 parser.add_argument("-job_limit", dest="joblimit", type=int, help="Max number of jobs to accept to the queue at any given time - script will wait and monitor for queue to reduce below this number before sending more.", default=1000)
+parser.add_argument("-errorlog", dest="errorlog", type=str, help="(Optional) File to store information on any failed launches for later debugging.", default=None)
 args = parser.parse_args()
 
 
@@ -255,6 +256,10 @@ def write_list(fh, arr, client, url, token):
 # for a given array of psrdb observations and argpase arguments, determine which pipelines should be launched for each entry and then launch them
 def array_launcher(arr, ag, client, url, token):
 
+    # set up the errorlog, if one is set
+    if not (ag.errorlog == None):
+        errorfile = open(ag.errorlog, "w")
+
     # begin scrolling through the array
     for x in range (0, len(arr)):
 
@@ -274,68 +279,79 @@ def array_launcher(arr, ag, client, url, token):
                 # set of pipelines determined - scroll through and launch
                 for y in range(0, len(pipeline_list)):
 
-                    # need to get the configuration data
-                    config_data = get_pipe_config(pipeline_list[y], client, url, token)
+                    # catch errors and report to file
+                    try:
+                        # need to get the configuration data
+                        config_data = get_pipe_config(pipeline_list[y], client, url, token)
 
-                    # run some sanity checks
+                        # run some sanity checks
                     
-                    # check if config data actually exists
-                    # there may be a better way to handle this case, but for now...
-                    if (len(config_data) == 0):
-                        raise Exception ("Attempted to run pipeline with no config information - aborting. Please inspect execution parameters and try again")
+                        # check if config data actually exists
+                        # there may be a better way to handle this case, but for now...
+                        if (len(config_data) == 0):
+                            raise Exception ("Attempted to run pipeline ({0}) with no config information - aborting. Please inspect execution parameters and try again".format(pipeline_list[y]))
 
-                    # check for file path consistency for the raw data location
-                    config_query = "grep input_path {0}".format(config_data['config'])
-                    proc_query = shlex.split(config_query)
-                    proc = subprocess.Popen(proc_query, stdout=subprocess.PIPE)
-                    out = proc.stdout.read().decode("utf-8")
-                    linearray = out.split("\n")[0].split(" ")
+                        # check for file path consistency for the raw data location
+                        config_query = "grep input_path {0}".format(config_data['config'])
+                        proc_query = shlex.split(config_query)
+                        proc = subprocess.Popen(proc_query, stdout=subprocess.PIPE)
+                        out = proc.stdout.read().decode("utf-8")
+                        linearray = out.split("\n")[0].split(" ")
 
-                    if (len(linearray) != 3):
-                        raise Exception("Config file ({0}) parameter 'input_path' is not the correct length.".format(config_data['config']))
+                        if (len(linearray) != 3):
+                            raise Exception("Config file ({0}) parameter 'input_path' is not the correct length.".format(config_data['config']))
+
+                        in_path = linearray[2]
                         
-                    in_path = linearray[2]
-                        
-                    # check if the paths are self-consistent
-                    if (not ((in_path in obs_location) or (obs_location in in_path))):
-                        raise Exception("Config file ({0}) parameter 'input_path' is inconsistent with database file locations.".format(config_json['config']))
-                            
-                    # get the launch project code from the config data
-                    launch_project_code = pid_getshort(config_data['pid'])
+                        # check if the paths are self-consistent
+                        if (not ((in_path in obs_location) or (obs_location in in_path))):
+                            raise Exception("Config file ({0}) parameter 'input_path' is inconsistent with database file locations - skipping".format(config_data['config']))
 
-                    # get the obs_id to prevent duplicate job launching
-                    obs_id = get_foldedobservation_obsid(utc, psr_name, obs_location, client, url, token)
+                        # get the launch project code from the config data
+                        launch_project_code = pid_getshort(config_data['pid'])
 
-                    # finally, launch
-                    print ("Launching: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
-                    pipeline_launch_instruction = "{0} -cfile {1} -dirname {2} -utc {3} -verbose -pid {4} -db -db_pipe {5} -db_obsid {6}".format(config_data['path'], config_data['config'], psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y], obs_id)
-                    # check for slurm
-                    if (ag.slurm):
-                        pipeline_launch_instruction = "{0} -slurm".format(pipeline_launch_instruction)
+                        # get the obs_id to prevent duplicate job launching
+                        obs_id = get_foldedobservation_obsid(utc, psr_name, obs_location, client, url, token)
 
-                    # launch the jobs - check for SLURM limit if required and wait
-                    if (ag.slurm):
-                        queue_flag = False
-                        while not (queue_flag):
+                        # finally, launch
+                        print ("Launching: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
+                        pipeline_launch_instruction = "{0} -cfile {1} -dirname {2} -utc {3} -verbose -pid {4} -db -db_pipe {5} -db_obsid {6}".format(config_data['path'], config_data['config'], psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y], obs_id)
+                        # check for slurm
+                        if (ag.slurm):
+                            pipeline_launch_instruction = "{0} -slurm".format(pipeline_launch_instruction)
 
-                            # get the slurm queue size
-                            comm = "slurm queue"
-                            args = shlex.split(comm)
-                            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-                            slurm_data = proc.communicate()[0].decode("utf-8").rstrip().split("\n")
+                        # launch the jobs - check for SLURM limit if required and wait
+                        if (ag.slurm):
+                            queue_flag = False
+                            while not (queue_flag):
 
-                            if ((len(slurm_data) - 1) < ag.joblimit):
-                                queue_flag = True
-                            else:
-                                delay = 60 #seconds
-                                print ("Script-imposed SLURM queue limit of {0} exceeded.".format(ag.joblimit))
-                                print ("Current time is {0} - waiting {1} seconds...".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), delay))
-                                time.sleep(delay)
+                                # get the slurm queue size
+                                comm = "slurm queue"
+                                args = shlex.split(comm)
+                                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                                slurm_data = proc.communicate()[0].decode("utf-8").rstrip().split("\n")
+
+                                if ((len(slurm_data) - 1) < ag.joblimit):
+                                    queue_flag = True
+                                else:
+                                    delay = 60 #seconds
+                                    print ("Script-imposed SLURM queue limit of {0} exceeded.".format(ag.joblimit))
+                                    print ("Current time is {0} - waiting {1} seconds...".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), delay))
+                                    time.sleep(delay)
                                 
-                    proc_query = shlex.split(pipeline_launch_instruction)
-                    proc = subprocess.Popen(proc_query)
-                    # wait until jobs are finished launching before returning the command line
-                    proc.wait()
+                        proc_query = shlex.split(pipeline_launch_instruction)
+                        proc = subprocess.Popen(proc_query)
+                        # wait until jobs are finished launching before returning the command line
+                        proc.wait()
+
+                    except:
+                        print ("Error detected - skipping launch of job\nIf error log file enabled, details will be reported there.")
+                        # report error
+                        if not (ag.errorlog == None):
+                            errorfile.write("\n-- Error detected --\n")
+                            errorfile.write("Pipeline = {0}\n".format(pipeline_list[y]))
+                            errorfile.write("{}\n".format(json.dumps(arr[x])))
+                        
 
             else:
 
@@ -348,6 +364,10 @@ def array_launcher(arr, ag, client, url, token):
             print ("Unable to identify a unique pulsar name matching the following entry")
             print (arr[x])
             print ("\nSkipping...\n")
+
+    # close errorfile
+    if not (ag.errorlog == None):
+        errorfile.close()
 
     return
 
