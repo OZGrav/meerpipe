@@ -307,15 +307,20 @@ def get_outputinfo(cparams,logger):
 
                         #Computing RAM requirements for this observation
                         if float(info_params["target_duration"]) <= 900.0: #Less than 15 mins
-                            reqram = "64g"
+                            #reqram = "64g"
+                            reqram = "32g"
                         elif float(info_params["target_duration"]) > 900.0 and float(info_params["target_duration"]) <= 3600.0: #15 mins to 1 hour
-                            reqram = "128g"
+                            #reqram = "128g"
+                            reqram = "64g"
                         elif float(info_params["target_duration"]) > 3600.0 and float(info_params["target_duration"]) <= 10800.0: #1 to 3 hours
-                            reqram = "256g"
+                            #reqram = "256g"
+                            reqram = "128g"
                         elif float(info_params["target_duration"]) > 10800.0 and float(info_params["target_duration"]) < 18000.0: #3 hours to 5 hours
-                            reqram = "512g"
+                            #reqram = "512g"
+                            reqram = "256g"
                         elif float(info_params["target_duration"]) > 18000.0: #More than 5 hours
-                            reqram = "768g"
+                            #reqram = "768g"
+                            reqram = "512g"
              
                         obs_time_list.append(info_params["target_duration"])
                         required_ram_list.append(reqram)
