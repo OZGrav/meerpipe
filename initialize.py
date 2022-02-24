@@ -91,6 +91,8 @@ def parse_config(path_cfile):
                 config_params["type"] = sline[1].rstrip().lstrip(' ')
             if attr == "user":
                 config_params["user"] = sline[1].rstrip().lstrip(' ')
+            if attr == "email":
+                config_params["email"] = sline[1].rstrip().lstrip(' ')
             if attr == "calibrators_path":
                 config_params["calibrators_path"] = sline[1].rstrip().lstrip(' ')
             if attr == "rm_cat":

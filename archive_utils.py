@@ -1476,6 +1476,12 @@ def generate_toas(output_dir,cparams,psrname,logger):
     processed_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
 
     if not template is None:
+
+        #Creating a select file
+        select_file = open("{0}/{1}.select".format(timing_path,orig_psrname),"w")
+        select_file.write("LOGIC -snr < 10 REJECT \n")
+        select_file.close()
+
         for proc_archive in processed_archives:
             tim_name = os.path.split(proc_archive)[1].split('.ar')[0]+".tim"
             #Running pat
@@ -1488,11 +1494,6 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 subprocess.call(proc, stdout=f)
                 logger.info("{0} generated".format(tim_name))
                 f.close()
-
-                #Creating a select file
-                select_file = open("{0}/{1}.select".format(timing_path,orig_psrname),"w")
-                select_file.write("LOGIC -snr < 10 REJECT \n")
-                select_file.close()
 
                 #Creating a meerwatch launch file
                 logger.info("{0}.launch file for MeerWatch".format(psrname))
@@ -1512,6 +1513,37 @@ def generate_toas(output_dir,cparams,psrname,logger):
             db_client = GraphQLClient(cparams["db_url"], False)
             
             if not cparams["fluxcal"]:
+
+                # chose a suitable processed archive for summary TOA production
+                proc_archive = None
+                chop_string = ".ch"
+                fluxcal_string = "fluxcal"
+                for archive in processed_archives:
+                    if chop_string not in archive:
+                        # first preference - unchopped archives
+                        proc_archive = archive
+
+                if (proc_archive == None):
+                    if (len(processed_archives) > 0):
+                        # second preference - chopped archives
+                        proc_archive = processed_archives[0]
+                    else:
+                        # need to check the cleaned archives
+                        cleaned_path = os.path.join(str(output_dir),"cleaned")
+                        cleaned_archives = sorted(glob.glob(os.path.join(cleaned_path,"J*.ar")))
+                        for archive in cleaned_archives:
+                            if fluxcal_string in archive and chop_string not in archive:
+                                # third preference - unchopped fluxcal archive
+                                proc_archive = archive
+                    
+                        if (proc_archive == None):
+                            for archive in cleaned_archives:
+                                # fourth preference - unchopped unfluxcal archive
+                                if chop_string not in archive:
+                                    proc_archive = archive
+
+                if (proc_archive == None):
+                    raise Exception("Unable to identify file to use in PSRDB TOA production - investigation required.")
 
                 # load and convert the ephemeris
                 eph = ephemeris.Ephemeris()
@@ -1541,6 +1573,9 @@ def generate_toas(output_dir,cparams,psrname,logger):
 
                 # ensure this pat comment closely matches the one above
                 comm = 'pat -jFTp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, proc_archive)
+                # note that 'proc_archive' could be any type of decimated file 
+                # (here taken asthe last entry in the processed_archives list)
+                # however, as the above command fully scrunches it, it doesn't matter what choice we made
                 args = shlex.split(comm)
                 proc = subprocess.Popen(args,stdout=subprocess.PIPE)
                 proc.wait()
