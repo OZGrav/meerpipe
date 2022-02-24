@@ -872,6 +872,10 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
             if 'START' in eph.ephem and 'FINISH' in eph.ephem:
                 start = astrotime(float(eph.ephem['START']['val']), format='mjd', scale='utc').datetime.replace(microsecond=0)
                 finish = astrotime(float(eph.ephem['FINISH']['val']), format='mjd', scale='utc').datetime.replace(microsecond=0)
+                # some ephemerides have essentially equal START/FINISH fields at this precision - check and resolve
+                if (start == finish):
+                    finish = finish + datetime.timedelta(0,1)
+
                 valid_from = utc_date2psrdb(start)
                 valid_to = utc_date2psrdb(finish)
             else:

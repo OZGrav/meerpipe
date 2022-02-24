@@ -20,6 +20,9 @@ from shutil import copyfile
 import datetime
 import pandas as pd
 
+# image manip imports
+from PIL import Image
+
 #matplotlib comm3 fix
 import matplotlib
 matplotlib.use('Agg')
@@ -1316,6 +1319,9 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
 def fluxcalibrate(output_dir, cparams, psrname, logger):
 
+    # needed for a hack later
+    del_string = "delme"
+
     obsheader_path = glob.glob(os.path.join(str(output_dir), "*obs.header"))[0]
     header_params = get_obsheadinfo(obsheader_path)
     parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{}*par".format(psrname)))
@@ -1340,6 +1346,8 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
         else:
             decimated_archives.append(cleaned_archive[0])
 
+        TP_file = None
+
         for archive in decimated_archives:
             if pid == "TPA" and "Tp" in archive:
                 TP_file = archive
@@ -1347,6 +1355,25 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
                 TP_file = archive
             elif pid == "RelBin" and "Tp" in archive:
                 TP_file = archive
+            else:
+                # HACK - this file is required, so we need to build one and patch it back in
+                clarch = None
+                for entry in cleaned_archive:
+                    if ".ch.ar" not in entry:
+                        clarch = entry
+                if (clarch == None):
+                    clarch = cleaned_archive[0]
+                # cleaned archive selected - now scrunch it
+                comm = "pam -Tp -u {0} -e {1} {2}".format(decimated_path, del_string, clarch)
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                proc.wait()
+                TP_file = proc.stdout.read().decode("utf-8").rstrip().split()[0]
+
+        if (TP_file == None):
+            raise Exception("TP_file not set in fluxcalibrate() - check into this, because apparently this file is important!")
+        else:
+            logger.info("TP_file = {0}".format(TP_file))
 
         addfile = glob.glob(os.path.join(str(output_dir), "*add"))[0]
 
@@ -1361,6 +1388,10 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
             subprocess.check_call(fluxcalproc)
         except subprocess.CalledProcessError:
             logger.error("fluxcal failed")
+
+        # clean the hack
+        if (del_string in TP_file):
+            os.remove(TP_file)
 
         fluxcal_obs = glob.glob(os.path.join(decimated_path, "*.fluxcal"))
         archives_indecimated = glob.glob(os.path.join(decimated_path, "*.ar"))
@@ -1495,7 +1526,6 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 dm = float(info[1].split()[1])
                 rm = float(info[1].split()[2])
                 site = info[1].split()[3]                
-                #site = 7 # TESTING ONLY
 
                 # call the ephemeris and template creation functions
                 eph_id = create_ephemeris(psrname, eph, dm, rm, cparams, db_client, logger)
@@ -2143,7 +2173,49 @@ def generate_images(output_dir, cparams, psrname, logger):
         else:
             # unique match found
             logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
-            image_data.append({'file': data[0], 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['type']})
+
+            if (cparams["db_flag"]):
+
+                # BUG FIX - We now need to check on the file size!
+                max_image_size = 750 # kB
+                dimension_factor = 0.95
+                loop_counter = 0
+                size_check = False
+            
+                logger.info("Checking on file size of {0} to determine if downsampling is needed for PSRDB upload...".format(data[0]))
+
+                while not (size_check):
+
+                    current_factor = dimension_factor**loop_counter
+
+                    if (loop_counter == 0):
+                        # initialise the image
+                        og_image = Image.open(data[0])
+                        og_sizes = og_image.size
+                        data_split = os.path.splitext(data[0])
+                        small_image_name = "{0}.small.jpg".format(data_split[0])
+                        next_image = og_image
+                        next_image_name = data[0]
+                    else:
+                        # make a downsized copy
+                        small_image = og_image.convert('RGB')
+                        small_image = small_image.resize((round(og_sizes[0]*current_factor), round(og_sizes[1]*current_factor)), Image.ANTIALIAS)
+                        small_image.save(small_image_name, optimize=True, quality=95)
+                        next_image = small_image
+                        next_image_name = small_image_name
+
+                    # image to be considered is ready - test file size (in MB)
+                    image_size = os.stat(next_image_name).st_size / 1024
+                    if (image_size <= max_image_size):
+                        size_check = True
+                        logger.info("Final image {2} downsampled {0} times ({1}% size of original)".format(loop_counter, current_factor*100, next_image_name))
+
+                    loop_counter += 1
+
+            else:
+                next_image_name = data[0]
+
+            image_data.append({'file': next_image_name, 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['type']})
 
     # write all images to PSRDB
     if (cparams["db_flag"]):
