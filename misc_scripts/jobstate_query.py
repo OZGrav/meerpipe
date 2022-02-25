@@ -85,7 +85,7 @@ processedobservations.get_dicts = True
 processedobservations.set_use_pagination(True)
 
 print ("Compiling raw list of processing entries (this will take a few minutes)...")
-#proc_data = processings.list(None, None, None, None, None)
+# proc_data = processings.list(None, None, None, None, None)
 proc_data = processedobservations.list(None, None, None, None, None)
 print ("Raw data compiled - {0} processing entries found".format(len(proc_data)))
 
@@ -134,7 +134,8 @@ for x in range(0, len(proc_data)):
 
     target_name = proc_entry['observation']['target']['name']
     obs_utc = utc_psrdb2normal(proc_entry['observation']['utcStart'])
-    results_list.append([proc_id, target_name, obs_utc, job_state])
+    pipe_name = proc_entry['pipeline']['name']
+    results_list.append([proc_id, pipe_name, target_name, obs_utc, job_state])
 
     #results_list.append([proc_id, job_state])
 
@@ -144,7 +145,7 @@ if (len(results_list) > 0):
 
     #header = "# ProcID Target ObsID ObsUTC JobState"
     #header = "# ProcID JobState"
-    header = "# ProcID Target ObsUTC JobState"
+    header = "# ProcID PipeName Target ObsUTC JobState"
     arr = results_list
 
     # check file or screen output
@@ -161,7 +162,7 @@ if (len(results_list) > 0):
             for x in range(0, len(arr)):
                 #outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
                 #outfile.write("{0}\t{1}\n".format(arr[x][0], arr[x][1]))
-                outfile.write("{0}\t{1}\t{2}\t{3}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3]))
+                outfile.write("{0}'t{1}\t{2}\t{3}\t{4}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
             outfile.close()
             print("{0} matching processing entries written to {1}.".format(len(arr), outpath))
         else:
@@ -169,7 +170,7 @@ if (len(results_list) > 0):
             for x in range(0, len(arr)):
                 #print ("{0}\t{1}\t{2}\t{3}\t{4}".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
                 #print ("{0}\t{1}".format(arr[x][0], arr[x][1]))
-                print ("{0}\t{1}\t{2}\t{3}".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3]))
+                print ("{0}\t{1}\t{2}\t{3}\t{4}".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
             print("{0} matching processing entries found.".format(len(arr)))
 
     else:
@@ -194,8 +195,8 @@ if (len(results_list) > 0):
             # check through the array
             count = 0
             for x in range(0, len(arr)):
-                if (ref_job_state == arr[x][3]):
-                    outfile.write("{0}\t{1}\t{2}\t{3}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3]))
+                if (ref_job_state == arr[x][4]):
+                    outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
                     count += 1
                     
             outfile.close()
