@@ -1731,7 +1731,7 @@ def generate_summary(output_dir, cparams, psrname, logger):
     # This will need modification once the S-Band receiver comes online. I have already made an appropriate start.
     if str(split_path[path_args - 2]) == "816":
         rcvr = "UHF"
-    elif str(split_path[path_args - 2]) == "1284":
+    elif str(split_path[path_args - 2]) == "1284" or str(split_path[path_args - 2]) == "1283":
         rcvr = "L-band"
     else:
         rcvr = "RCVR Unknown"
@@ -2144,7 +2144,7 @@ def generate_images(output_dir, cparams, psrname, logger):
         logger.info("Path freq = {0}".format(path_freq))
 
         # only build TOAs for L-band data so far - fix this later!
-        if (path_freq == "1284"):
+        if (path_freq == "1284" or path_freq == "1283"):
             if ("global_toa_path" in cparams):
                 if (os.path.exists(cparams["global_toa_path"]) == False):
                     os.makedirs(cparams["global_toa_path"])
