@@ -162,7 +162,7 @@ if (len(results_list) > 0):
             for x in range(0, len(arr)):
                 #outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
                 #outfile.write("{0}\t{1}\n".format(arr[x][0], arr[x][1]))
-                outfile.write("{0}'t{1}\t{2}\t{3}\t{4}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
+                outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
             outfile.close()
             print("{0} matching processing entries written to {1}.".format(len(arr), outpath))
         else:

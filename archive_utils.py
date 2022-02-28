@@ -2239,7 +2239,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                         next_image = small_image
                         next_image_name = small_image_name
 
-                    # image to be considered is ready - test file size (in MB)
+                    # image to be considered is ready - test file size (in KB)
                     image_size = os.stat(next_image_name).st_size / 1024
                     if (image_size <= max_image_size):
                         size_check = True
