@@ -306,6 +306,7 @@ def get_outputinfo(cparams,logger):
                         all_archives.append(archives)
 
                         #Computing RAM requirements for this observation
+                        """
                         if float(info_params["target_duration"]) <= 900.0: #Less than 15 mins
                             #reqram = "64g"
                             reqram = "32g"
@@ -321,9 +322,36 @@ def get_outputinfo(cparams,logger):
                         elif float(info_params["target_duration"]) > 18000.0: #More than 5 hours
                             #reqram = "768g"
                             reqram = "512g"
-             
+                        """
+                        # now calculating RAM requirements based on file size, per an empirically derived relation
+                        # may yet require future tweaking
+                        ram_slope = 10.6
+                        ram_intercept = 0.2 # GB
+                        ram_min = 0.3 # GB
+                        ram_factor = 1.15
+                        ram_factor_max = 10 # GB
+                        
+                        file_size = 0
+                        for subint in archives:
+                            file_size += os.stat(subint).st_size # KB
+
+                        # calculate RAM request in GB
+                        #reqram = ram_factor * ((file_size/(1024**3)) * ram_slope + ram_intercept)
+                        inter_ram = ((file_size/(1024**3)) * ram_slope + ram_intercept)
+                        if (inter_ram * ram_factor - inter_ram > ram_factor_max):
+                            reqram = inter_ram + ram_factor_max
+                        else:
+                            reqram = inter_ram * ram_factor
+
+                        if reqram < ram_min:
+                            reqram = ram_min
+
+                        # report result in MB
+                        reqram_str = "{0}m".format(int(np.ceil(reqram*1024)))
+
                         obs_time_list.append(info_params["target_duration"])
-                        required_ram_list.append(reqram)
+                        #required_ram_list.append(reqram)
+                        required_ram_list.append(reqram_str)
 
                         # Computing time requirements for this observation to be processed
                         # This is WIP - may need additional tweaking
