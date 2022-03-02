@@ -329,19 +329,19 @@ def get_outputinfo(cparams,logger):
                         ram_intercept = 0.2 # GB
                         ram_min = 0.3 # GB
                         ram_factor = 1.15
-                        ram_factor_max = 10 # GB
+                        #ram_factor_max = 15 # GB
                         
                         file_size = 0
                         for subint in archives:
                             file_size += os.stat(subint).st_size # KB
 
                         # calculate RAM request in GB
-                        #reqram = ram_factor * ((file_size/(1024**3)) * ram_slope + ram_intercept)
-                        inter_ram = ((file_size/(1024**3)) * ram_slope + ram_intercept)
-                        if (inter_ram * ram_factor - inter_ram > ram_factor_max):
-                            reqram = inter_ram + ram_factor_max
-                        else:
-                            reqram = inter_ram * ram_factor
+                        reqram = ram_factor * ((file_size/(1024**3)) * ram_slope + ram_intercept)
+                        #inter_ram = ((file_size/(1024**3)) * ram_slope + ram_intercept)
+                        #if (inter_ram * ram_factor - inter_ram > ram_factor_max):
+                        #    reqram = inter_ram + ram_factor_max
+                        #else:
+                        #    reqram = inter_ram * ram_factor
 
                         if reqram < ram_min:
                             reqram = ram_min
