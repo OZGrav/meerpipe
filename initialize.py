@@ -356,7 +356,7 @@ def get_outputinfo(cparams,logger):
                         # Computing time requirements for this observation to be processed
                         # This is WIP - may need additional tweaking
                         
-                        time_factor = 2.0
+                        time_factor = 2.5
                         effective_time = float(info_params["target_duration"])*time_factor
                         
                         if ( effective_time <= 14400 ): # 4 hours

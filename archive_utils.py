@@ -1729,7 +1729,7 @@ def generate_summary(output_dir, cparams, psrname, logger):
     # depending on where results are being stored, while the lower directory structure remains constant.
 
     # This will need modification once the S-Band receiver comes online. I have already made an appropriate start.
-    if str(split_path[path_args - 2]) == "816":
+    if str(split_path[path_args - 2]) == "816" or str(split_path[path_args - 2]) == "815":
         rcvr = "UHF"
     elif str(split_path[path_args - 2]) == "1284" or str(split_path[path_args - 2]) == "1283":
         rcvr = "L-band"
@@ -1780,15 +1780,27 @@ def generate_summary(output_dir, cparams, psrname, logger):
         #Checking if cleaned files exists
         cleaned_path = os.path.join(output_dir,"cleaned")
         cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
-        if len(cleanedfiles)  == 2:
-            sfile.write("CleanedFluxFiles: CHECK \n")
-        elif len(cleanedfiles) < 2:
-            sfile.write("CleanedFluxFiles: FAIL \n")
+        if (rcvr == "UHF"):
+            if (len(cleanedfiles) == 2):
+                if ((".ch" in cleanedfiles[0] or ".ch" in cleanedfiles[1]) and not (".ch" in cleanedfiles[0] and ".ch" in cleanedfiles[1])):
+                    sfile.write("CleanedChoppedFiles: CHECK \n")
+                else:
+                    sfile.write("CleanedChoppedFiles: FAIL \n")
+            elif (len(cleanedfiles) == 1 and ".ch" not in cleanedfiles[0]):
+                sfile.write("CleanedFiles: CHECK \n")
+            else:
+                sfile.write("CleanedFiles: FAIL \n")
 
-        elif len(cleanedfiles) == 4:
-            sfile.write("CleanedChoppedFluxFile: CHECK \n")
-        elif len(cleanedfiles) < 4 and len(cleanedfiles) > 2:
-            sfile.write("CleanedChoppedFluxFile: FAIL \n")
+        else:
+            if len(cleanedfiles)  == 2:
+                sfile.write("CleanedFluxFiles: CHECK \n")
+            elif len(cleanedfiles) < 2:
+                sfile.write("CleanedFluxFiles: FAIL \n")
+
+            elif len(cleanedfiles) == 4:
+                sfile.write("CleanedChoppedFluxFile: CHECK \n")
+            elif len(cleanedfiles) < 4 and len(cleanedfiles) > 2:
+                sfile.write("CleanedChoppedFluxFile: FAIL \n")
 
 
         #Checking if decimated files exist

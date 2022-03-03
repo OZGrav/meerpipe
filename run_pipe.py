@@ -59,7 +59,8 @@ parser.add_argument("-utc", dest="utc", help="Process a particular UTC. Should b
 parser.add_argument("-batch", dest="batch", help="Enable batch processing - multiple files")
 parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm",action="store_true")
 parser.add_argument("-pid",dest="pid",help="Process pulsars as PID (Ignores original PID)")
-parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value. Automatic allocation is ignored")
+parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value (GB). Automatic allocation is ignored")
+parser.add_argument("-forcetime", dest="forcetime", type=str, help="Force runtime to this value (HH:MM:SS). Automatic allocation is ignored")
 parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
 parser.add_argument("-softpath", help="Change software path", default="/fred/oz005/meerpipe/")
 
@@ -200,8 +201,20 @@ if toggle:
         required_time = required_time_list[obs_num]
 
         if args.forceram:
-            required_ram = int(args.forceram)
+            required_ram = "{0}m".format(int(float(args.forceram))*1024) # assumes args.forceram is in GB
             logger.warning("Forcing RAM to be {0}".format(required_ram))
+
+        if args.forcetime:
+            time_pieces = args.forcetime.split(":")
+            if not (len(time_pieces) == 3):
+                logger.error("Forcetime parameter not provided in correct format - using default allocation.")
+            else:
+                forcetime = timedelta(hours=int(time_pieces[0]), minutes=int(time_pieces[1]), seconds=int(time_pieces[2]))
+                if (forcetime.seconds < 86400):
+                    required_time = forcetime.seconds
+                    logger.warning("Forcing time to be {0} seconds".format(required_time))
+                else:
+                    logger.error("Forcetime parameter cannot be larger than 24 hours - using default allocation.")
 
         #Creating output directories for saving the data products
         create_structure(output_dir, config_params, psrnames[obs_num], logger)

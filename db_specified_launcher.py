@@ -47,6 +47,8 @@ parser.add_argument("-list_in", dest="list_in", help="(Secondary: required) - Li
 parser.add_argument("-runas", dest="runas", help="(Optional) - Specify an override pipeline to use in processing the observations. \nOptions:\n'PIPE' - launch each observation through multiple pipelines as defined by the 'launches' PSRDB table (default).\n'OBS' - use the observation PID to define pipeline selection.\n<int> - specify a specific PSRDB pipeline ID.\n<pid> - specify a MeerTIME project code (e.g. 'PTA', 'RelBin'), which will launch a default pipeline.", default="PIPE")
 parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm.",action="store_true")
 parser.add_argument("-job_limit", dest="joblimit", type=int, help="Max number of jobs to accept to the queue at any given time - script will wait and monitor for queue to reduce below this number before sending more.", default=1000)
+parser.add_argument("-forceram", dest="forceram", type=float, help="(Optional) Specify RAM to use for job execution (GB). Recommended only for single-job launches.")
+parser.add_argument("-forcetime", dest="forcetime", type=str, help="(Optional) Specify time to use for job execution (HH:MM:SS). Recommended only for single-job launches.")
 parser.add_argument("-errorlog", dest="errorlog", type=str, help="(Optional) File to store information on any failed launches for later debugging.", default=None)
 args = parser.parse_args()
 
@@ -319,6 +321,13 @@ def array_launcher(arr, ag, client, url, token):
                         # check for slurm
                         if (ag.slurm):
                             pipeline_launch_instruction = "{0} -slurm".format(pipeline_launch_instruction)
+
+                        # check manual force parameters
+                        # no validity checks here - this will be done in run_pipe.py
+                        if ag.forceram:
+                            pipeline_launch_instruction = "{0} -forceram {1}".format(pipeline_launch_instruction, ag.forceram)
+                        if ag.forcetime:
+                            pipeline_launch_instruction = "{0} -forcetime {1}".format(pipeline_launch_instruction, ag.forcetime)
 
                         # launch the jobs - check for SLURM limit if required and wait
                         if (ag.slurm):
