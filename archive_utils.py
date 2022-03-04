@@ -2136,10 +2136,24 @@ def generate_images(output_dir, cparams, psrname, logger):
         # generate TOA-based images
         # produce toas - need to recall the template used through the toas table
         logger.info("Obtaining templates and ephemerides for generating TOA images...")
-        template = glob.glob(os.path.join(str(timing_path),"{0}.std".format(psrname)))[0]
-        parfile = glob.glob(os.path.join(str(timing_path),"{0}.par".format(psrname)))[0]
-        selfile = glob.glob(os.path.join(str(timing_path),"{0}.select".format(psrname)))[0]
-        
+        template_list = glob.glob(os.path.join(str(timing_path),"{0}.std".format(psrname)))
+        if (len(template_list) > 0):
+            template = template_list[0]
+        else:
+            template = None
+
+        parfile_list = glob.glob(os.path.join(str(timing_path),"{0}.par".format(psrname)))
+        if (len(parfile_list) > 0):
+            parfile = parfile_list[0]
+        else:
+            parfile = None
+
+        selfile_list = glob.glob(os.path.join(str(timing_path),"{0}.select".format(psrname)))
+        if (len(selfile_list) > 0):
+            selfile = selfile_list[0]
+        else:
+            selfile = None
+
         toa_archive_name = "image_toas.ar"
         toa_archive_file = os.path.join(images_path, toa_archive_name)
         single_image_name = "toas_single.png"
@@ -2412,29 +2426,40 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
     obs_bw = float(info[1].split()[2])
     obs_freq = float(info[1].split()[3])    
 
-    # ensure this pat comment closely matches the one in generate_toas()
-    comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive)
-    args = shlex.split(comm)
-    f = open(timfile, "w")
-    subprocess.call(args, stdout=f)
-    f.close()
-    logger.info("TOA data generated and stored in {0}".format(timfile))
+    if not (template == None) and (os.path.exists(template)):
 
-    # use meerwatch functions to produce residual images for this observation
-    logger.info("Calling modified MeerWatch residual generation...")
-    residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
-    # check for valid output
-    if (len(residuals) > 0):
-        logger.info("Producing single-obs image from modified MeerWatch residuals...")
-        logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
-        plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
+        # ensure this pat comment closely matches the one in generate_toas()
+        comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive)
+        args = shlex.split(comm)
+        f = open(timfile, "w")
+        subprocess.call(args, stdout=f)
+        f.close()
+        logger.info("TOA data generated and stored in {0}".format(timfile))
 
-        # check if file creation was successful and return
-        return os.path.exists(image_file)
+        if not (parfile == None) and (os.path.exists(parfile)):
+
+            # use meerwatch functions to produce residual images for this observation
+            logger.info("Calling modified MeerWatch residual generation...")
+            residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
+            # check for valid output
+            if (len(residuals) > 0):
+                logger.info("Producing single-obs image from modified MeerWatch residuals...")
+                logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
+                plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
+
+                # check if file creation was successful and return
+                result = os.path.exists(image_file)
+            else:
+                logger.error("Insufficient TOAs to generate single-obs image - skipping...")
+                result =  False
+        else:
+            logger.error("No parfile provided! - Skipping single-obs TOA image generation...")
+            result = False
     else:
-        logger.error("Insufficient TOAs to generate single-obs image - skipping...")
-        return False
+        logger.error("No template provided! - Skipping single-obs TOA image generation...")
+        result = False
 
+    return result
 
 # produce residual image for all available observations that have completed processing and which match the project code
 # assumes that the TOA files have been dlyfix'd
@@ -2502,23 +2527,36 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
 
     # toa list generation complete - build TOAs
 
-    # ensure this pat comment closely matches the one in generate_toas()
-    comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_list)
-    args = shlex.split(comm)
-    f = open(timfile, "w")
-    subprocess.call(args, stdout=f)
-    f.close()
-    logger.info("Global TOA data generated and stored in {0}".format(timfile))
+    if not (template == None) and (os.path.exists(template)):
 
-    # use meerwatch functions to produce residual images for this observation
-    logger.info("Calling modified MeerWatch residual generation...")
-    residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
-    if (len(residuals) > 0):
-        logger.info("Producing global TOA image from modified MeerWatch residuals...")
-        plot_toas_fromarr(residuals, out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
+        # ensure this pat comment closely matches the one in generate_toas()
+        comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_list)
+        args = shlex.split(comm)
+        f = open(timfile, "w")
+        subprocess.call(args, stdout=f)
+        f.close()
+        logger.info("Global TOA data generated and stored in {0}".format(timfile))
 
-        # check if file creation was successful and return
-        return os.path.exists(image_file)
+        if not (parfile == None) and (os.path.exists(parfile)):
+
+            # use meerwatch functions to produce residual images for this observation
+            logger.info("Calling modified MeerWatch residual generation...")
+            residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
+            if (len(residuals) > 0):
+                logger.info("Producing global TOA image from modified MeerWatch residuals...")
+                plot_toas_fromarr(residuals, out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
+
+                # check if file creation was successful and return
+                result = os.path.exists(image_file)
+            else:
+                logger.error("Insufficient TOAs to generate global-obs image - skipping...")
+                result = False
+        else:
+            logger.error("No parfile provided! - Skipping global-obs TOA image generation...")
+            result = False
+
     else:
-        logger.error("Insufficient TOAs to generate global-obs image - skipping...")
-        return False
+        logger.error("No template provided! - Skipping global-obs TOA image generation...")
+        result = False
+
+    return result
