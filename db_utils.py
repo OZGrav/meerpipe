@@ -1192,6 +1192,72 @@ def create_pipelineimage(image, image_type, rank, cparams, client, logger):
 
     return retval
 
+# ROLE   : Creates a Pipelinefile entry with the specified parameters.
+#        : If a matching entry exists, that is updated returned instead.
+# INPUTS : String, String, Dictionary, GraphQL client, Logger object
+# RETURNS: Integer (success) | Exception (failure)
+def create_pipelinefile(filename, filetype, cparams, client, logger):
+
+    logger.info("Checking for existing files matching {0} from processing {1}".format(filename,cparams["db_proc_id"]))
+
+    # PSRDB setup
+    pipelinefiles = Pipelinefiles(client, cparams["db_url"], cparams["db_token"])
+
+    # sanitise input
+    filename = os.path.normpath(filename)
+
+    # Query matching Pipelinefiles entries and check for equivalence
+    response = pipelinefiles.list(
+        None,
+        int(cparams["db_proc_id"])
+    )
+    check_response(response)
+    pipefile_content = json.loads(response.content)
+    pipefile_data = pipefile_content['data']['allPipelinefiles']['edges']
+
+    # Check for matches based on file type
+    matches = 0
+    for x in range(0, len(pipefile_data)):
+        if (pipefile_data[x]['node']['fileType'] == filetype):
+            matches += 1
+            pipefile_id = pipelinefiles.decode_id(pipefile_data[x]['node']['id'])
+
+    if (matches == 0):
+        # if no entry exists, create one
+        response = pipelinefiles.create(
+            filename,
+            filetype,
+            int(cparams["db_proc_id"]),
+        )
+        pipefile_content = json.loads(response.content)
+        pipefile_id = pipefile_content['data']['createPipelinefile']['pipelinefile']['id']
+        retval = int(pipefile_id)
+        logger.info("No match found, new pipelinefile entry created, ID = {0}".format(retval))
+    elif (matches == 1):
+        # entry already exists - update and return
+        logger.info("Match found, pipelinefile ID = {0}".format(pipefile_id))
+        retval = int(pipefile_id)
+        update_id = update_pipelinefile(
+            retval,
+            filename,
+            filetype,
+            int(cparams["db_proc_id"]),
+            client,
+            cparams["db_url"],
+            cparams["db_token"]
+        )
+        #logger.info(update_id)
+        if (update_id != retval) or (update_id == None):
+            logger.error("Failure to update 'pipelinefiles' entry ID {0} - PSRDB cleanup may be required.".format(retval))
+        else:
+            logger.info("Updated PSRDB entry in 'pipelinefiles' table, ID = {0}".format(retval))
+    else:
+        # Houston, we have a problem
+        raise Exception("Multiple 'pipelinefile' entries found for combination of processing ID {0} and file type {1}".format(cparams["db_proc_id"], filetype))
+        retval = None
+
+    return retval
+
 # ----- UPDATE FUNCTIONS -----
 
 # ROLE   : Update the content of an existing Processing entry.
@@ -1396,6 +1462,52 @@ def update_pipelineimage(image_id, image, image_type, rank, proc_id, client, url
     else:
         return
 
+# ROLE   : Update the content of an existing Pipelinefile entry.
+#        : Unspecified parameters should be set to 'None'.
+# INPUTS : Integer, String, String, Integer,
+#          GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
+def update_pipelinefile(file_id, filename, filetype, proc_id, client, url, token):
+
+    # PSRDB setup
+    pipelinefiles = Pipelinefiles(client, url, token)
+    pipelinefiles.set_field_names(True, False)
+    processings = Processings(client, url, token)
+
+    # Query for file_id
+    response = pipelinefiles.list(file_id)
+    check_response(response)
+    pipefile_content = json.loads(response.content)
+    pipefile_data = pipefile_content['data']['pipelinefile']
+
+    # Check for validity and update
+    if not (pipefile_data == None):
+
+        # Check for parameters
+        if (filename == None):
+            filename = pipefile_data['file']
+        if (proc_id == None):
+            proc_id = processings.decode_id(pipefile_data['processing']['id'])
+        if (filetype == None):
+            filetype = pipefile_data['fileType']
+
+        # Sanitise
+        filename = os.path.normpath(filename)
+
+        # Update the entry
+        response = pipelinefiles.update(
+            int(file_id),
+            filename,
+            filetype,
+            int(proc_id)
+        )
+        check_response(response)
+        update_content = json.loads(response.content)
+        update_data = update_content['data']['updatePipelinefile']['pipelinefile']
+        update_id = update_data['id']
+        return int(update_id)
+    else:
+        return
 
 # ----- UNSORTED / NON-UPDATED FUNCTIONS -----
 # Note - most of these functions will eventually be deprecated once the remainder of the PSRDB

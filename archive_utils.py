@@ -49,7 +49,7 @@ from meerwatch_tools import get_res_fromtim, plot_toas_fromarr
 from util import ephemeris
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import create_ephemeris, create_template, create_toa_record, create_pipelineimage, get_results, update_processing
+from db_utils import create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage, get_results, update_processing
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -1355,20 +1355,21 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
                 TP_file = archive
             elif pid == "RelBin" and "Tp" in archive:
                 TP_file = archive
-            else:
-                # HACK - this file is required, so we need to build one and patch it back in
-                clarch = None
-                for entry in cleaned_archive:
-                    if ".ch.ar" not in entry:
-                        clarch = entry
-                if (clarch == None):
-                    clarch = cleaned_archive[0]
-                # cleaned archive selected - now scrunch it
-                comm = "pam -Tp -u {0} -e {1} {2}".format(decimated_path, del_string, clarch)
-                args = shlex.split(comm)
-                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-                proc.wait()
-                TP_file = proc.stdout.read().decode("utf-8").rstrip().split()[0]
+
+        if (TP_file == None):
+            # HACK - this file is required, so we need to build one and patch it back in
+            clarch = None
+            for entry in cleaned_archive:
+                if ".ch.ar" not in entry:
+                    clarch = entry
+            if (clarch == None):
+                clarch = cleaned_archive[0]
+            # cleaned archive selected - now scrunch it
+            comm = "pam -Tp -u {0} -e {1} {2}".format(decimated_path, del_string, clarch)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            TP_file = proc.stdout.read().decode("utf-8").rstrip().split()[0]
 
         if (TP_file == None):
             raise Exception("TP_file not set in fluxcalibrate() - check into this, because apparently this file is important!")
@@ -2449,6 +2450,21 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
 
                 # check if file creation was successful and return
                 result = os.path.exists(image_file)
+
+                # new function - store residuals file in PSRDB
+                # this is a bit of a hack but I just need it to work
+                if (cparams["db_flag"]):
+
+                    logger.info("PSRDB functionality activated - recording single-obs TOAs to PSRDB")
+                    db_client = GraphQLClient(cparams["db_url"], False)
+                    residual_file = os.path.join(os.path.dirname(timfile), os.path.basename(timfile).replace('.tim', '_res.txt'))
+                    local_pid = cparams["pid"].lower()
+                    residual_type = "{0}.single-res".format(local_pid)
+                    if (os.path.exists(residual_file)):
+                        logger.info("Residual file {0} identified - recording to PSRDB.".format(residual_file))
+                        create_pipelinefile(residual_file, residual_type, cparams, db_client, logger)
+                    else:
+                        logger.error("Residual file {0} not located - no output recorded to PSRDB.".format(residual_file))
             else:
                 logger.error("Insufficient TOAs to generate single-obs image - skipping...")
                 result =  False
@@ -2548,6 +2564,21 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
 
                 # check if file creation was successful and return
                 result = os.path.exists(image_file)
+
+                # new function - store residuals file in PSRDB
+                # this is a bit of a hack but I just need it to work
+                if (cparams["db_flag"]):
+
+                    logger.info("PSRDB functionality activated - recording global-obs TOAs to PSRDB")
+                    db_client = GraphQLClient(cparams["db_url"], False)
+                    residual_file = os.path.join(os.path.dirname(timfile), os.path.basename(timfile).replace('.tim', '_res.txt'))
+                    local_pid = cparams["pid"].lower()
+                    residual_type = "{0}.global-res".format(local_pid)
+                    if (os.path.exists(residual_file)):
+                        logger.info("Residual file {0} identified - recording to PSRDB.".format(residual_file))
+                        create_pipelinefile(residual_file, residual_type, cparams, db_client, logger)
+                    else:
+                        logger.error("Residual file {0} not located - no output recorded to PSRDB.".format(residual_file))
             else:
                 logger.error("Insufficient TOAs to generate global-obs image - skipping...")
                 result = False
