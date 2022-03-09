@@ -328,7 +328,7 @@ def get_outputinfo(cparams,logger):
                         ram_slope = 10.6
                         ram_intercept = 0.2 # GB
                         ram_min = 0.3 # GB
-                        ram_factor = 1.15
+                        ram_factor = 1.13
                         #ram_factor_max = 15 # GB
                         
                         file_size = 0
@@ -508,10 +508,24 @@ def create_structure(output_dir,cparams,psrname,logger):
             logger.info("Ephemeris for {0} not found. Generating new one.".format(psrname))
             psrcat = "psrcat -all -e {0}".format(psrname)
             proc = shlex.split(psrcat)
-            f = open("{0}/{1}.par".format(ephem_dir,psrname),"w")
-            subprocess.call(proc,stdout=f)
-            logger.info("An ephemeris was generated from the psrcat database")
-            copyfile(os.path.join(ephem_dir,psrname+".par"),os.path.join(pulsar_dir,psrname+".par"))
+            try:
+                f = open("{0}/{1}.par".format(ephem_dir,psrname),"w")
+                subprocess.call(proc,stdout=f)
+                f.close()
+            except:
+                logger.error("Could not open / create ephemeris file.")
+                
+            # check for success and implement one further contingency
+            if os.path.exists(os.path.join(ephem_dir,psrname+".par")):
+                logger.info("An ephemeris was generated from the psrcat database")
+                copyfile(os.path.join(ephem_dir,psrname+".par"),os.path.join(pulsar_dir,psrname+".par"))
+            else:
+                # skip storing the ephemeris in a master directory and store locally
+                logger.info("Unable to create ephemeris in {0}".format(ephem_dir))
+                logger.info("Storing ephemeris locally in {0} only.".format(pulsar_dir))
+                f = open("{0}/{1}.par".format(pulsar_dir,psrname),"w")
+                subprocess.call(proc,stdout=f)
+                f.close()
 
         #Copying pulsar template
         if os.path.exists(os.path.join(template_dir,psrname+".std")):

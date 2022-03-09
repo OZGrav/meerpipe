@@ -64,6 +64,54 @@ def get_ephemeris(psrname,output_path,cparams,logger):
 
     return par_path
 
+def get_ephemeris_doublecheck(psrname,output_dir,ephem,archive_list,cparams,logger):
+
+    # backup methods of getting an ephemeris in case the primary function fails
+    output_dir = str(output_dir)
+
+    if not (os.path.isfile(ephem)):
+        # fallback 1 - look in the local directory
+        local_par = os.path.join(output_dir,psrname+".par")
+    else:
+        local_par = ephem
+
+    # fallback 2 - if the file still doesn't exist or is invalid,
+    # create an ephemeris in the local directory from the archives themselves
+
+    # check for existence and validity
+    if (os.path.isfile(local_par)):
+        eph_file = open(local_par, 'r')
+        line = eph_file.readline()
+        eph_file.close()
+
+        if ("WARNING" in line) and ("not in catalogue" in line):
+            eph_test = False
+            logger.info("Ephemeris found at {0} but is invalid".format(local_par))
+        else:
+            logger.info("Valid ephemeris found at {0}".format(local_par))
+            eph_test = True
+    else:
+        logger.info("Could not find ephemeris at {0}".format(local_par))
+        eph_test = False
+
+    # go to fallback 2
+    if not (eph_test):
+
+        logger.info("Test 1")
+        local_par = os.path.join(output_dir,psrname+".par")
+        logger.info("Test 2")
+        logger.info("Creating local ephemeris at {0} from internal archive ephemeris.".format(local_par))
+        logger.info("Test 3")
+        par_fh = open(local_par, 'w')
+        logger.info("Test 4")
+        comm = "vap -E {0}".format(archive_list[0])
+        logger.info(comm)
+        proc = subprocess.Popen(shlex.split(comm), stdin=subprocess.PIPE, stdout=par_fh)
+        proc.wait()
+        par_fh.close()
+
+    return local_par
+
 def get_pptatemplate(backend,psrname,cfreq,nbin,logger):
     "Function written specifically to obtain proper PPTA templates"
     toa_path = "/fred/oz002/meertime/meerpipe/ppta_zap_results/ppta_zap_template/ppta_templates"
@@ -164,6 +212,8 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
 
             #Set ephemeris while psradd
             ephem = get_ephemeris(psrname,output_path,cparams,logger)
+            # redundancy check
+            ephem = get_ephemeris_doublecheck(psrname,output_dir,ephem,archive_list,cparams,logger)
             add_raw = 'psradd -M {0} -o {1}/{2} -E {3}'.format(raw_archives,str(output_dir),str(added_fname),ephem)
             proc_add = shlex.split(add_raw)
             p_add = subprocess.Popen(proc_add)
