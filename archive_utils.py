@@ -1369,12 +1369,15 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
 def fluxcalibrate(output_dir, cparams, psrname, logger):
 
+    logger.info("Beginning flux calibration routine...")
+
     # needed for a hack later
     del_string = "delme"
 
     obsheader_path = glob.glob(os.path.join(str(output_dir), "*obs.header"))[0]
     header_params = get_obsheadinfo(obsheader_path)
-    parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{}*par".format(psrname)))
+    #parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{}*par".format(psrname)))
+    parfile = glob.glob(os.path.join(str(output_dir),"{0}.par".format(psrname)))[0]
     if len(parfile) == 0:
         logger.warning("No par file found for "+psrname)
         parfile = None
