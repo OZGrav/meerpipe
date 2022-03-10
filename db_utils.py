@@ -937,9 +937,10 @@ def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, 
     response = toas.list(
         None,
         cparams["db_proc_id"],
-        cparams["db_fold_id"],
-        eph_id,
-        template_id
+        cparams["db_fold_id"]
+        #cparams["db_fold_id"],
+        #eph_id,
+        #template_id
     )
     check_response(response)
     toa_content = json.loads(response.content)
@@ -978,6 +979,15 @@ def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, 
         logger.info("Match found, TOA ID = {0}".format(retval))
         logger.info("Updating entry...")
         comment = "Entry updated as part of MeerPIPE - Pipeline ID {0} (Project {1})".format(cparams["db_pipe_id"], cparams["pid"])
+
+        # NEW - Note changes to ephemeris / template IDs
+        orig_eph_id = toas.decode_id(toa_data[0]['node']['timingEphemeris']['id'])
+        orig_template_id = toas.decode_id(toa_data[0]['node']['timingEphemeris']['id'])
+        if not (int(eph_id) == int(orig_eph_id)):
+            comment = comment + ' - Ephemeris updated from {0}'.format(orig_eph_id)
+        if not (int(template_id) == int(orig_template_id)):
+            comment = comment + ' - Template updated from {0}'.format(orig_template_id)
+
         update_id = update_toa_record(
             retval,
             int(cparams["db_proc_id"]),
