@@ -982,7 +982,7 @@ def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, 
 
         # NEW - Note changes to ephemeris / template IDs
         orig_eph_id = toas.decode_id(toa_data[0]['node']['timingEphemeris']['id'])
-        orig_template_id = toas.decode_id(toa_data[0]['node']['timingEphemeris']['id'])
+        orig_template_id = toas.decode_id(toa_data[0]['node']['template']['id'])
         if not (int(eph_id) == int(orig_eph_id)):
             comment = comment + ' - Ephemeris updated from {0}'.format(orig_eph_id)
         if not (int(template_id) == int(orig_template_id)):
