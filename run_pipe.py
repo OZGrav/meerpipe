@@ -201,7 +201,7 @@ if toggle:
         required_time = required_time_list[obs_num]
 
         if args.forceram:
-            required_ram = "{0}m".format(int(float(args.forceram))*1024) # assumes args.forceram is in GB
+            required_ram = "{0}m".format(int(float(args.forceram)*1024)) # assumes args.forceram is in GB
             logger.warning("Forcing RAM to be {0}".format(required_ram))
 
         if args.forcetime:
