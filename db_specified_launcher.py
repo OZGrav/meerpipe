@@ -61,10 +61,11 @@ args = parser.parse_args()
 # RETURNS: Array (success) | None (failure) 
 def get_foldedobservation_list(utc1, utc2, pulsar, pcode, client, url, token):
 
-    # PSRDB setup                                                                                                                                                                                                                           
+    # PSRDB setup
     foldedobs = FoldedObservations(client, url, token)
 
-    # Query based on provided parameters                                                                                                                                                                                                    
+    # Query based on provided parameters
+
     response = foldedobs.list(
         None,
         pulsar,
@@ -81,7 +82,7 @@ def get_foldedobservation_list(utc1, utc2, pulsar, pcode, client, url, token):
     foldobs_content = json.loads(response.content)
     foldobs_data = foldobs_content['data']['allFoldings']['edges']
 
-    # check for a valid result                                                                                                                                                                                                               
+    # check for a valid result
     if (len(foldobs_data) > 0):
         return foldobs_data
     else:
