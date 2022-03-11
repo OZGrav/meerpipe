@@ -8,7 +8,7 @@ __author__ = "Andrew Cameron"
 __copyright__ = "Copyright (C) 2022 Andrew Cameron"
 __credits__ = ["Aditya Parthasarathy", "Andrew Jameson", "Stefan Oslowski"]                                                                                                                                                                 
 __license__ = "Public Domain"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Andrew Cameron"
 __email__ = "andrewcameron@swin.edu.au"
 __status__ = "Development"
@@ -45,7 +45,8 @@ parser.add_argument("-obs_pid", dest="pid", help="(Primary: optional) - Project 
 parser.add_argument("-list_out", dest="list_out", help="(Primary: optional) - Output file name to write the list of observations submitted by this particular search. Does not work in secondary mode as it would simply duplicate the input list.")
 parser.add_argument("-list_in", dest="list_in", help="(Secondary: required) - List of observations to process, given in standard format. These will be crossmatched against PSRDB before job submission. List format must be:\n* Column 1 - Pulsar name\n* Column 2 - UTC\n* Column 3 - Observation PID\nTrailing columns may be left out if needed, but at a minimum the pulsar name must be provided.")
 parser.add_argument("-runas", dest="runas", help="(Optional) - Specify an override pipeline to use in processing the observations. \nOptions:\n'PIPE' - launch each observation through multiple pipelines as defined by the 'launches' PSRDB table (default).\n'OBS' - use the observation PID to define pipeline selection.\n<int> - specify a specific PSRDB pipeline ID.\n<pid> - specify a MeerTIME project code (e.g. 'PTA', 'RelBin'), which will launch a default pipeline.", default="PIPE")
-parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm.",action="store_true")
+parser.add_argument("-slurm", dest="slurm", help="Processes all jobs using the OzStar Slurm queue.",action="store_true")
+parser.add_argument("-unprocessed", dest="unprocessed", help="Launch only those observations which have not yet been processed by the specified pipelines.", action="store_true")
 parser.add_argument("-job_limit", dest="joblimit", type=int, help="Max number of jobs to accept to the queue at any given time - script will wait and monitor for queue to reduce below this number before sending more.", default=1000)
 parser.add_argument("-forceram", dest="forceram", type=float, help="(Optional) Specify RAM to use for job execution (GB). Recommended only for single-job launches.")
 parser.add_argument("-forcetime", dest="forcetime", type=str, help="(Optional) Specify time to use for job execution (HH:MM:SS). Recommended only for single-job launches.")
@@ -63,10 +64,12 @@ def get_foldedobservation_list(utc1, utc2, pulsar, pcode, client, url, token):
 
     # PSRDB setup
     foldedobs = FoldedObservations(client, url, token)
+    foldedobs.get_dicts = True
+    foldedobs.set_use_pagination(True)
 
     # Query based on provided parameters
 
-    response = foldedobs.list(
+    foldobs_data = foldedobs.list(
         None,
         pulsar,
         None,
@@ -78,10 +81,7 @@ def get_foldedobservation_list(utc1, utc2, pulsar, pcode, client, url, token):
         utc1,
         utc2
     )
-    check_response(response)
-    foldobs_content = json.loads(response.content)
-    foldobs_data = foldobs_content['data']['allFoldings']['edges']
-
+    
     # check for a valid result
     if (len(foldobs_data) > 0):
         return foldobs_data
@@ -164,6 +164,51 @@ def get_location(dbdata, client, url, token):
         raise Exception("Passed array to function expecting non-array input - aborting.")
 
     return dbdata['node']['processing']['location']
+
+# ROLE   : Returns the parent processing associated with a single entry of folded obs data
+# INPUTS : PSRDB JSON data, GraphQL client, String, String
+# RETURNS: Int | None (failure)
+def get_parent_id(dbdata, client, url, token):
+
+    # check for valid input
+    if (isinstance(dbdata, list)):
+        raise Exception("Passed array to function expecting non-array input - aborting.")
+
+    processings = Processings(client, url, token)
+    return int(processings.decode_id(dbdata['node']['processing']['id']))
+
+# ROLE   : Checks if there a is a processing already matching the provided criteria
+# INPUTS : Int, Int, Int, GraphQL client, String, String
+# RETURNS: Boolean
+def check_for_processing(parent_id, obs_id, pipe_id, client, url, token):
+
+    # sanitise input
+    parent_id = int(parent_id)
+    pipe_id = int(pipe_id)
+    obs_id = int(obs_id)
+    
+    # PSRDB setup
+    processings = Processings(client, url, token)
+    processings.set_field_names(True, False)
+
+    response = processings.list(
+        None,
+        obs_id,
+        parent_id,
+        None,
+        None
+    )
+    proc_content = json.loads(response.content)
+    proc_data = proc_content['data']['allProcessings']['edges']
+
+    result = False
+    # check for matching pipe_id
+    for x in range(0, len(proc_data)):
+        proc_pipe_id = int(processings.decode_id(proc_data[x]['node']['pipeline']['id']))
+        result = result or (proc_pipe_id == pipe_id)
+
+    return result
+        
 
 # ROLE   : Determines which pipeline should be run based on the scheme outlined in the help menu
 # INPUTS : Arg dictionary, Int
@@ -274,6 +319,7 @@ def array_launcher(arr, ag, client, url, token):
             utc = get_utc(arr[x], client, url, token)
             obs_location = get_location(arr[x], client, url, token)
             psr_id = get_pulsar_id(psr_name, client, url, token)
+            parent_id = get_parent_id(arr[x], client, url, token)
 
             # determine which pipelines get launched
             pipeline_list = determine_pipelines(arr[x], ag, psr_id, client, url, token)
@@ -283,6 +329,7 @@ def array_launcher(arr, ag, client, url, token):
                 for y in range(0, len(pipeline_list)):
 
                     # catch errors and report to file
+                    errorstring=""
                     try:
                         # need to get the configuration data
                         config_data = get_pipe_config(pipeline_list[y], client, url, token)
@@ -292,7 +339,8 @@ def array_launcher(arr, ag, client, url, token):
                         # check if config data actually exists
                         # there may be a better way to handle this case, but for now...
                         if (len(config_data) == 0):
-                            raise Exception ("Attempted to run pipeline ({0}) with no config information - aborting. Please inspect execution parameters and try again".format(pipeline_list[y]))
+                            errorstring="Attempted to run pipeline ({0}) with no config information - aborting. Please inspect execution parameters and try again".format(pipeline_list[y])
+                            raise Exception(errorstring)
 
                         # check for file path consistency for the raw data location
                         config_query = "grep input_path {0}".format(config_data['config'])
@@ -302,19 +350,31 @@ def array_launcher(arr, ag, client, url, token):
                         linearray = out.split("\n")[0].split(" ")
 
                         if (len(linearray) != 3):
-                            raise Exception("Config file ({0}) parameter 'input_path' is not the correct length.".format(config_data['config']))
+                            errorstring="Config file ({0}) parameter 'input_path' is not the correct length.".format(config_data['config'])
+                            raise Exception(errorstring)
 
                         in_path = linearray[2]
                         
                         # check if the paths are self-consistent
                         if (not ((in_path in obs_location) or (obs_location in in_path))):
-                            raise Exception("Config file ({0}) parameter 'input_path' is inconsistent with database file locations - skipping".format(config_data['config']))
+                            errorstring="Config file ({0}) parameter 'input_path' is inconsistent with database file locations - skipping".format(config_data['config'])
+                            raise Exception(errorstring)
 
                         # get the launch project code from the config data
                         launch_project_code = pid_getshort(config_data['pid'])
 
                         # get the obs_id to prevent duplicate job launching
                         obs_id = get_foldedobservation_obsid(utc, psr_name, obs_location, client, url, token)
+
+                        # check for the unprocessed flag
+                        if (ag.unprocessed):
+                            
+                            # check if a processing already exists
+                            unproc_test = check_for_processing(parent_id, obs_id, pipeline_list[y], client, url, token)
+                            if (unproc_test):
+                                print ("Skipping: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
+                                print ("Processing already exists!")
+                                continue
 
                         # finally, launch
                         print ("Launching: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
@@ -348,7 +408,7 @@ def array_launcher(arr, ag, client, url, token):
                                     print ("Script-imposed SLURM queue limit of {0} exceeded.".format(ag.joblimit))
                                     print ("Current time is {0} - waiting {1} seconds...".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), delay))
                                     time.sleep(delay)
-                                
+                        
                         proc_query = shlex.split(pipeline_launch_instruction)
                         proc = subprocess.Popen(proc_query)
                         # wait until jobs are finished launching before returning the command line
@@ -359,6 +419,7 @@ def array_launcher(arr, ag, client, url, token):
                         # report error
                         if not (ag.errorlog == None):
                             errorfile.write("\n-- Error detected --\n")
+                            errorfile.write("{}\n".format(errorstring))
                             errorfile.write("Pipeline = {0}\n".format(pipeline_list[y]))
                             errorfile.write("{}\n".format(json.dumps(arr[x])))
                         

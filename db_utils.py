@@ -651,13 +651,7 @@ def get_results(proc_id, client, url, token):
     processings = Processings(client, url, token)
 
     # Query for proc_id
-    response = processings.list(
-        proc_id,
-        None,
-        None,
-        None,
-        None
-    )
+    response = processings.list(proc_id)
     check_response(response)
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['processing']
@@ -668,6 +662,29 @@ def get_results(proc_id, client, url, token):
         return results
     else:
         return
+
+# ROLE   : Return the pipeline associated with a given Processing ID
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: Integer | None (failure)
+def get_proc_pipeid(proc_id, client, url, token):
+
+    # PSRDB setup
+    processings = Processings(client, url, token)
+    processings.set_field_names(True, False)
+
+    # Query for proc_id
+    response = processings.list(proc_id)
+    check_response(response)
+    proc_content = json.loads(response.content)
+    proc_data = proc_content['data']['processing']
+
+    # Check for valid proc_id
+    if not (proc_data == None):
+        pipe_id = int(processings.decode_id(proc_data['pipeline']['id']))
+        return pipe_id
+    else:
+        return
+
 
 # ROLE   : Return the config JSON of a pipeline entry
 # INPUTS : Integer, GraphQL client, String, String
