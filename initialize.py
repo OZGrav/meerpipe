@@ -327,7 +327,7 @@ def get_outputinfo(cparams,logger):
                         # may yet require future tweaking
                         ram_slope = 10.6
                         ram_intercept = 0.2 # GB
-                        ram_min = 0.3 # GB
+                        ram_min = 0.5 # GB
                         ram_factor = 1.13
                         #ram_factor_max = 15 # GB
                         
