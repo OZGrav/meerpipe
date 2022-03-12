@@ -326,8 +326,8 @@ def get_outputinfo(cparams,logger):
                         # now calculating RAM requirements based on file size, per an empirically derived relation
                         # may yet require future tweaking
                         ram_slope = 10.6
-                        ram_intercept = 0.2 # GB
-                        ram_min = 0.5 # GB
+                        ram_intercept = 0.4 # GB
+                        ram_min = 0.6 # GB
                         ram_factor = 1.13
                         #ram_factor_max = 15 # GB
                         
@@ -356,7 +356,7 @@ def get_outputinfo(cparams,logger):
                         # Computing time requirements for this observation to be processed
                         # This is WIP - may need additional tweaking
                         
-                        time_factor = 2.5
+                        time_factor = 2.7
                         effective_time = float(info_params["target_duration"])*time_factor
                         
                         if ( effective_time <= 14400 ): # 4 hours
