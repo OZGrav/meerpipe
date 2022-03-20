@@ -2142,12 +2142,14 @@ def generate_images(output_dir, cparams, psrname, logger):
         length = float(info[1].split()[2])
 
         logger.info("Beginning S/N analysis...")
+        #logger.info("NSUB = {0} | LENGTH = {1}".format(nsub, length))
 
         # collect and write snr data
         snr_data = []
         snr_cumulative = 0
         snr_report = os.path.join(images_path, "snr.dat")
         for x in range(0, nsub):
+            #logger.info ("S/N loop = {}".format(x))
             comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
