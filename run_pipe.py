@@ -179,14 +179,18 @@ if toggle:
             split_path = output_info[obs_num].split("/")
             path_args = len(split_path)
             obs_utc = split_path[path_args - 4]
-            obs_id = get_foldedobservation_obsid(
-                utc_normal2psrdb(obs_utc),
-                psrnames[obs_num],
-                os.path.dirname(archive_list[obs_num][0]), # this is a complete hack - come back to fix this in version 2
-                db_client,
-                db_url,
-                db_token
-            )
+            if (len(archive_list[obs_num]) == 0):
+                logger.error("Archive list for this observation is empty - skipping observation!")
+                continue
+            else:
+                obs_id = get_foldedobservation_obsid(
+                    utc_normal2psrdb(obs_utc),
+                    psrnames[obs_num],
+                    os.path.dirname(archive_list[obs_num][0]), # this is a complete hack - come back to fix this in version 2
+                    db_client,
+                    db_url,
+                    db_token
+                )
 
             # compare this against the provided obs_id if it exists
             if not (args.db_obsid == None):
