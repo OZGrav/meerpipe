@@ -211,14 +211,19 @@ if toggle:
         if args.forcetime:
             time_pieces = args.forcetime.split(":")
             if not (len(time_pieces) == 3):
-                logger.error("Forcetime parameter not provided in correct format - using default allocation.")
+                logger.error("Forcetime parameter not provided with hours, minutes and seconds in correct format - using default allocation.")
+            elif not (len(time_pieces[1]) == 2) or not (len(time_pieces[2]) == 2):
+                logger.error("Forectime parameter not provided with 2-digit MM or SS - using default allocation.")
             else:
-                forcetime = timedelta(hours=int(time_pieces[0]), minutes=int(time_pieces[1]), seconds=int(time_pieces[2]))
-                if (forcetime.seconds < 86400):
-                    required_time = forcetime.seconds
-                    logger.warning("Forcing time to be {0} seconds".format(required_time))
+                # try for integer conversion
+                try:
+                    hours = int(time_pieces[0])
+                    minutes = int(time_pieces[1])
+                    seconds = int(time_pieces[2])
+                except:
+                    logger.error("Forectime parameter not provided with int compatible fields - using default allocation.")
                 else:
-                    logger.error("Forcetime parameter cannot be larger than 24 hours - using default allocation.")
+                    required_time = (hours * 60 + minutes) * 60 + seconds
 
         #Creating output directories for saving the data products
         create_structure(output_dir, config_params, psrnames[obs_num], logger)
@@ -341,6 +346,11 @@ if toggle:
                 user_email = config_params['email']
             else:
                 user_email = "adityapartha3112@gmail.com"
+
+            # convert required time back into HH:MM:SS
+            mm,ss = divmod(required_time, 60)
+            hh,mm = divmod(mm, 60)
+            timestring = "%02d:%02d:%02d" % (hh, mm, ss)
             
             with open(os.path.join(output_dir,str(job_name)),'w') as job_file:
                 job_file.write("#!/bin/bash \n")
@@ -348,7 +358,7 @@ if toggle:
                 job_file.write("#SBATCH --output={0}meerpipe_out_{1}_{2} \n".format(str(output_dir),psrnames[obs_num],obs_num))
                 job_file.write("#SBATCH --ntasks=1 \n")
                 job_file.write("#SBATCH --mem={0} \n".format(required_ram))
-                job_file.write("#SBATCH --time={0} \n".format(timedelta(seconds=required_time)))
+                job_file.write("#SBATCH --time={0} \n".format(timestring))
                 #job_file.write("#SBATCH --time=4:00:00 \n")
                 #job_file.write("#SBATCH --reservation=oz005_obs \n")
                 #job_file.write("#SBATCH --account=oz005 \n")

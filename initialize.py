@@ -356,18 +356,18 @@ def get_outputinfo(cparams,logger):
                         # Computing time requirements for this observation to be processed
                         # This is WIP - may need additional tweaking
                         
-                        time_factor = 4.0
-                        effective_time = float(info_params["target_duration"])*time_factor
-                        
+                        # based now on empirical study of the processing time required by jobs
+                        time_factor = 2.3
+                        effective_time = int(np.ceil((file_size/(1024**2)) * time_factor)) # seconds
+
                         if ( effective_time <= 14400 ): # 4 hours
                             # minimum time
                             reqtime = 14400
-                        elif ( effective_time >= 86400): #24 hours
-                            # maximum time
-                            reqtime = 86399
                         else:
                             # dynamic time
                             reqtime = effective_time 
+
+                        # maximum cap of 86399 seconds removed
 
                         required_time_list.append(int(reqtime))
 
