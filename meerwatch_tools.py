@@ -61,7 +61,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
     return(toas)
 
 
-def plot_toas_fromarr(toas, fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None):
+def plot_toas_fromarr(toas, pid="unk", fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None):
 
     if out_dir:
         out_file = os.path.join(out_dir, out_file)
@@ -128,8 +128,10 @@ def plot_toas_fromarr(toas, fs=14, out_file="toas.png", out_dir=None, sequential
     cb.set_label("Observing frequency (MHz)", rotation=270, size=fs, labelpad=16)
     if sequential:
         ax.set_xlabel("ToA Number", fontsize=fs)
+        ax.set_title("Single-observation TOAs ({0})".format(pid), fontsize=fs)
     else:
         ax.set_xlabel("MJD", fontsize=fs)
+        ax.set_title("Global TOAs ({0})".format(pid), fontsize=fs)
 
     ax.set_ylabel("residuals ($\mu$s)", fontsize=fs)
     if title is not None and type(title) is str:

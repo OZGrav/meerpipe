@@ -2082,11 +2082,11 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # basic psrplot images - mimicking ingest images
         plot_commands = [
-            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'rank': 1, 'type': '{0}.profile-int.hi'.format(local_pid)} ,
-            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'rank': 2, 'type': '{0}.profile-pol.hi'.format(local_pid)},
-            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'rank': 4, 'type': '{0}.phase-freq.hi'.format(local_pid)},
-            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'rank': 3, 'type': '{0}.phase-time.hi'.format(local_pid)},
-            {'comm': 'psrplot -p b -x -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'rank': 8, 'type': '{0}.bandpass.hi'.format(local_pid)},
+            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'title': 'Stokes I Profile ({0})'.format(cparams["pid"]), 'rank': 1, 'type': '{0}.profile-int.hi'.format(local_pid)} ,
+            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'title': 'Polarisation Profile ({0})'.format(cparams["pid"]), 'rank': 2, 'type': '{0}.profile-pol.hi'.format(local_pid)},
+            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'title': 'Phase vs. Frequency ({0})'.format(cparams["pid"]), 'rank': 4, 'type': '{0}.phase-freq.hi'.format(local_pid)},
+            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'title': 'Phase vs. Time ({0})'.format(cparams["pid"]), 'rank': 3, 'type': '{0}.phase-time.hi'.format(local_pid)},
+            {'comm': 'psrplot -p b -x -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'title': 'Cleaned bandpass ({0})'.format(cparams["pid"]), 'rank': 8, 'type': '{0}.bandpass.hi'.format(local_pid)},
         ]
 
         # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
@@ -2107,7 +2107,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 if (os.path.exists(image_file)):
                     os.remove(image_file)
                 # comm = "{0} -g {1}/png {2}".format(plot_commands[x]['comm'], image_name, clean_file)
-                comm = "{0} {2} -g 1024x768 -c above:l= -c above:c= -D {1}/png".format(plot_commands[x]['comm'], image_name, clean_file)
+                comm = "{0} {2} -g 1024x768 -c above:l= -c above:c='{3}' -D {1}/png".format(plot_commands[x]['comm'], image_name, clean_file, plot_commands[x]['title'])
                 args = shlex.split(comm)
                 proc = subprocess.Popen(args,stdout=subprocess.PIPE)
                 proc.wait()
@@ -2164,8 +2164,8 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # plot results - single subint snr
         matplot_commands = [
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR', 'name': 'SNR_single', 'rank': 7, 'type': '{0}.snr-single.hi'.format(local_pid)},
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR', 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr-cumul.hi'.format(local_pid)},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR ({0})'.format(cparams["pid"]), 'name': 'SNR_single', 'rank': 7, 'type': '{0}.snr-single.hi'.format(local_pid)},
+            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR ({0})'.format(cparams["pid"]), 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr-cumul.hi'.format(local_pid)},
         ]
 
         for x in range(0, len(matplot_commands)):
@@ -2501,7 +2501,7 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
             if (len(residuals) > 0):
                 logger.info("Producing single-obs image from modified MeerWatch residuals...")
                 logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
-                plot_toas_fromarr(residuals, out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
+                plot_toas_fromarr(residuals, pid=cparams["pid"], out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
 
                 # check if file creation was successful and return
                 result = os.path.exists(image_file)
@@ -2615,7 +2615,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
             residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
             if (len(residuals) > 0):
                 logger.info("Producing global TOA image from modified MeerWatch residuals...")
-                plot_toas_fromarr(residuals, out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
+                plot_toas_fromarr(residuals, pid=cparams["pid"], out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
 
                 # check if file creation was successful and return
                 result = os.path.exists(image_file)
