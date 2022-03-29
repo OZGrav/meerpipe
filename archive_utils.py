@@ -2563,7 +2563,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     # assumes that the output path of the current config file contains all neccessary observations
     toa_archives = glob.glob(os.path.join(cparams["output_path"],"{0}/{1}/*/*/*/images/image_toas.ar".format(cparams["pid"], psrname)))
     # get parameters with reference to the local toa_archive
-    comm = "vap -c telescop,bw,freq {0}".format(local_toa_archive)
+    comm = "vap -c telescop,bw,freq,mjd {0}".format(local_toa_archive)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
@@ -2571,6 +2571,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     telescope = str(info[1].split()[1])
     obs_bw = float(info[1].split()[2])
     obs_freq = float(info[1].split()[3])
+    obs_mjd = float(info[1].split()[4])
 
     # begin the scroll
     toa_list = ""
@@ -2615,7 +2616,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
             residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
             if (len(residuals) > 0):
                 logger.info("Producing global TOA image from modified MeerWatch residuals...")
-                plot_toas_fromarr(residuals, pid=cparams["pid"], out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
+                plot_toas_fromarr(residuals, pid=cparams["pid"], mjd=obs_mjd, out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
 
                 # check if file creation was successful and return
                 result = os.path.exists(image_file)

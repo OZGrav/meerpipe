@@ -19,6 +19,19 @@ import subprocess as sproc
 import matplotlib.pyplot as plt
 from matplotlib import colors, cm
 
+# calculate the rms of the toa format used in this library
+def weighted_rms(toas):
+
+    numerator = 0
+    denominator = 0
+
+    for x in range (0, len(toas)):
+        
+        weight = 1.0 / (toas['err'][x]**2)
+        numerator += weight * (toas['res'][x]**2)
+        denominator += weight
+
+    return np.sqrt(numerator / denominator)
 
 def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False):
 
@@ -61,7 +74,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
     return(toas)
 
 
-def plot_toas_fromarr(toas, pid="unk", fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None):
+def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None):
 
     if out_dir:
         out_file = os.path.join(out_dir, out_file)
@@ -131,7 +144,18 @@ def plot_toas_fromarr(toas, pid="unk", fs=14, out_file="toas.png", out_dir=None,
         ax.set_title("Single-observation TOAs ({0})".format(pid), fontsize=fs)
     else:
         ax.set_xlabel("MJD", fontsize=fs)
-        ax.set_title("Global TOAs ({0})".format(pid), fontsize=fs)
+        
+        # new - include WRMS as part of the plot
+        if (len(toas) > 0):
+            wrms = weighted_rms(toas)/(1e-6)
+            ax.set_title("Global TOAs ({0}) | Wrms={1:.2f}$\mu$s".format(pid, wrms), fontsize=fs)
+        else:
+            ax.set_title("Global TOAs ({0})".format(pid), fontsize=fs)
+        #ax.set_title("Global TOAs ({0})".format(pid), fontsize=fs)
+
+        # new - add vertical line to indicate the MJD of the observation being processed
+        if not ( mjd == None ):
+            ax.vlines(mjd, ymin=0, ymax=1, color='red', linestyle='dotted', transform=ax.get_xaxis_transform(), zorder=1)
 
     ax.set_ylabel("residuals ($\mu$s)", fontsize=fs)
     if title is not None and type(title) is str:
