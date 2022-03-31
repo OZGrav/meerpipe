@@ -2579,9 +2579,9 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
         #logger.error("PSRDB mode not active - Global TOA residual image will not be generated.")
 
     # set up paths, filenames and required parameters
-    timfile = os.path.join(image_path, "{0}.{1}_global.tim".format(cparams["pid"].lower(), psrname))
-    image_file = os.path.join(image_path, image_name)
     local_pid = cparams["pid"].lower()
+    timfile = os.path.join(image_path, "{0}.{1}_global.tim".format(local_pid, psrname))
+    image_file = os.path.join(image_path, image_name)
     files_to_store = []
 
     # scroll through all available observations under the file heirarchy matching the required parameters
