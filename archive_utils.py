@@ -580,6 +580,8 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
         
         # Recall results field and update
         results = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
+        logger.info("Recalled results of processing ID {0}".format(cparams["db_proc_id"]))
+        logger.info(results)
         results['snr'] = float(max_snr)
         update_id = update_processing(
             cparams["db_proc_id"],
