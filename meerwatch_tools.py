@@ -40,7 +40,9 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
                   "{{freq}} BLAH\n\" -nobs 10000000 -npsr 1 -f {} {}"
     awk_cmd = "awk '{print $1,$2,$3*1e-6,$4}'"
     temp_file = os.path.basename(tim_file).replace('.tim', '_res.txt')
+    comp_file = os.path.basename(tim_file).replace('.tim', '_res_comp.txt')
     temp_file = os.path.join(out_dir, temp_file)
+    comp_file = os.path.join(out_dir, comp_file)
 
     # if a select file is given, include it                                                                                                                                                                                                  
     if sel_file is not None:
@@ -62,7 +64,11 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
     if verb:
         print("Finished running tempo2")
 
+    # load in the toa residuals
     toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3), dtype=[('mjd', 'f8'), ('res', 'f4'), ('err', 'f4'), ('freq', 'f4')])
+    # write out the compressed residuals
+    np.savetxt(comp_file, toas, fmt="%12.6f\t%.4e\t%.2e\t%9.4f")
+    
     if toas.size == 1:
         if verb:
             print("Only one ToA from {}; skipping".format(tim_file))

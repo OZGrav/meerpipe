@@ -2474,6 +2474,8 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
     # set up paths, filenames and required parameters
     timfile = os.path.join(image_path, "toas_single.tim")
     image_file = os.path.join(image_path, image_name)
+    local_pid = cparams["pid"].lower()
+    files_to_store = []
 
     comm = "vap -c nchan,bw,freq {0}".format(toa_archive)
     args = shlex.split(comm)
@@ -2494,6 +2496,17 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
         f.close()
         logger.info("TOA data generated and stored in {0}".format(timfile))
 
+        # package the timfile for storage
+        if (os.path.exists(timfile)):
+            timtar = timfile.replace(".tim", ".tar.gz")
+            comm = "tar -zcvf {0} {1}".format(timtar, timfile)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            if (os.path.exists(timtar)):
+                tartype = "{0}.single-tim".format(local_pid)
+                files_to_store.append({'filename': timtar, 'type': tartype})
+        
         if not (parfile == None) and (os.path.exists(parfile)):
 
             # use meerwatch functions to produce residual images for this observation
@@ -2508,20 +2521,13 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
                 # check if file creation was successful and return
                 result = os.path.exists(image_file)
 
-                # new function - store residuals file in PSRDB
-                # this is a bit of a hack but I just need it to work
-                if (cparams["db_flag"]):
-
-                    logger.info("PSRDB functionality activated - recording single-obs TOAs to PSRDB")
-                    db_client = GraphQLClient(cparams["db_url"], False)
+                # new - now preferencing the compressed residual file for upload
+                residual_file = os.path.join(os.path.dirname(timfile), os.path.basename(timfile).replace('.tim', '_res_comp.txt'))
+                if not os.path.exists(residual_file):
                     residual_file = os.path.join(os.path.dirname(timfile), os.path.basename(timfile).replace('.tim', '_res.txt'))
-                    local_pid = cparams["pid"].lower()
-                    residual_type = "{0}.single-res".format(local_pid)
-                    if (os.path.exists(residual_file)):
-                        logger.info("Residual file {0} identified - recording to PSRDB.".format(residual_file))
-                        create_pipelinefile(residual_file, residual_type, cparams, db_client, logger)
-                    else:
-                        logger.error("Residual file {0} not located - no output recorded to PSRDB.".format(residual_file))
+                residual_type = "{0}.single-res".format(local_pid)
+                files_to_store.append({'filename': residual_file, 'type': residual_type})
+
             else:
                 logger.error("Insufficient TOAs to generate single-obs image - skipping...")
                 result =  False
@@ -2531,6 +2537,22 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
     else:
         logger.error("No template provided! - Skipping single-obs TOA image generation...")
         result = False
+
+    # new function - store requested files in PSRDB
+    # this is a bit of a hack but I just need it to work
+    if (cparams["db_flag"]):
+        
+        logger.info("PSRDB functionality activated - recording single-obs TOA files to PSRDB")
+        db_client = GraphQLClient(cparams["db_url"], False)
+
+        # loop through the listed files and store
+        for entry in files_to_store:
+
+            if (os.path.exists(entry['filename'])):
+                logger.info("File {0} identified (type {1}) - recording to PSRDB.".format(entry['filename'], entry['type']))
+                create_pipelinefile(entry['filename'], entry['type'], cparams, db_client, logger)
+            else:
+                logger.error("File {0} not located (type {1}) - no output recorded to PSRDB.".format(entry['filename'], entry['type']))
 
     return result
 
@@ -2559,6 +2581,8 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     # set up paths, filenames and required parameters
     timfile = os.path.join(image_path, "{0}.{1}_global.tim".format(cparams["pid"].lower(), psrname))
     image_file = os.path.join(image_path, image_name)
+    local_pid = cparams["pid"].lower()
+    files_to_store = []
 
     # scroll through all available observations under the file heirarchy matching the required parameters
     # if they match, build their TOAs into the file
@@ -2611,6 +2635,17 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
         f.close()
         logger.info("Global TOA data generated and stored in {0}".format(timfile))
 
+        # package the timfile for storage
+        if (os.path.exists(timfile)):
+            timtar = timfile.replace(".tim", ".tar.gz")
+            comm = "tar -zcvf {0} {1}".format(timtar, timfile)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            if (os.path.exists(timtar)):
+                tartype = "{0}.global-tim".format(local_pid)
+                files_to_store.append({'filename': timtar, 'type': tartype})
+
         if not (parfile == None) and (os.path.exists(parfile)):
 
             # use meerwatch functions to produce residual images for this observation
@@ -2623,20 +2658,13 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                 # check if file creation was successful and return
                 result = os.path.exists(image_file)
 
-                # new function - store residuals file in PSRDB
-                # this is a bit of a hack but I just need it to work
-                if (cparams["db_flag"]):
-
-                    logger.info("PSRDB functionality activated - recording global-obs TOAs to PSRDB")
-                    db_client = GraphQLClient(cparams["db_url"], False)
+                # new - now preferencing the compressed residual file for upload
+                residual_file = os.path.join(os.path.dirname(timfile), os.path.basename(timfile).replace('.tim', '_res_comp.txt'))
+                if not os.path.exists(residual_file):
                     residual_file = os.path.join(os.path.dirname(timfile), os.path.basename(timfile).replace('.tim', '_res.txt'))
-                    local_pid = cparams["pid"].lower()
-                    residual_type = "{0}.global-res".format(local_pid)
-                    if (os.path.exists(residual_file)):
-                        logger.info("Residual file {0} identified - recording to PSRDB.".format(residual_file))
-                        create_pipelinefile(residual_file, residual_type, cparams, db_client, logger)
-                    else:
-                        logger.error("Residual file {0} not located - no output recorded to PSRDB.".format(residual_file))
+                residual_type = "{0}.global-res".format(local_pid)
+                files_to_store.append({'filename': residual_file, 'type': residual_type})
+
             else:
                 logger.error("Insufficient TOAs to generate global-obs image - skipping...")
                 result = False
@@ -2647,5 +2675,21 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     else:
         logger.error("No template provided! - Skipping global-obs TOA image generation...")
         result = False
+
+    # new function - store requested file in PSRDB
+    # this is a bit of a hack but I just need it to work
+    if (cparams["db_flag"]):
+
+        logger.info("PSRDB functionality activated - recording global-obs TOA files to PSRDB")
+        db_client = GraphQLClient(cparams["db_url"], False)
+
+        # loop through the listed files and store
+        for entry in files_to_store:
+
+            if (os.path.exists(entry['filename'])):
+                logger.info("File {0} identified (type {1}) - recording to PSRDB.".format(entry['filename'], entry['type']))
+                create_pipelinefile(entry['filename'], entry['type'], cparams, db_client, logger)
+            else:
+                logger.error("File {0} not located (type {1}) - no output recorded to PSRDB.".format(entry['filename'], entry['type']))
 
     return result
