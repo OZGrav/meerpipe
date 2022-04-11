@@ -2604,27 +2604,42 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     logger.info("Compiling global TOA list for pulsar {0} and project {1}...".format(psrname, cparams["pid"]))
     for x in range (0, len(toa_archives)):
         
-        # get comparison parameters
-        comm = "vap -c telescop,bw,freq {0}".format(toa_archives[x])
-        args = shlex.split(comm)
-        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-        proc.wait()
-        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
-        telescope_comp = str(info[1].split()[1])
-        #obs_bw_comp = float(info[1].split()[2])
-        #obs_freq_comp = float(info[1].split()[3])
+        # new - check that the archive still exists, and hasn't been deleted
+        attempt_counter = 0
+        if (os.path.exists(toa_archives[x]) and attempt_counter < 3):
 
-        #if (telescope_comp == telescope) and (obs_bw_comp == obs_bw) and (obs_freq_comp == obs_freq):
-        if (telescope_comp == telescope):
-            # we have a match - add it to the list
-            logger.info("{0} added to global TOA list".format(toa_archives[x]))
-            toa_list = "{0} {1}".format(toa_list, toa_archives[x])
+            try:
+
+                # get comparison parameters
+                comm = "vap -c telescop,bw,freq {0}".format(toa_archives[x])
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                proc.wait()
+                info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+                telescope_comp = str(info[1].split()[1])
+                #obs_bw_comp = float(info[1].split()[2])
+                #obs_freq_comp = float(info[1].split()[3])
+
+                #if (telescope_comp == telescope) and (obs_bw_comp == obs_bw) and (obs_freq_comp == obs_freq):
+                if (telescope_comp == telescope):
+                    # we have a match - add it to the list
+                    logger.info("{0} added to global TOA list".format(toa_archives[x]))
+                    toa_list = "{0} {1}".format(toa_list, toa_archives[x])
+                else:
+                    # no match
+                    logger.info("{0} excluded from global TOA list".format(toa_archives[x]))
+
+            except:
+
+                logger.error("Encountered problem trying to query {0} - trying again (Attempt #{1})".format(toa_archives[x], attempt_counter))
+                attempt_counter += 1
+
         else:
-            # no match
-            logger.info("{0} excluded from global TOA list".format(toa_archives[x]))
+            logger.info("Unable to locate {} - skipping...".format(toa_archives[x]))
 
     # toa list generation complete - build TOAs
-
+    logger.info("TOA list generation complete.")
+    
     if not (template == None) and (os.path.exists(template)):
 
         # ensure this pat comment closely matches the one in generate_toas()

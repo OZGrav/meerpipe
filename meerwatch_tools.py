@@ -66,9 +66,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
 
     # load in the toa residuals
     toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3), dtype=[('mjd', 'f8'), ('res', 'f4'), ('err', 'f4'), ('freq', 'f4')])
-    # write out the compressed residuals
-    np.savetxt(comp_file, toas, fmt="%12.6f\t%.4e\t%.2e\t%9.4f")
-    
+
     if toas.size == 1:
         if verb:
             print("Only one ToA from {}; skipping".format(tim_file))
@@ -76,6 +74,9 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
 
     if len(toas) == 0:
         print("No ToAs from tempo2 for {}".format(tim_file))
+    else:
+        # write out the compressed residuals
+        np.savetxt(comp_file, toas, fmt="%12.6f\t%.4e\t%.2e\t%9.4f")
 
     return(toas)
 
