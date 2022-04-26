@@ -31,7 +31,7 @@ from joins import *
 from graphql_client import GraphQLClient
 from db_utils import (utc_normal2psrdb, utc_psrdb2normal, utc_normal2date, utc_psrdb2date, pid_getofficial, 
                       check_response, pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config, 
-                      check_pipeline, get_foldedobservation_obsid)
+                      check_pipeline, get_foldedobservation_obsid, get_job_output)
 
 # Important paths
 PSRDB = "psrdb.py"
@@ -179,7 +179,7 @@ def get_parent_id(dbdata, client, url, token):
 
 # ROLE   : Checks if there a is a processing already matching the provided criteria
 # INPUTS : Int, Int, Int, GraphQL client, String, String
-# RETURNS: Boolean
+# RETURNS: None | Int
 def check_for_processing(parent_id, obs_id, pipe_id, client, url, token):
 
     # sanitise input
@@ -201,11 +201,12 @@ def check_for_processing(parent_id, obs_id, pipe_id, client, url, token):
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['allProcessings']['edges']
 
-    result = False
+    result = None
     # check for matching pipe_id
     for x in range(0, len(proc_data)):
         proc_pipe_id = int(processings.decode_id(proc_data[x]['node']['pipeline']['id']))
-        result = result or (proc_pipe_id == pipe_id)
+        if (proc_pipe_id == pipe_id):
+            result = int(processings.decode_id(proc_data[x]['node']['id']))
 
     return result
         
@@ -363,18 +364,38 @@ def array_launcher(arr, ag, client, url, token):
                         # get the launch project code from the config data
                         launch_project_code = pid_getshort(config_data['pid'])
 
-                        # get the obs_id to prevent duplicate job launching
+                        # get the obs_id and prior proc_id to prevent duplicate job launching
                         obs_id = get_foldedobservation_obsid(utc, psr_name, obs_location, client, url, token)
+                        proc_id = check_for_processing(parent_id, obs_id, pipeline_list[y], client, url, token)
 
                         # check for the unprocessed flag
                         if (ag.unprocessed):
                             
                             # check if a processing already exists
-                            unproc_test = check_for_processing(parent_id, obs_id, pipeline_list[y], client, url, token)
-                            if (unproc_test):
+                            if not (proc_id == None):
                                 print ("Skipping: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
                                 print ("Processing already exists!")
                                 continue
+                        
+                        # if a previous proc_id does exist, check for the SLURM job id in case it's still running on the queue!
+                        if not (proc_id == None):
+                            
+                            job_out = get_job_output(proc_id, client, url, token)
+                            if 'job_id' in job_out.keys():
+                                job_id = job_out['job_id']
+
+                                comm = "slurm job {}".format(job_id)
+                                args = shlex.split(comm)
+                                proc = subprocess.Popen(args,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                slurm_data = proc.communicate()
+                                slurm_out = slurm_data[0].decode("utf-8").rstrip().split("\n")
+                                slurm_err = slurm_data[1].decode("utf-8").rstrip().split("\n")
+
+                                if (len(slurm_out) > 1 and not "Invalid job id specified" in slurm_err[0]):
+
+                                    print ("Skipping: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
+                                    print ("Processing of this entry is already in progress!")
+                                    continue
 
                         # finally, launch
                         print ("Launching: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))

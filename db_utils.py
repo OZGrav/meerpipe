@@ -624,13 +624,7 @@ def get_job_output(proc_id, client, url, token):
     processings = Processings(client, url, token)
 
     # Query for proc_id
-    response = processings.list(
-        proc_id,
-        None,
-        None,
-        None,
-        None
-    )
+    response = processings.list(proc_id)
     check_response(response)
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['processing']
