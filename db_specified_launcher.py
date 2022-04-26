@@ -38,8 +38,8 @@ PSRDB = "psrdb.py"
 
 # Argument parsing
 parser = argparse.ArgumentParser(description="Launches specific observations to be processed by MeerPipe. Provide either a set of searchable parameters (primary input) or a list of observations (secondary input). If both inputs are provided, only the primary input will be used.", formatter_class=RawTextHelpFormatter)
-parser.add_argument("-utc1", dest="utc1", help="(Primary: required) - Start UTC for PSRDB search - returns only observations after this UTC timestamp.")
-parser.add_argument("-utc2", dest="utc2", help="(Primary: required) - End UTC for PSRDB search - returns only observations before this UTC timestamp.")
+parser.add_argument("-utc1", dest="utc1", help="(Primary: required) - Start UTC for PSRDB search - returns only observations after this UTC timestamp.", default=None)
+parser.add_argument("-utc2", dest="utc2", help="(Primary: required) - End UTC for PSRDB search - returns only observations before this UTC timestamp.", default=None)
 parser.add_argument("-psr", dest="pulsar", help="(Primary: optional) - Pulsar name for PSRDB search - returns only observations with this pulsar name. If not provided, returns all pulsars.", default=None)
 parser.add_argument("-obs_pid", dest="pid", help="(Primary: optional) - Project ID for PSRDB search - return only observations matching this Project ID. If not provided, returns all observations.", default=None)
 parser.add_argument("-list_out", dest="list_out", help="(Primary: optional) - Output file name to write the list of observations submitted by this particular search. Does not work in secondary mode as it would simply duplicate the input list.")
@@ -472,28 +472,131 @@ env_query = 'echo $PSRDB_URL'
 db_url = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
 db_client = GraphQLClient(db_url, False)
 
-# Work out which inputs we have, and whether we have enough to complete execution
-if (args.utc1 and args.utc2):
+# Determine what parameters we have to work with and build search
+print ("Launching observations matching the intersection of the following specifications:")
+if (args.list_in):
+    print ("* List: {}".format(args.list_in))
 
-    print("Primary mode engaged.")
-    
-    # process the utc timestamps into a format that PSRDB can understand
+if (args.utc1):
+    print ("* Start UTC: {}".format(args.utc1))
     utc1_psrdb = utc_normal2psrdb(args.utc1)
-    utc2_psrdb = utc_normal2psrdb(args.utc2)
+else:
+    utc1_psrdb = None
 
-    # verify that the dates are in the correct order
+if (args.utc2):
+    print ("* End UTC: {}".format(args.utc2))
+    utc2_psrdb = utc_normal2psrdb(args.utc2)
+else:
+    utc2_psrdb = None
+
+if (args.pulsar):
+    print ("* PSR: {}".format(args.pulsar))
+
+if (args.pid):
+    print ("* PID: {}".format(args.pid))
+    official_PID =  pid_getofficial(args.pid)
+else:
+    official_PID = None
+
+if (args.unprocessed):
+    print ("* Only launching unprocessed observations.")
+
+# Verify input
+if (args.utc1 and args.utc2):
     if (utc_normal2date(args.utc1) > utc_normal2date(args.utc2)):
         raise Exception("UTC1 ({0}) is not before UTC2 ({1}).".format(args.utc1, args.utc2))
     else:
         print ("Selected UTC range ({0} - {1}) is valid.".format(args.utc1, args.utc2))
 
-    # query the database for the relevant folding ids after checking for extra input
-    if (args.pulsar):
-        print ("Querying for observations of pulsar %s." % (args.pulsar))
-    if (args.pid):
-        print ("Querying for observations matching PID %s." % (args.pid))
-    
-    dbdata = get_foldedobservation_list(utc_normal2psrdb(args.utc1), utc_normal2psrdb(args.utc2), args.pulsar, pid_getofficial(args.pid), db_client, db_url, db_token)
+# Query and run observations
+
+print ("\nBeginning launch sequence...\n")
+
+if (args.list_in)
+
+    # we need to cycle through the lines of the file, find each observation and then send it to be launched
+    infile = open(args.list_in, "r")
+    # if output list specified, prep for writing
+    if (args.list_out):
+        outfile = open(args.list_out, "w")
+        outfile.close()
+
+    print("%s opened successfully - processing entries line by line..." % (args.list_in))
+
+    for x in infile:
+        linearray = shlex.split(x)
+
+        # check for valid input
+        if (len(linearray) == 0 or len(linearray) > 3):
+            raise Exception("Input file has an incorrect number of fields (line {0})".format(x))
+
+        # check input for query parameters and test against 
+        query_pulsar = None
+        query_date = None
+        query_PID = None
+
+        if (len(linearray) > 0):
+            # first column is pulsar name
+            query_pulsar = str(linearray[0])
+
+            if (args.pulsar):
+                if not (args.pulsar == query_pulsar):
+                    print ("File entry '{0}' does not match command line entry '{1}' - skipping...".format(query_pulsar, args.pulsar))
+                    continue
+
+        if (len(linearray) > 1):
+            # second column is UTC of the observation
+            query_date = utc_normal2psrdb(linearray[1])
+
+            if (args.utc1):
+                if (utc_normal2date(args.utc1) > utc_psrdb2date(query_date)):
+                    print ("File UTC '{0}' is before specified command line start date '{1}' - skipping...".format(utc_psrdb2normal(query_date), args.utc1))
+                    continue
+
+            if (args.utc2):
+                if (utc_normal2date(args.utc2) < utc_psrdb2date(query_date)):
+                    print ("File UTC '{0}' is after specified command line end date '{1}' - skipping...".format(utc_psrdb2normal(query_date), args.utc2))
+                    continue
+
+        if (len(linearray) > 2):
+            # third column is PID
+            query_PID = pid_getofficial(linearray[2])
+
+            if (official_PID):
+                if not (official_PID == query_PID):
+                    print ("File observation PID '{0}' does not match command line observation PID '{1}' - skipping...".format(query_PID, official_PID))
+                    continue
+
+        print ("Querying PSRDB for:")
+        if not (query_pulsar == None):
+            print ("PSR = {0}".format(query_pulsar))
+        if not (query_date == None):
+            print ("DATE = {0}".format(query_date))
+        if not (query_PID == None):
+            print ("Observation PID = {0}".format(query_PID))
+
+        dbdata = get_foldedobservation_list(query_date, query_date, query_pulsar, query_PID, db_client, db_url, db_token)
+        print("PSRDB query complete.")
+
+        if (dbdata):
+            print("PSRDB query complete - {0} matching records found".format(len(dbdata)))
+            print("Launching requested processing job.")
+            array_launcher(dbdata, args, db_client, db_url, db_token)
+
+            if (args.list_out):
+                outfile = open(args.list_out, "a")
+                write_list(outfile, dbdata, db_client, db_url, db_token)
+                outfile.close()
+
+    if (args.list_out):
+        print("List of observations to process written to {0}.".format(args.list_out))
+
+else if (args.utc1 and args.utc2):
+
+    # I'm maintaining this restriction of needing at minimum either the LIST IN or the UTCs
+    # Otherwise there's a risk that running the script with no inputs will just launch *everything* at once
+
+    dbdata = get_foldedobservation_list(utc1_psrdb, utc1_psrdb2, args.pulsar, official_PID, db_client, db_url, db_token)
 
     # check for valid output
     if (dbdata):
@@ -511,55 +614,6 @@ if (args.utc1 and args.utc2):
         write_list(outfile, dbdata, db_client, db_url, db_token)
         outfile.close()
         print("List of observations to process written to {0}.".format(args.list_out))
-    
-elif (args.list_in):
-
-    print("Secondary mode engaged.")
-
-    # we need to cycle through the lines of the file, find each observation and then send it to be launched
-    infile = open(args.list_in, "r")
-
-    print("%s opened successfully." % (args.list_in))
-
-    for x in infile:
-        linearray = shlex.split(x)
-
-        # check for valid input
-        if (len(linearray) == 0 or len(linearray) > 3):
-            raise Exception("Input file has an incorrect number of fields (line {0})".format(x))
-
-        # check input for query parameters
-        query_pulsar = None
-        query_date = None
-        query_PID = None
-
-        if (len(linearray) > 0):
-            # first column is pulsar name
-            query_pulsar = str(linearray[0])
-
-        if (len(linearray) > 1):
-            # second column is UTC of the observation
-            query_date = utc_normal2psrdb(linearray[1])
-
-        if (len(linearray) > 2):
-            # third column is PID
-            query_PID = pid_getofficial(linearray[2])
-
-        print ("Querying PSRDB for:")
-        if not (query_pulsar == None):
-            print ("PSR = {0}".format(query_pulsar))
-        if not (query_date == None):
-            print ("DATE = {0}".format(query_date))
-        if not (query_PID == None):
-            print ("Observation PID = {0}".format(query_PID))
-
-        dbdata = get_foldedobservation_list(query_date, query_date, query_pulsar, query_PID, db_client, db_url, db_token)
-        print("PSRDB query complete.")
-
-        if (dbdata):
-            print("PSRDB query complete - {0} matching records found".format(len(dbdata)))
-            print("Launching requested processing job.")
-            array_launcher(dbdata, args, db_client, db_url, db_token)
 
 else:
     # we do not have enough arguments to complete the script - abort
