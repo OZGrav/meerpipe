@@ -52,6 +52,7 @@ parser.add_argument("-forceram", dest="forceram", type=float, help="Specify RAM 
 parser.add_argument("-forcetime", dest="forcetime", type=str, help="Specify time to use for job execution (HH:MM:SS). Recommended only for single-job launches.")
 parser.add_argument("-errorlog", dest="errorlog", type=str, help="File to store information on any failed launches for later debugging.", default=None)
 parser.add_argument("-testrun", dest="testrun", help="Toggles test mode - jobs will not actually be launched.", action="store_true")
+parser.add_argument("-obs_id", dest="obsid", type=int, help="Specify a single PSRDB observation ID to be processed. Observation must also be either specified via UTC range or list input. Typically only for use by real-time launch script.")
 args = parser.parse_args()
 
 
@@ -368,6 +369,12 @@ def array_launcher(arr, ag, client, url, token):
                         # get the obs_id and prior proc_id to prevent duplicate job launching
                         obs_id = get_foldedobservation_obsid(utc, psr_name, obs_location, client, url, token)
                         proc_id = check_for_processing(parent_id, obs_id, pipeline_list[y], client, url, token)
+
+                        # check for the obsid flag
+                        if (args.obsid):
+                            if not (int(args.obsid) == int(obs_id)):
+                                print ("Match not found to command line obs ID of {0} - skipping...".format(args.obsid))
+                                continue
 
                         # check for the unprocessed flag
                         if (ag.unprocessed):
