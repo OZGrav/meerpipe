@@ -18,4 +18,4 @@ IN_OBSID=$3
 IN_FOLDID=$4
 
 # Run the pipeline
-python ${MEERPATH}/db_specified_launcher.py -utc1 ${IN_UTC} -utc2 ${IN_UTC} -psr ${IN_PSR} -slurm -unprocessed -runas PIPE -obs_id ${IN_OBSID}
+python ${MEERPATH}/db_specified_launcher.py -utc1 ${IN_UTC} -utc2 ${IN_UTC} -psr ${IN_PSR} -slurm -unprocessed -runas PIPE -obs_id ${IN_OBSID} -testrun

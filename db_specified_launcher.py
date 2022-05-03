@@ -332,7 +332,7 @@ def array_launcher(arr, ag, client, url, token):
                 for y in range(0, len(pipeline_list)):
 
                     # catch errors and report to file
-                    errorstring=""
+                    errorstring="Error unknown."
                     try:
                         # need to get the configuration data
                         config_data = get_pipe_config(pipeline_list[y], client, url, token)
@@ -371,8 +371,8 @@ def array_launcher(arr, ag, client, url, token):
                         proc_id = check_for_processing(parent_id, obs_id, pipeline_list[y], client, url, token)
 
                         # check for the obsid flag
-                        if (args.obsid):
-                            if not (int(args.obsid) == int(obs_id)):
+                        if (ag.obsid):
+                            if not (int(ag.obsid) == int(obs_id)):
                                 print ("Match not found to command line obs ID of {0} - skipping...".format(args.obsid))
                                 continue
 

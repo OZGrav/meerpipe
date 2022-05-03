@@ -24,9 +24,10 @@ from archive_utils import (secondary_cleanup)
 
 # Argument parsing
 parser = argparse.ArgumentParser(description="Deletes undesired data products from all observations stored under a specific pulsar directory after processing via MeerPIPE. USE WITH EXTREME CAUTION.")
-parser.add_argument("-psr_path", dest="psrpath", type=str, help="Processed pulsar directory under which to delete unwanted data products", required=True, default=None)
+parser.add_argument("-psr_path", dest="psrpath", type=str, help="Processed pulsar directory under which to delete unwanted data products", default=None)
 parser.add_argument("-config", dest="config", type=str, help="Path to the config file used in creating the processed results (must contain list of products to delete.", required=True, default=None)
 parser.add_argument("-testmode", dest="testmode", action="store_true", help="Disables the script's deletion command for a test run.")
+parser.add_argument("-safety_off", dest="nosafety", action="store_true", help="Disables the safety deletion check - script will not ask you to verify your input before deleting files. DANGEROUS - ONLY USE IF YOU ARE ABSOLUTELY SURE OF WHAT YOU ARE DOING")
 args = parser.parse_args()
 
 # -- MAIN PROGRAM --
@@ -63,11 +64,12 @@ obsdirs = sorted(glob.glob(os.path.join(psrpath, "2*/*/*")))
 if len(obsdirs) == 0:
     raise Exception("No observation directories identified - aborting.")
 else:
-    # safety check
-    safety_response = input("WARNING: Continuing with this script will delete all redundant files across {} processings. Continue? (Y/N)".format(len(obsdirs)))
-    if not safety_response == "Y":
-        print ("Program terminated.")
-        exit()
+    if not (args.nosafety):
+        # safety check
+        safety_response = input("WARNING: Continuing with this script will delete all redundant files across {} processings. Continue? (Y/N)".format(len(obsdirs)))
+        if not safety_response == "Y":
+            print ("Program terminated.")
+            exit()
 
 # and clean
 for obs in obsdirs:
