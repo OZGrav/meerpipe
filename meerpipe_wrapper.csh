@@ -5,17 +5,22 @@
 # DO NOT CHANGE THE INTERFACE WITHOUT CHECKING WITH AJ FIRST
 
 # Paths
-MEERPATH="/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/"
+set MEERPATH = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/"
 
 # Environment setup
+echo "Configuring environment..."
 source ${MEERPATH}/env_setup.csh
-source /home/acameron/virtual-envs/meerpipe_db/bin/activate.csh
+source /fred/oz005/pipelines/meerpipe/virtual-envs/meerpipe_db/bin/activate.csh
+setenv PSRDB_TOKEN `get_ingest_token.sh`
 
+echo "Parsing input..."
 # Arguments
-IN_UTC=$1
-IN_PSR=$2
-IN_OBSID=$3
-IN_FOLDID=$4
+set IN_UTC = $1
+set IN_PSR = $2
+set IN_OBSID = $3
+set IN_FOLDID = $4
 
 # Run the pipeline
-python ${MEERPATH}/db_specified_launcher.py -utc1 ${IN_UTC} -utc2 ${IN_UTC} -psr ${IN_PSR} -slurm -unprocessed -runas PIPE -obs_id ${IN_OBSID} -testrun
+echo "Running PSR =" ${IN_PSR} "| UTC =" ${IN_UTC} "| OBS_ID =" ${IN_OBSID} "| FOLD_ID =" ${IN_FOLDID} "..."
+python ${MEERPATH}/db_specified_launcher.py -utc1 ${IN_UTC} -utc2 ${IN_UTC} -psr ${IN_PSR} -slurm -runas PIPE -obs_id ${IN_OBSID} # -unprocessed -testrun
+echo "Launch complete"

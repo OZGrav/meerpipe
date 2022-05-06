@@ -2103,6 +2103,22 @@ def generate_images(output_dir, cparams, psrname, logger):
 
                 logger.info("Creating image type {0}...".format(plot_commands[x]['type']))
 
+                # find out where we are
+                comm = "pwd"
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                path_loc = proc.communicate()[0].decode("utf-8")
+                logger.info("Creating image at {}".format(path_loc))
+
+                logger.info("Cparams = {}".format(cparams))
+
+                # JOBFS test
+                comm = "echo $JOBFS"
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                job_loc = proc.communicate()[0].decode("utf-8")
+                logger.info("JOBFS at {}".format(job_loc))
+
                 # create / overwrite the image
                 image_name = "{0}.png".format(plot_commands[x]['name'])
                 image_file = os.path.join(images_path,image_name)

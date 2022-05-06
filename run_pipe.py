@@ -369,7 +369,9 @@ if toggle:
                 job_file.write("source env_setup.sh\n")
                 #if (args.db_flag):
                 #    job_file.write("export PSRDB_TOKEN={0} \n".format(db_token))
-                job_file.write("source /home/acameron/virtual-envs/meerpipe_db/bin/activate\n")
+                #job_file.write("source /home/acameron/virtual-envs/meerpipe_db/bin/activate\n")
+                job_file.write("source /fred/oz005/pipelines/meerpipe/virtual-envs/meerpipe_db/bin/activate\n")
+                job_file.write("export PSRDB_TOKEN=`get_ingest_token.sh`\n")
                 job_file.write("python slurm_pipe.py -obsname {0}archivelist.npy -outputdir {0}output.npy -psrname {0}psrname.npy".format(output_dir))
 
             logger.info("Slurm job - {0} created".format(job_name))
