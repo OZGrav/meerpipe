@@ -2094,6 +2094,17 @@ def generate_images(output_dir, cparams, psrname, logger):
         # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
         # instead create locally and move
 
+        if (cparams['slurm'] == "True"):
+            logger.info("SLURM environment recognised")
+            env_query = 'echo $JOBFS'
+            jobfs_dir = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+            logger.info("JOBFS dir = {}".format(jobfs_dir))
+            loc_path = jobfs_dir
+        else:
+            loc_path = "/tmp"
+
+        logger.info("Loc_path = {}".format(loc_path))
+
         logger.info("Creating psrsplot images...")
 
         for x in range(0, len(plot_commands)):
@@ -2103,35 +2114,26 @@ def generate_images(output_dir, cparams, psrname, logger):
 
                 logger.info("Creating image type {0}...".format(plot_commands[x]['type']))
 
-                # find out where we are
-                comm = "pwd"
-                args = shlex.split(comm)
-                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-                path_loc = proc.communicate()[0].decode("utf-8")
-                logger.info("Creating image at {}".format(path_loc))
-
-                logger.info("Cparams = {}".format(cparams))
-
-                # JOBFS test
-                comm = "echo $JOBFS"
-                args = shlex.split(comm)
-                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-                job_loc = proc.communicate()[0].decode("utf-8")
-                logger.info("JOBFS at {}".format(job_loc))
-
                 # create / overwrite the image
                 image_name = "{0}.png".format(plot_commands[x]['name'])
                 image_file = os.path.join(images_path,image_name)
+                tmp_image_file = os.path.join(loc_path,image_name)
+
                 if (os.path.exists(image_file)):
                     os.remove(image_file)
                 # comm = "{0} -g {1}/png {2}".format(plot_commands[x]['comm'], image_name, clean_file)
-                comm = "{0} {2} -g 1024x768 -c above:l= -c above:c='{3}' -D {1}/png".format(plot_commands[x]['comm'], image_name, clean_file, plot_commands[x]['title'])
+                comm = "{0} {2} -g 1024x768 -c above:l= -c above:c='{3}' -D {1}/png".format(plot_commands[x]['comm'], tmp_image_file, clean_file, plot_commands[x]['title'])
                 args = shlex.split(comm)
                 proc = subprocess.Popen(args,stdout=subprocess.PIPE)
                 proc.wait()
 
                 # move resulting image
-                os.rename(image_name, image_file)
+                try:
+                    logger.info("Renaming {0} to {1}...".format(tmp_image_file, image_file))
+                    os.rename(tmp_image_file, image_file)
+                except:
+                    logger.info("Rename attempt failed - copying {0} to {1} instead...".format(tmp_image_file, image_file))
+                    os.system("cp {0} {1}".format(tmp_image_file, image_file))
 
                 # log results to array for later recording
                 image_data.append({'file': image_file, 'rank': plot_commands[x]['rank'], 'type': plot_commands[x]['type']})

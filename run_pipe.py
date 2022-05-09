@@ -328,6 +328,9 @@ if toggle:
             # PSRDB now primed - proceed.
 
         if args.slurm:
+
+            config_params["slurm"] = "True"
+
             logger.info("Creating and submitting pipeline jobs using Slurm")
             logger.info("Observation length is {0}. Using RAM of {1} and time of {2} seconds to process"
                         .format(obstime, required_ram, required_time))
@@ -426,7 +429,9 @@ if toggle:
             """
 
         else:
-            
+        
+            config_params["slurm"] = "False"
+    
             # describes pipeline operation on a host node, not being routed to the OZSTAR HPC nodes
 
             if (args.db_flag):
