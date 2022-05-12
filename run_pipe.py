@@ -38,7 +38,7 @@ from initialize import (parse_config, create_structure, get_outputinfo, setup_lo
 
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives,
                            calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary, 
-                           check_summary, generate_images, secondary_cleanup)
+                           check_summary, generate_images, secondary_cleanup, folding_resync)
 
 # PSRDB imports
 from tables import *
@@ -518,6 +518,9 @@ if toggle:
                     
                     # Secondary cleanup
                     secondary_cleanup(output_dir,config_params,psrnames[obs_num],logger)
+
+                    # Trigger PSRDB resync
+                    folding_resync(config_params,logger)
 
                     logger.info ("##############")
 

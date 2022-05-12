@@ -1352,6 +1352,62 @@ def update_processing(proc_id, obs_id, pipe_id, parent_id, embargo_end, location
     else:
         return
 
+# ROLE   : Update the content of an existing Folding entry.
+#        : Unspecified parameters should be set to 'None'.
+# INPUTS : Integer, Integer, Integer, Integer, Integer, Integer,
+#          Float, Float, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
+def update_folding(fold_id, proc_id, eph_id, nbin, npol, nchan, dm, tsubint, client, url, token):
+
+    # PSRDB setup
+    foldings = Foldings(client, url, token)
+    #processings.set_field_names(True, False)
+
+    # Query for proc_id
+    response = foldings.list(fold_id)
+    check_response(response)
+    fold_content = json.loads(response.content)
+    fold_data = fold_content['data']['folding']
+
+    # Check for valid proc_id
+    if not (fold_data == None):
+
+        # Check for parameters
+        if (proc_id == None):
+            proc_id = foldings.decode_id(fold_data['processing']['id'])
+        if (eph_id == None):
+            eph_id = foldings.decode_id(fold_data['foldingEphemeris']['id'])
+        if (nbin == None):
+            nbin = fold_data['nbin']
+        if (npol == None):
+            npol = fold_data['npol']
+        if (nchan == None):
+            nchan = fold_data['nchan']
+        if (dm == None):
+            dm = fold_data['dm']
+        if (tsubint == None):
+            tsubint = fold_data['tsubint']
+
+        # Update the entry
+        response = foldings.update(
+            fold_id,
+            proc_id,
+            eph_id,
+            nbin,
+            npol,
+            nchan,
+            dm,
+            tsubint
+        )
+        check_response(response)
+        update_content = json.loads(response.content)
+        update_data = update_content['data']['updateFolding']['folding']
+        update_id = update_data['id']
+        return int(update_id)
+    else:
+        return
+
+
 # ROLE   : Update the content of an existing TOA entry.
 #        : Unspecified parameters should be set to 'None'.
 # INPUTS : Integer, Integer, Integer, Integer, Integer, JSON object, Float, Float,

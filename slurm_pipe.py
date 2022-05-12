@@ -31,7 +31,7 @@ from initialize import (parse_config, setup_logging)
 
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives, calibrate_data, 
                            dynamic_spectra, fluxcalibrate, cleanup, generate_summary, check_summary,
-                           generate_images, secondary_cleanup)
+                           generate_images, secondary_cleanup, folding_resync)
 
 # PSRDB imports
 from tables import *
@@ -184,6 +184,9 @@ try:
 
         # Secondary cleanup
         secondary_cleanup(output_dir,config_params,psrname,logger)
+
+        # Trigger PSRDB resync
+        folding_resync(config_params,logger)
         
         logger.info ("##############")
 

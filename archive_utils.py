@@ -49,7 +49,7 @@ from meerwatch_tools import get_res_fromtim, plot_toas_fromarr
 from util import ephemeris
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage, get_results, update_processing
+from db_utils import create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage, get_results, update_processing, update_folding
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -2726,3 +2726,32 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                 logger.error("File {0} not located (type {1}) - no output recorded to PSRDB.".format(entry['filename'], entry['type']))
 
     return result
+
+# echos back a folding entry to PSRDB so as to trigger a resync of the online DB instance
+def folding_resync(cparams,logger):
+
+    logger.info("Echoing an update of folding ID {0} to initiate PSRDB online synchronisation...".format(cparams['db_fold_id']))
+
+    # create client
+    db_client = GraphQLClient(cparams["db_url"], False)
+
+    update_id = update_folding(
+        cparams['db_fold_id'],
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        db_client,
+        cparams["db_url"],
+        cparams["db_token"]
+    )
+
+    if (update_id != cparams["db_fold_id"]) or (update_id == None):
+        logger.error("Failure to update 'foldings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_fold_id"]))
+    else:
+        logger.info("Updated PSRDB entry in 'foldings' table, ID = {0}".format(cparams["db_fold_id"]))
+
+    return
