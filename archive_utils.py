@@ -49,7 +49,7 @@ from meerwatch_tools import get_res_fromtim, plot_toas_fromarr
 from util import ephemeris
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage, get_results, update_processing, update_folding
+from db_utils import create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage, get_results, update_processing, update_folding, get_procid_by_location, get_toa_id, check_toa_nominal
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -1648,7 +1648,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 flags_json = json.dumps(flags_dict)
                 flags = json.loads(flags_json)
 
-                # link via entry in TOA table - DISABLED UNTIL THE TOA TABLE GETS FIXED BY AJ
+                # link via entry in TOA table
                 toa_id = create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, db_client, logger)
                 
                 logger.info("Entry in table 'toas' successfully created - ID {0}".format(toa_id))
@@ -2605,7 +2605,8 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     # scroll through all available observations under the file heirarchy matching the required parameters
     # if they match, build their TOAs into the file
     # assumes that the output path of the current config file contains all neccessary observations
-    toa_archives = glob.glob(os.path.join(cparams["output_path"],"{0}/{1}/*/*/*/images/image_toas.ar".format(cparams["pid"], psrname)))
+    toa_str = "images/image_toas.ar"
+    toa_archives = glob.glob(os.path.join(cparams["output_path"],"{0}/{1}/*/*/*/{2}".format(cparams["pid"], psrname, toa_str)))
     # get parameters with reference to the local toa_archive
     comm = "vap -c telescop,bw,freq,mjd {0}".format(local_toa_archive)
     args = shlex.split(comm)
@@ -2638,9 +2639,52 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                 #obs_bw_comp = float(info[1].split()[2])
                 #obs_freq_comp = float(info[1].split()[3])
 
+                # flag setup
+                allow_toa = False
+
                 #if (telescope_comp == telescope) and (obs_bw_comp == obs_bw) and (obs_freq_comp == obs_freq):
                 if (telescope_comp == telescope):
-                    # we have a match - add it to the list
+                    # we have a match - set the flag to true and see if anything overrides it
+                    allow_toa = True
+
+                    # new PSRDB step - check that the TOAs haven't been flagged as bad yet
+                    if (cparams["db_flag"]):
+
+                        logger.info("PSRDB functionality activated - checkeing TOA table for flagged TOAs")
+                        db_client = GraphQLClient(cparams["db_url"], False)
+
+                        # step 1 - get processing ID matching the location of the data being checked
+                        location = os.path.normpath(toa_archives[x].replace(toa_str, ""))
+                        toa_proc_id = get_procid_by_location(location, db_client, cparams["db_url"], cparams["db_token"])
+
+                        # step 2 - get the toa entry matching the processing ID
+                        if not (toa_proc_id == None):
+
+                            logger.info("Found unique processing ID {0} matching location {1}".format(toa_proc_id, location))
+                            toa_id = get_toa_id(toa_proc_id,  db_client, cparams["db_url"], cparams["db_token"])
+
+                            # step 3 - determine if the toa is nominal
+                            if not (toa_id == None):
+
+                                logger.info("Found unique TOA ID {0} matching processing ID {1}".format(toa_id, toa_proc_id))
+
+                                # checking quality
+                                if (check_toa_nominal(toa_id,  db_client, cparams["db_url"], cparams["db_token"])):
+                                    logger.info("TOA quality is NOMINAL.")
+                                    allow_toa = True
+                                else:
+                                    logger.info("TOA quality is not NOMINAL.")
+                                    allow_toa = False
+
+                            else:
+
+                                logger.info("Could not find unique TOA ID matching processing ID {0}".format(toa_proc_id))
+                                logger.info("Allowing TOAs by default...")
+
+                        else:
+                            logger.info("Could not find unique processing ID matching location {0}".format(location))
+                            logger.info("Allowing TOAs by default...")
+                if (allow_toa):
                     logger.info("{0} added to global TOA list".format(toa_archives[x]))
                     toa_list = "{0} {1}".format(toa_list, toa_archives[x])
                 else:

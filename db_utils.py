@@ -266,7 +266,21 @@ def check_pipeline(pipe_id, client, url, token):
 
     return retval
 
+# ROLE   : Checks if a TOA ID has NOMINAL data
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: Boolean
+def check_toa_nominal(toa_id, client, url, token):
 
+    # this is largely a wrapper function set up to handle a later diversification of the TOA quality field
+
+    # get TOA quality
+    quality = get_toa_quality(toa_id, client, url, token)
+
+    # check for status
+    if (quality == "NOMINAL"):
+        return True
+    else:
+        return False
 
 # ----- GET FUNCTIONS -----
 
@@ -701,6 +715,85 @@ def get_pipe_config(pipe_id, client, url, token):
     else:
         return
 
+# ROLE   : Return a unique processing ID for a given location (full path)
+#          If a unique entry cannot be found, returns None
+# INPUTS : String, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
+def get_procid_by_location(location, client, url, token):
+
+    # PSRDB setup
+    processings = Processings(client, url, token)
+
+    # sanitise
+    location = os.path.normpath(location)
+
+    # query
+    response = processings.list(
+        None,
+        None,
+        None,
+        location,
+        None
+    )
+    check_response(response)
+    proc_content = json.loads(response.content)
+    proc_data = proc_content['data']['allProcessings']['edges']
+
+    # Check for single matching entry and return ID
+    if (len(proc_data) == 1):
+        proc_id = processings.decode_id(proc_data[0]['node']['id'])
+        return int(proc_id)
+    else:
+        return
+
+# ROLE   : Return a TOA ID given a processing ID
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: Integer (success) | None (failure)
+def get_toa_id(proc_id, client, url, token):
+
+    # PSRDB setup
+    toas = Toas(client, url, token)
+
+    # Query for matching proc_id
+    response = toas.list(
+        None,
+        proc_id,
+        None,
+        None,
+        None,
+    )
+    check_response(response)
+    toa_content = json.loads(response.content)
+    toa_data = toa_content['data']['allToas']['edges']
+
+    # Check for single matching entry and return ID
+    if (len(toa_data) == 1):
+        toa_id = toas.decode_id(toa_data[0]['node']['id'])
+        return int(toa_id)
+    else:
+        return
+
+# ROLE   : Return the quality string of a TOA entry
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: String (success) | None (failure)
+def get_toa_quality(toa_id, client, url, token):
+
+    # PSRDB setup
+    toas = Toas(client, url, token)
+
+    # query for pipe id
+    response = toas.list(toa_id)
+    check_response(response)
+    toa_content = json.loads(response.content)
+    toa_data = toa_content['data']['toa']
+
+    # Check for valid proc_id
+    if not (toa_data == None):
+        results = toa_data['quality']
+        return results
+    else:
+        return
+
 # ----- CREATE FUNCTIONS -----
 
 # ROLE   : Creates a Launch entry with the specified parameters.
@@ -949,7 +1042,6 @@ def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, 
         None,
         cparams["db_proc_id"],
         cparams["db_fold_id"]
-        #cparams["db_fold_id"],
         #eph_id,
         #template_id
     )
@@ -998,6 +1090,13 @@ def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, 
             comment = comment + ' - Ephemeris updated from {0}'.format(orig_eph_id)
         if not (int(template_id) == int(orig_template_id)):
             comment = comment + ' - Template updated from {0}'.format(orig_template_id)
+
+        # NEW - do not overwrite existing quality settings - this should be done manually
+        logger.info("Checking for old quality code and carrying it forward...")
+        old_qual_code = get_toa_quality(retval, client, cparams["db_url"], cparams["db_token"])
+        if not (old_qual_code == None):
+            quality = old_qual_code.lower()
+            logger.info("Quality code will be retained as {0}".format(quality))
 
         update_id = update_toa_record(
             retval,
