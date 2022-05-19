@@ -519,6 +519,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                         surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={0},subintthresh={1}'.format(chan_thresh,subint_thresh)
                     
                     surgical_cleaner.parse_config_string(surgical_parameters)
+                    logger.info("Surgical cleaner parameters correctly parsed.")
                     surgical_cleaner.run(cloned_archive)
 
                     #Bandwagon cleaner

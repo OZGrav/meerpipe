@@ -16,7 +16,7 @@ module load scipy/1.3.0-python-3.6.4
 module load astropy/3.1.2-python-3.6.4
 
 # SET ENVIRONMENT VARIABLES
-setenv COAST_GUARD /fred/oz002/dreardon/MeerGuard3
+setenv COAST_GUARD /fred/oz002/dreardon/MeerGuard_dev
 setenv COASTGUARD_CFG $COAST_GUARD/configurations
 setenv PATH $PATH\:$COAST_GUARD\:$COAST_GUARD/coast_guard
 setenv PYTHONPATH $PYTHONPATH\:$COAST_GUARD\:$COAST_GUARD/coast_guard
