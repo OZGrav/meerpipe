@@ -487,10 +487,39 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
                 #Get templates for coastguarding
                 if cparams["type"] == "ppta_zap": 
-                    template = get_pptatemplate(backend,psrname,float(cloned_archive.get_centre_frequency()),int(cloned_archive.get_nbin()),logger)
+                    orig_template = get_pptatemplate(backend,psrname,float(cloned_archive.get_centre_frequency()),int(cloned_archive.get_nbin()),logger)
                 elif cparams["type"] == "meertime":
-                    template = get_meertimetemplate(psrname,output_path,cparams,logger)
+                    orig_template = get_meertimetemplate(psrname,output_path,cparams,logger)
+                else:
+                    orig_template = None
+                
+                template = orig_template
 
+                # NEW - check for bin count of template and adjust to match archive if required
+                if not template is None:
+                    template_ar = ps.Archive_load(str(template))
+                    template_bins = int(template_ar.get_nbin())
+                    archive_bins = int(cloned_archive.get_nbin())
+                    if not (template_bins == archive_bins):                
+                    
+                        logger.info("Mismatch detected between phase bin count of archive ({0}) and template ({1})".format(archive_bins, template_bins))
+                        logger.info("Attempting to produce scrunched template to correct for mismatch...")
+
+                        # work out the mismatch factor
+                        b_factor = template_bins / archive_bins
+                        b_remainder = template_bins % archive_bins
+
+                        if not (b_remainder == 0):
+                            logger.info("Non-integer factor between the bin values, cannot scrunch to match - skipping step")
+                        elif (b_factor < 1.0):
+                            logger.info("Archive has higher bin count than template - skipping step")
+                        else:
+                            # create bin-scrunched clone and write to temporary file
+                            logger.info("Creating scrunched template by factor {}".format(b_factor))
+                            template_ar.bscrunch_to_nbin(archive_bins)
+                            template = os.path.join(str(output_dir),"temp_{}.std".format(archive_bins))
+                            template_ar.unload(template)
+                        
                 if not (int(cloned_archive.get_nsubint()) == 1 and int(cloned_archive.get_nchan()) == 1):
 
                     #RcvrStandard cleaner
@@ -602,7 +631,17 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
             logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_proc_id"]))
         else:
             logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(cparams["db_proc_id"]))
-            
+
+
+    # clean up any scrunched template, if one was built
+    if not template is None:
+        
+        template_bins = int(template_ar.get_nbin())
+
+        if not (orig_template == template) and not (int(ps.Archive_load(str(template)).get_nbin()) == template_bins):
+            logger.info("Removing scrunched template {}".format(template))
+            #os.remove(template)
+
     return cleaned_archives
 
 
