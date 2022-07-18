@@ -435,7 +435,13 @@ def create_structure(output_dir,cparams,psrname,logger):
         #Copying pulsar ephemeris
         if os.path.exists(os.path.join(ephem_dir,psrname+".par")):
             logger.info("Ephemeris for {0} found".format(psrname))
-            copyfile(os.path.join(ephem_dir,psrname+".par"),os.path.join(pulsar_dir,psrname+".par"))
+            if os.path.exists(os.path.join(ephem_dir,psrname+"_p2.par")):
+                copyfile(os.path.join(ephem_dir,psrname+"_p2.par"),os.path.join(pulsar_dir,psrname+"_p2.par"))
+            elif os.path.exists(os.path.join(ephem_dir,psrname+"_p3.par")):
+                copyfile(os.path.join(ephem_dir,psrname+"_p3.par"),os.path.join(pulsar_dir,psrname+"_p3.par"))
+            else:
+                copyfile(os.path.join(ephem_dir,psrname+".par"),os.path.join(pulsar_dir,psrname+".par"))
+
         else:
             logger.info("Ephemeris for {0} not found. Generating new one.".format(psrname))
             psrcat = "psrcat -all -e {0}".format(psrname)
@@ -446,9 +452,20 @@ def create_structure(output_dir,cparams,psrname,logger):
             copyfile(os.path.join(ephem_dir,psrname+".par"),os.path.join(pulsar_dir,psrname+".par"))
 
         #Copying pulsar template
+        notemplate_list = np.loadtxt(os.path.join(template_dir,"notemplate.list"),dtype=str)
         if os.path.exists(os.path.join(template_dir,psrname+".std")):
             logger.info("Template for {0} found".format(psrname))
-            copyfile(os.path.join(template_dir,psrname+".std"),os.path.join(pulsar_dir,psrname+".std"))
+            if os.path.exists(os.path.join(template_dir,psrname+"_p2.std")):
+                copyfile(os.path.join(template_dir,psrname+"_p2.std"),os.path.join(pulsar_dir,psrname+"_p2.std"))
+            elif os.path.exists(os.path.join(template_dir,psrname+"_p3.std")):
+                copyfile(os.path.join(template_dir,psrname+"_p3.std"),os.path.join(pulsar_dir,psrname+"_p3.std"))
+            else:
+                copyfile(os.path.join(template_dir,psrname+".std"),os.path.join(pulsar_dir,psrname+".std"))
+        
+        elif psrname in notemplate_list:
+            logger.info("{0} in notemplate list. Using a Gaussian template instead.".format(psrname))
+            copyfile(os.path.join(template_dir,"Gaussian.std"),os.path.join(pulsar_dir,"Gaussian.std"))
+
         else:
             #TODO:Generate new template in this case
             logger.info("Template for {0} not found. Will generate one after zapping.".format(psrname))
