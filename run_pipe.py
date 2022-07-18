@@ -151,31 +151,31 @@ if toggle:
                 job_file.write("#SBATCH --output={0}meerpipe_out_{1}_{2} \n".format(str(output_dir),psrnames[obs_num],obs_num))
                 job_file.write("#SBATCH --ntasks=1 \n")
                 job_file.write("#SBATCH --mem={0} \n".format(required_ram))
-                job_file.write("#SBATCH --time=04:00:00 \n")
+                job_file.write("#SBATCH --time=03:00:00 \n")
                 #job_file.write("#SBATCH --reservation=oz005_obs \n")
                 #job_file.write("#SBATCH --account=oz005 \n")
                 job_file.write("#SBATCH --mail-type=FAIL --mail-user={} \n".format(user_email))
                 job_file.write('cd {0} \n'.format(mysoft_path))
                 job_file.write("python slurm_pipe.py -obsname {0}archivelist.npy -outputdir {0}output.npy -psrname {0}psrname.npy".format(output_dir))
-
+                                                 
             logger.info("Slurm job - {0} created".format(job_name))
-
+                                               
             logger.info("Deploying {0}".format(job_name))
             com_sbatch = 'sbatch {0}'.format(os.path.join(output_dir,str(job_name)))
             args_sbatch = shlex.split(com_sbatch)
             proc_sbatch = subprocess.Popen(args_sbatch)
-            time.sleep(1)
+            time.sleep(1)                        
             logger.info("{0} deployed.".format(job_name))
-
-            """
-            logger.info("Cleaning up")
+                                                 
+            """                                  
+            logger.info("Cleaning up")           
             os.remove(os.path.join(output_dir,"archivelist.npy"))
             os.remove(os.path.join(output_dir,"output.npy"))
             os.remove(os.path.join(output_dir,"psrname.npy"))
-            """
-
-        else:
-
+            """                                  
+                                                 
+        else:                                    
+                                                 
             #Add the archive files per observation directory into a single file
             added_archives = add_archives(archive_list[obs_num],output_dir,config_params,psrnames[obs_num],logger)
             logger.info("Added archive: {0}".format(added_archives))
