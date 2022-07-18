@@ -46,7 +46,13 @@ def get_ephemeris(psrname,output_path,cparams,logger):
     Routine to return the path of the ephemeris file for a given pulsar name
     """
     if cparams["meertime_ephemerides"]:
-        par_path = os.path.join(cparams["meertime_ephemerides"],psrname+".par")
+        if os.path.exists(os.path.join(cparams["meertime_ephemerides"],psrname+".par")):
+            if os.path.exists(os.path.join(cparams["meertime_ephemerides"],psrname+"_p2.par")):
+                par_path = os.path.join(cparams["meertime_ephemerides"],psrname+"_p2.par")
+            elif os.path.exists(os.path.join(cparams["meertime_ephemerides"],psrname+"_p3.par")):
+                par_path = os.path.join(cparams["meertime_ephemerides"],psrname+"_p3.par")
+            else:
+                par_path = os.path.join(cparams["meertime_ephemerides"],psrname+".par")
     else:
         ephem = os.path.join(output_path,"meertime_ephemerides")
         par_path = os.path.join(ephem,psrname+".par")
@@ -92,7 +98,19 @@ def get_pptatemplate(backend,psrname,cfreq,nbin,logger):
 
 def get_meertimetemplate(psrname,output_path,cparams,logger):
     if cparams["meertime_templates"]:
-        psr_template = os.path.join(cparams["meertime_templates"],str(psrname)+".std")
+        notemplate_list = np.loadtxt(os.path.join(cparams["meertime_templates"],"notemplate.list"),dtype=str)
+        if os.path.exists(os.path.join(cparams["meertime_templates"],str(psrname)+".std")):
+            if os.path.exists(os.path.join(cparams["meertime_templates"],str(psrname)+"_p2.std")):
+                psr_template = os.path.join(cparams["meertime_templates"],str(psrname)+"_p2.std")
+            elif os.path.exists(os.path.join(cparams["meertime_templates"],str(psrname)+"_p3.std")):
+                psr_template = os.path.join(cparams["meertime_templates"],str(psrname)+"_p3.std")
+            else:
+                psr_template = os.path.join(cparams["meertime_templates"],str(psrname)+".std")
+        elif psrname in notemplate_list:
+            psr_template = os.path.join(cparams["meertime_templates"],"Gaussian.std")
+        else:
+            psr_template = "NA"
+
     else:
         template_dir = os.path.join(output_path,"meertime_templates")
         psr_template = os.path.join(template_dir,str(psrname)+".std")
@@ -453,7 +471,12 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
                         logger.info("Applying channel threshold of {0} and subint threshold of {0}".format(chan_thresh,subint_thresh))
 
-                        surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={1},subintthresh={2},template={0}'.format(template,chan_thresh,subint_thresh)
+                        if os.path.split(template)[-1] == "Gaussian.std":
+                            logger.info("Since using a Gaussian template - typically the observation S/N is very low. So RFI exicision is done without a template")
+                            surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={0},subintthresh={1}'.format(chan_thresh,subint_thresh)
+                        else:
+                            surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={1},subintthresh={2},template={0}'.format(template,chan_thresh,subint_thresh)
+                    
                     else:
                         surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={0},subintthresh={1}'.format(chan_thresh,subint_thresh)
                     
@@ -734,7 +757,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             archive_name = archive_name.split('.')[0]
 
             #decimation_info = np.genfromtxt(cparams["decimation_products"],delimiter=", ",dtype=str)
-            decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str, header=None)
+            decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str, header=None, engine='python')
             decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
             decimation_info = decimation_info.values.tolist()
             decimation_info = decimation_info[0]
@@ -885,7 +908,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 freqs = cleaned_ar.get_frequencies().tolist()
 
 
-            decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str, header=None)
+            decimation_info = pd.read_csv(cparams["decimation_products"],sep=", ", dtype=str, header=None, engine='python')
             decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
             decimation_info = decimation_info.values.tolist()
 
@@ -1229,7 +1252,15 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
 
     obsheader_path = glob.glob(os.path.join(str(output_dir), "*obs.header"))[0]
     header_params = get_obsheadinfo(obsheader_path)
-    parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{}*par".format(psrname)))
+    if len(glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}.par".format(psrname)))) > 0:
+        parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{0}.par".format(psrname)))
+    elif len(glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p2.par".format(psrname)))) > 0:
+        parfile = glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p2.par".format(psrname)))
+    elif len(glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p3.par".format(psrname)))) > 0:
+        parfile = glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p3.par".format(psrname)))
+
+       
+
     if len(parfile) == 0:
         logger.warning("No par file found for "+psrname)
         parfile = None
@@ -1308,11 +1339,23 @@ def generate_toas(output_dir,cparams,psrname,logger):
     logger.info("Obtaining templates for timing")
     template = get_meertimetemplate(psrname,output_path,cparams,logger)
 
-    parfile = glob.glob(os.path.join(str(output_dir),"{0}.par".format(psrname)))[0]
-    copy_parfile = os.path.join(timing_path,"{0}.par".format(psrname))
-    os.rename(parfile,copy_parfile)
-    logger.info("Ephemeris copied to the timing directory")
-
+    if len(glob.glob(os.path.join(str(output_dir),"{0}.par".format(psrname)))) > 0:
+        parfile = glob.glob(os.path.join(str(output_dir),"{0}.par".format(psrname)))[0]
+        copy_parfile = os.path.join(timing_path,"{0}.par".format(psrname))
+        os.rename(parfile,copy_parfile)
+        logger.info("Ephemeris copied to the timing directory")
+    elif len(glob.glob(os.path.join(str(output_dir),"{0}_p2.par".format(psrname)))) > 0:
+        parfile = glob.glob(os.path.join(str(output_dir),"{0}_p2.par".format(psrname)))[0]
+        copy_parfile = os.path.join(timing_path,"{0}_p2.par".format(psrname))
+        os.rename(parfile,copy_parfile)
+        logger.info("Ephemeris copied to the timing directory")
+    elif len(glob.glob(os.path.join(str(output_dir),"{0}_p3.par".format(psrname)))) > 0:
+        parfile = glob.glob(os.path.join(str(output_dir),"{0}_p3.par".format(psrname)))[0]
+        copy_parfile = os.path.join(timing_path,"{0}_p3.par".format(psrname))
+        os.rename(parfile,copy_parfile)
+        logger.info("Ephemeris copied to the timing directory")
+ 
+ 
     decimated_path = os.path.join(str(output_dir),"decimated")
     processed_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
 
@@ -1376,6 +1419,22 @@ def cleanup(output_dir, cparams, psrname, logger):
         timing_dir = os.path.join(output_dir,"timing")
         stdfile_timing = os.path.join(timing_dir,"{0}.std".format(psrname))
         os.rename(stdfile,stdfile_timing)
+    elif os.path.exists(os.path.join(output_dir,"{0}_p2.std".format(psrname))):
+        stdfile = glob.glob(os.path.join(output_dir,"{0}_p2.std".format(psrname)))[0]
+        timing_dir = os.path.join(output_dir,"timing")
+        stdfile_timing = os.path.join(timing_dir,"{0}_p2.std".format(psrname))
+        os.rename(stdfile,stdfile_timing)
+    elif os.path.exists(os.path.join(output_dir,"{0}_p3.std".format(psrname))):
+        stdfile = glob.glob(os.path.join(output_dir,"{0}_p3.std".format(psrname)))[0]
+        timing_dir = os.path.join(output_dir,"timing")
+        stdfile_timing = os.path.join(timing_dir,"{0}_p3.std".format(psrname))
+        os.rename(stdfile,stdfile_timing)
+    elif os.path.exists(os.path.join(output_dir,"Gaussian.std")):
+        stdfile = glob.glob(os.path.join(output_dir,"Gaussian.std"))[0]
+        timing_dir = os.path.join(output_dir,"timing")
+        stdfile_timing = os.path.join(timing_dir,"Gaussian.std")
+        os.rename(stdfile,stdfile_timing)
+
 
    
     #Renaming cleaned and decimated archives
@@ -1470,8 +1529,8 @@ def generate_summary(output_dir, cparams, psrname, logger):
     output_dir = str(output_dir)
 
     split_path = output_dir.split("/")
-    psrname = split_path[7]
-    utcname = split_path[8]
+    psrname = split_path[9]  # 7 by default
+    utcname = split_path[10] # 8 by default
     if str(split_path[10]) == "816":
         rcvr = "UHF"
     else:
@@ -1552,8 +1611,24 @@ def generate_summary(output_dir, cparams, psrname, logger):
         #Checking if timing files exist
         timing_path = os.path.join(output_dir,"timing")
         timingfiles = glob.glob(os.path.join(timing_path,"J*tim"))
-        parfile = glob.glob(os.path.join(timing_path,"{0}.par".format(psrname)))
-        stdfile = glob.glob(os.path.join(timing_path,"{0}.std".format(psrname)))
+        
+        if len(glob.glob(os.path.join(timing_path,"{0}.par".format(psrname))))>0:
+            parfile = glob.glob(os.path.join(timing_path,"{0}.par".format(psrname)))
+        elif len(glob.glob(os.path.join(timing_path,"{0}_p2.par".format(psrname))))>0:
+            parfile = glob.glob(os.path.join(timing_path,"{0}_p2.par".format(psrname)))
+        elif len(glob.glob(os.path.join(timing_path,"{0}_p3.par".format(psrname))))>0:
+            parfile = glob.glob(os.path.join(timing_path,"{0}_p3.par".format(psrname)))
+
+        if len(glob.glob(os.path.join(timing_path,"{0}.std".format(psrname))))>0:
+            stdfile = glob.glob(os.path.join(timing_path,"{0}.std".format(psrname)))
+        elif len(glob.glob(os.path.join(timing_path,"{0}_p2.std".format(psrname))))>0:
+            stdfile = glob.glob(os.path.join(timing_path,"{0}_p2.std".format(psrname)))
+        elif len(glob.glob(os.path.join(timing_path,"{0}_p3.std".format(psrname))))>0:
+            stdfile = glob.glob(os.path.join(timing_path,"{0}_p3.std".format(psrname)))
+        elif len(glob.glob(os.path.join(timing_path,"Gaussian.std")))>0:
+            stdfile = glob.glob(os.path.join(timing_path,"Gaussian.std"))
+
+
 
         if len(timingfiles) == len(decimatedfiles):
             sfile.write("TimingFiles: CHECK \n")
