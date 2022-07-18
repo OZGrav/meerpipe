@@ -57,6 +57,7 @@ if not config_params["fluxcal"]:
     #RFI zapping using coastguard on calibrated archives
     cleaned_archives = mitigate_rfi(calibrated_archives,output_dir,config_params,psrname,logger)
     logger.info("Cleaned archives: {0}".format(cleaned_archives))
+
 elif config_params["fluxcal"]:
     #RFI zapping using coastguard on added archives
     cleaned_archives = mitigate_rfi(added_archives,output_dir,config_params,psrname,logger)
