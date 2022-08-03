@@ -408,7 +408,7 @@ decimated_products = np.load(args.decimated)
 
 print ("Processing {0}:{1}".format(psr_name, obs_name))
 print ("============================================")
-
+print ("Reference par file = {0}".format(str(args.parfile)))
 
 #Get Tsky in Jy
 #gl,gb = get_glgb(psr_name)
