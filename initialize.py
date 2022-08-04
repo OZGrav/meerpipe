@@ -328,7 +328,7 @@ def get_outputinfo(cparams,logger):
                         ram_slope = 10.6
                         ram_intercept = 0.4 # GB
                         ram_min = 0.6 # GB
-                        ram_factor = 1.13
+                        ram_factor = 1.20
                         #ram_factor_max = 15 # GB
                         
                         file_size = 0

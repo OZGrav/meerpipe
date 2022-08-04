@@ -492,33 +492,12 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                     orig_template = get_meertimetemplate(psrname,output_path,cparams,logger)
                 else:
                     orig_template = None
-                
-                template = orig_template
 
-                # NEW - check for bin count of template and adjust to match archive if required
-                if not template is None:
-                    template_ar = ps.Archive_load(str(template))
-                    template_bins = int(template_ar.get_nbin())
-                    archive_bins = int(cloned_archive.get_nbin())
-                    if not (template_bins == archive_bins):                
-                    
-                        logger.info("Mismatch detected between phase bin count of archive ({0}) and template ({1})".format(archive_bins, template_bins))
-                        logger.info("Attempting to produce scrunched template to correct for mismatch...")
+                # NEW - produce tempoerary template that has been checked for bin count
+                # this template will be generated separately from the original template, making it safe to delete
+                if not orig_template is None:
 
-                        # work out the mismatch factor
-                        b_factor = template_bins / archive_bins
-                        b_remainder = template_bins % archive_bins
-
-                        if not (b_remainder == 0):
-                            logger.info("Non-integer factor between the bin values, cannot scrunch to match - skipping step")
-                        elif (b_factor < 1.0):
-                            logger.info("Archive has higher bin count than template - skipping step")
-                        else:
-                            # create bin-scrunched clone and write to temporary file
-                            logger.info("Creating scrunched template by factor {}".format(b_factor))
-                            template_ar.bscrunch_to_nbin(archive_bins)
-                            template = os.path.join(str(output_dir),"temp_{}.std".format(archive_bins))
-                            template_ar.unload(template)
+                    temporary_template = template_bin_adjuster(orig_template, cloned_archive, output_dir, logger)
                         
                 if not (int(cloned_archive.get_nsubint()) == 1 and int(cloned_archive.get_nchan()) == 1):
 
@@ -539,11 +518,11 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                     chan_thresh = 5
                     subint_thresh = 5
 
-                    if not template is None:
+                    if not orig_template is None:
 
                         logger.info("Applying channel threshold of {0} and subint threshold of {0}".format(chan_thresh,subint_thresh))
 
-                        surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={1},subintthresh={2},template={0}'.format(template,chan_thresh,subint_thresh)
+                        surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={1},subintthresh={2},template={0}'.format(temporary_template,chan_thresh,subint_thresh)
                     else:
                         surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={0},subintthresh={1}'.format(chan_thresh,subint_thresh)
                     
@@ -634,15 +613,53 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
 
     # clean up any scrunched template, if one was built
-    if not template is None:
-        
-        template_bins = int(template_ar.get_nbin())
+    if not orig_template is None:
 
-        if not (orig_template == template) and not (int(ps.Archive_load(str(template)).get_nbin()) == template_bins):
-            logger.info("Removing scrunched template {}".format(template))
+        logger.info("Cleaning up temporary template...")
+        os.remove(temporary_template)
+
+#        template_bins = int(template_ar.get_nbin())
+
+#        if not (str(orig_template) == str(template)) and not (int(ps.Archive_load(str(template)).get_nbin()) == template_bins):
+#            logger.info("Removing scrunched template {}".format(template))
             #os.remove(template)
 
     return cleaned_archives
+
+# utility function - adjustes a template to match the phase bins of the provided file, if possible
+# returns a copy of the template which can be safely deleted as needed
+def template_bin_adjuster(template, archive, output_dir, logger):
+
+    # setup
+    template_ar = ps.Archive_load(str(template))
+    template_bins = int(template_ar.get_nbin())
+    archive_bins = int(archive.get_nbin())
+
+    # if bin counts don't match
+    if not (template_bins == archive_bins):
+
+        logger.info("Mismatch detected between phase bin count of archive ({0}) and template ({1})".format(archive_bins, template_bins))
+        logger.info("Attempting to produce scrunched template to correct for mismatch...")
+
+        # work out the mismatch factor
+        b_factor = template_bins / archive_bins
+        b_remainder = template_bins % archive_bins
+
+        if not (b_remainder == 0):
+            logger.info("Non-integer factor between the bin values, cannot scrunch to match - skipping step")
+        elif (b_factor < 1.0):
+            logger.info("Archive has higher bin count than template - skipping step")
+        else:
+            # create bin-scrunched clone and write to temporary file
+            logger.info("Creating scrunched template by factor {}".format(b_factor))
+            template_ar.bscrunch_to_nbin(archive_bins)
+            
+    # the scrunch has now either been done or it has not
+    # write out the temporary standard
+    new_template = os.path.join(str(output_dir),"temporary_{}.std".format(archive_bins))
+    template_ar.unload(new_template)
+
+    return new_template
 
 
 def dynamic_spectra(output_dir,cparams,psrname,logger):
@@ -657,13 +674,13 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
     ds_path = os.path.join(str(output_dir),"scintillation")
     logger.info("Generating dynamic spectra using psrflux")
 
-    template = get_meertimetemplate(psrname,output_path,cparams,logger)
+    orig_template = get_meertimetemplate(psrname,output_path,cparams,logger)
 
     cleaned_dir = os.path.join(str(output_dir),"cleaned")
     cleaned_archives = sorted(glob.glob(os.path.join(str(cleaned_dir),"*.ar")))
     cleaned_archives.append(glob.glob(os.path.join(str(output_dir),"calibrated/*.calib"))[0])
 
-    if not template == None:
+    if not orig_template == None:
 
         max_rfi_frac = 0.0
 
@@ -673,6 +690,9 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
             archive_path,archive_name = os.path.split(clean_ar.get_filename())
             extension = archive_name.split('.')[-1]
             archive_name = archive_name.split('.')[0]
+
+            # account for phase bin differences
+            temporary_template = template_bin_adjuster(orig_template, clean_ar, output_dir, logger)
 
             logger.info("Archive name:{0} and extension: {1}".format(archive_name, extension))
             
@@ -686,11 +706,11 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
             if not os.path.exists(os.path.join(ds_path,"{0}".format(dynspec_name))):
 
                 if "ch" in dynspec_name:
-                    psrflux_com = 'psrflux -s {0} {1} -e ch.dynspec'.format(template,clean_archive)
+                    psrflux_com = 'psrflux -s {0} {1} -e ch.dynspec'.format(temporary_template,clean_archive)
                 if dynspec_name == archive_name+".dynspec":
-                    psrflux_com = 'psrflux -s {0} {1} -e dynspec'.format(template,clean_archive)
+                    psrflux_com = 'psrflux -s {0} {1} -e dynspec'.format(temporary_template,clean_archive)
                 if "calib" in dynspec_name:
-                    psrflux_com = 'psrflux -s {0} {1} -e dynspec'.format(template,clean_archive)
+                    psrflux_com = 'psrflux -s {0} {1} -e dynspec'.format(temporary_template,clean_archive)
 
                 proc_psrflux = shlex.split(psrflux_com)
                 p_psrflux = subprocess.Popen(proc_psrflux)
@@ -735,6 +755,10 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
                 rfi_frac = calc_dynspec_zap_fraction(os.path.join(ds_path,"{0}".format(dynspec_name)))
                 if (float(rfi_frac) > max_rfi_frac):
                     max_rfi_frac = rfi_frac
+
+            # cleanup temporary template
+            logger.info("Cleaning up temporary template...")
+            os.remove(temporary_template)
 
         # now for some tacked-on PSRDB stuff based on the highest RFI zap fraction
         if cparams["db_flag"]:
@@ -1419,13 +1443,13 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
     obsheader_path = glob.glob(os.path.join(str(output_dir), "*obs.header"))[0]
     header_params = get_obsheadinfo(obsheader_path)
     #parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{}*par".format(psrname)))
-    parfile = glob.glob(os.path.join(str(output_dir),"{0}.par".format(psrname)))[0]
+    parfile = glob.glob(os.path.join(str(output_dir),"{0}.par".format(psrname)))
     if len(parfile) == 0:
         logger.warning("No par file found for "+psrname)
         parfile = None
     else:
         parfile = parfile[0]
-
+    
     if not header_params["BW"] == "544.0":
         logger.info("Flux calibrating the decimated data products of {0}".format(psrname))
         pid = cparams["pid"]
