@@ -440,7 +440,7 @@ offrms_list = get_offrms(add_file)
 #offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
 offrms_freq = dict(list(zip(freq_list, offrms_list)))
 
-#Getting median rms of off-pulse rms values for ~2 channels centered at 1390 MHz
+#Getting median rms of off-pulse rms values for ~20 channels centered at 1390 MHz
 observed_rms = get_median_offrms(offrms_freq)
 
 print ("============")
