@@ -1605,23 +1605,42 @@ def generate_toas(output_dir,cparams,psrname,logger):
         for proc_archive in processed_archives:
             tim_name = os.path.split(proc_archive)[1].split('.ar')[0]+".tim"
             #Running pat
-            if not os.path.exists(os.path.join(timing_path,tim_name)):
-                logger.info("Creating ToAs with pat")
-                logger.info(proc_archive)
-                arg = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template,proc_archive)
-                proc = shlex.split(arg)
-                f = open("{0}/{1}".format(timing_path,tim_name), "w")
-                subprocess.call(proc, stdout=f)
-                logger.info("{0} generated".format(tim_name))
-                f.close()
+            
+            # NEW - August 2022 - Check for channel and subintegration count of decimated product
+            # If they are too high, do not create TOAs - PAT will seize up and the job will time out
+            # Experimentation will be needed to determine the appropriate limiting channel count
+            
+            comm = "vap -c nchan,nsub {0}".format(proc_archive)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            info = proc.stdout.read().decode("utf-8").split("\n")
+            nchan = int(info[1].split()[1])
+            nsub = int(info[1].split()[2])
 
-                #Creating a meerwatch launch file
-                logger.info("{0}.launch file for MeerWatch".format(psrname))
-                mw_launch = open("{0}/{1}.launch".format(str(output_dir),str(psrname)),"w")
-                mw_launch.write("Launch_MeerWatch. MeerPipe successful")
-                mw_launch.close()
+            if not ((nchan >= 16384) and (nsub > 1)):
+
+                if not os.path.exists(os.path.join(timing_path,tim_name)):
+                    logger.info("Creating ToAs with pat")
+                    logger.info(proc_archive)
+                    arg = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template,proc_archive)
+                    proc = shlex.split(arg)
+                    f = open("{0}/{1}".format(timing_path,tim_name), "w")
+                    subprocess.call(proc, stdout=f)
+                    logger.info("{0} generated".format(tim_name))
+                    f.close()
+
+                    #Creating a meerwatch launch file
+                    logger.info("{0}.launch file for MeerWatch".format(psrname))
+                    mw_launch = open("{0}/{1}.launch".format(str(output_dir),str(psrname)),"w")
+                    mw_launch.write("Launch_MeerWatch. MeerPipe successful")
+                    mw_launch.close()
+                else:
+                    logger.info("{0} file exists. Skipping ToA computation.".format(tim_name))
+
             else:
-                logger.info("{0} file exists. Skipping ToA computation.".format(tim_name))
+                # report inability to create TOA
+                logger.info("ALERT: Decimated product channel count of {0} and subintegration count of {1} are too large for TOA production - skipping...".format(nchan, nsub))
     
         # create the relevant entries in PSRDB to summarise the TOA production
         # create / recall the ephemeris and template entries
