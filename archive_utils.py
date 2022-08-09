@@ -226,7 +226,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
             p_add = subprocess.Popen(proc_add)
             p_add.wait()
  
-        if pid == "TPA" or pid == "PTA" or pid == "RelBin":
+        if pid == "TPA" or pid == "PTA" or pid == "RelBin" or pid == "GC":
             #Check for new MK DMs and RMs and apply if present. If not, the DM is applied from the ephemeris and the RM from psrcat.
             #Applying DM
             dm_path = cparams["dmcat"]
@@ -256,7 +256,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 p_dm.wait()
 
         
-        if pid == "TPA" or pid == "PTA" or pid == "J0437_LT" or pid == "RelBin":
+        if pid == "TPA" or pid == "PTA" or pid == "J0437_LT" or pid == "RelBin" or pid == "GC":
             #Applying RMs
             rm_path = cparams["rmcat"]
             rm_cat = np.genfromtxt(rm_path,delimiter=" ",dtype=str)
@@ -1073,7 +1073,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 logger.info("{0}.ar exists. Skipping polarization+frequency+time scrunching".format(archive_name))
 
 
-        elif pid == "RelBin":
+        elif pid == "RelBin" or pid == "GC":
             #Using relbin_decimation.list (in additional_info) for decimating cleaned archives. 
 
             #Decimating on a fresh copy of the archive
@@ -1472,7 +1472,7 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
                 TP_file = archive
             elif pid == "PTA" and "t32p" in archive:
                 TP_file = archive
-            elif pid == "RelBin" and "Tp" in archive:
+            elif (pid == "RelBin" or pid == "GC") and "Tp" in archive:
                 TP_file = archive
 
         if (TP_file == None):
@@ -2503,6 +2503,10 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
         elif (cparams["pid"] == "RelBin"):
             toa_nchan = 1
             toa_tobs = 240
+            toa_config_success = True
+        elif (cparams["pid"] == "GC"):
+            toa_nchan = 1
+            toa_tobs = 1800
             toa_config_success = True
         elif (cparams["pid"] == "PTA"):
             toa_nchan = 4

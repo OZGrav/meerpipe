@@ -154,6 +154,8 @@ def pid_getdefaultpipe(op):
         pipe = 4
     elif op == "SCI-20180516-MB-02":
         pipe = 8
+    elif op == "SCI-20180516-MB-04":
+        pipe = 9
     else:
         pipe = None
 
