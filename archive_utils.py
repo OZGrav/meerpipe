@@ -974,35 +974,8 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 #L-band data
                 if not header_params["BW"] == "544.0":
 
-                    #CHOPPING TO 775.75 MHz
-                    logger.info("Extracting frequency channels from cleaned file since BW is 856 MHz (1024 channels)")
-                    reference_928ch_freqlist  = np.load(cparams["ref_freq_list"]).tolist()
-                    oar = cleaned_ar.clone()
-                    dd = oar.get_dedispersed()
-                    if dd:
-                        oar.dededisperse()
-
-                    recheck=True
-                    while recheck:
-                        recheck=False
-                        freqs = oar.get_frequencies()
-                        for i,f in enumerate(freqs):
-                            if f in reference_928ch_freqlist:
-                                pass
-                            else:
-                                oar.remove_chan(i,i)
-                                recheck=True
-                                break
-
-                    logger.info("Done extracting")
-                    if dd:
-                        oar.dedisperse()
-
-                    if not os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
-                        oar.unload(os.path.join(cleaned_path,archive_name+".ch.ar"))
-                        logger.info("Unloaded extracted file")
-                    else:
-                        logger.info("Chopped cleaned file already exists")
+                    # chopping functionality now replaced by abstracted utility function
+                    chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,logger)
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
@@ -1130,36 +1103,10 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
                 #L-BAND DATA
                 if not header_params["BW"] == "544.0":
-                
-                    logger.info("Extracting frequency channels from cleaned file since BW is 856 MHz (1024 channels)")
-                    reference_928ch_freqlist  = np.load(cparams["ref_freq_list"]).tolist()
-                    oar = cleaned_ar.clone()
-                    dd = oar.get_dedispersed()
-                    if dd:
-                        oar.dededisperse()
 
-                    recheck=True
-                    while recheck:
-                        recheck=False
-                        freqs = oar.get_frequencies()
-                        for i,f in enumerate(freqs):
-                            if f in reference_928ch_freqlist:
-                                pass
-                            else:
-                                oar.remove_chan(i,i)
-                                recheck=True
-                                break
-
-                    logger.info("Done extracting")
-                    if dd:
-                        oar.dedisperse()
-
-                    if not os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
-                        oar.unload(os.path.join(cleaned_path,archive_name+".ch.ar"))
-                        logger.info("Unloaded extracted file")
-                    else:
-                        logger.info("Chopped cleaned file already exists")
-
+                    # chopping functionality now replaced by abstracted utility function
+                    chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,logger)
+                    
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
                         for num in range(0,len(decimation_info)):
@@ -1269,35 +1216,8 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 #L-band data
                 if not header_params["BW"] == "544.0":
 
-                    #CHOPPING TO 775.75 MHz
-                    logger.info("Extracting frequency channels from cleaned file since BW is 856 MHz (1024 channels)")
-                    reference_928ch_freqlist  = np.load(cparams["ref_freq_list"]).tolist()
-                    oar = cleaned_ar.clone()
-                    dd = oar.get_dedispersed()
-                    if dd:
-                        oar.dededisperse()
-
-                    recheck=True
-                    while recheck:
-                        recheck=False
-                        freqs = oar.get_frequencies()
-                        for i,f in enumerate(freqs):
-                            if f in reference_928ch_freqlist:
-                                pass
-                            else:
-                                oar.remove_chan(i,i)
-                                recheck=True
-                                break
-
-                    logger.info("Done extracting")
-                    if dd:
-                        oar.dedisperse()
-
-                    if not os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
-                        oar.unload(os.path.join(cleaned_path,archive_name+".ch.ar"))
-                        logger.info("Unloaded extracted file")
-                    else:
-                        logger.info("Chopped cleaned file already exists")
+                    # chopping functionality now replaced by abstracted utility function
+                    chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,logger)
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
@@ -1431,6 +1351,50 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
         
     return processed_archives
+
+# NEW - 16/08/2022
+# Abstraction of the chopping code used in decimate_data()
+# Future abstraction may be required, this is just a starting point
+def chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,logger):
+
+    # CHOPPING DATA TO 775.75 MHz
+    logger.info("Extracting frequency channels from cleaned file since BW is 856 MHz")
+
+    # recalling comparison frequency list (should be contiguous)
+    reference_928ch_freqlist  = np.load(cparams["ref_freq_list"]).tolist()
+    # cloning archive and ensuring it has not been dedispersed
+    oar = cleaned_ar.clone()
+    dd = oar.get_dedispersed()
+    if dd:
+        oar.dededisperse()
+    
+    # chopping channels
+    # complex structure required as with every channel removal, indexes of oar get reset
+    recheck=True
+    while recheck:
+        recheck=False
+        freqs = oar.get_frequencies()
+        for i,f in enumerate(freqs):
+            if f in reference_928ch_freqlist:
+                pass
+            else:
+                oar.remove_chan(i,i)
+                recheck=True
+                break
+    
+    logger.info("Done extracting")
+    # dedisperse is previously true
+    if dd:
+        oar.dedisperse()
+
+    # write file if it does not already exist
+    if not os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
+        oar.unload(os.path.join(cleaned_path,archive_name+".ch.ar"))
+        logger.info("Unloaded extracted file")
+    else:
+        logger.info("Chopped cleaned file already exists")
+
+    return
 
 
 def fluxcalibrate(output_dir, cparams, psrname, logger):
