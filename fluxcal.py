@@ -217,15 +217,16 @@ def get_tsky_updated(rajd, decjd):
         tsky = tsky_default
         
     print ('### Sky Temperature(mK) used for flux calibration: {0} ###'.format(tsky))
+
         
     #Converting to Jy and subtracting 3372mK as per SARAO specifications
     print ("Converting tsky (mK) to Jy and subtracting 3372mK (SARAO specs)")
     tsky_jy = (tsky-3372.0)*0.019
-    print ("### Tsky (old) in Jy: {0} ###".format(tsky_jy))
+    print ("### Tsky (old) in Jy: {0} ### (deprecated)".format(tsky_jy))
 
     #New conversion - Jan 2022
     new_scaling_factor = 1.7202+0.0002
-    tsky_jy = new_scaling_factor*(tsky_jy-3.372)+3.372
+    tsky_jy = (new_scaling_factor*(tsky-3372))*0.019
     print ("Tsky (new) in Jy: {0}".format(tsky_jy))
     
     return tsky_jy
