@@ -1627,7 +1627,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
             nchan = int(info[1].split()[1])
             nsub = int(info[1].split()[2])
 
-            if not ((nchan >= 16384) and (nsub > 1)):
+            if not ((nchan >= 2048) and (nsub > 1)):
 
                 if not os.path.exists(os.path.join(timing_path,tim_name)):
                     logger.info("Creating ToAs with pat")
