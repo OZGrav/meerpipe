@@ -975,7 +975,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 if not header_params["BW"] == "544.0":
 
                     # chopping functionality now replaced by abstracted utility function
-                    chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,logger)
+                    chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
@@ -1105,7 +1105,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 if not header_params["BW"] == "544.0":
 
                     # chopping functionality now replaced by abstracted utility function
-                    chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,logger)
+                    chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
                     
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
@@ -1217,7 +1217,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 if not header_params["BW"] == "544.0":
 
                     # chopping functionality now replaced by abstracted utility function
-                    chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,logger)
+                    chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
@@ -1355,9 +1355,9 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 # NEW - 16/08/2022
 # Abstraction of the chopping code used in decimate_data()
 # Future abstraction may be required, this is just a starting point
-def chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,logger):
+def chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,hparams,logger):
 
-    # CHOPPING DATA TO 775.75 MHz
+    # CHOPPING LBAND DATA TO 775.75 MHz
     logger.info("Extracting frequency channels from cleaned file since BW is 856 MHz")
 
     # recalling comparison frequency list (should be contiguous)
@@ -1367,21 +1367,66 @@ def chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,logger):
     dd = oar.get_dedispersed()
     if dd:
         oar.dededisperse()
-    
+
     # chopping channels
-    # complex structure required as with every channel removal, indexes of oar get reset
-    recheck=True
-    while recheck:
-        recheck=False
-        freqs = oar.get_frequencies()
-        for i,f in enumerate(freqs):
-            if f in reference_928ch_freqlist:
-                pass
-            else:
-                oar.remove_chan(i,i)
-                recheck=True
-                break
+    # check for channel count in header parameters
+    if (hparams == None):
+        nchan = 1024
+    else:
+        nchan = int(hparams["FOLD_OUTNCHAN"])
     
+    # in theory, the new chopping technique is faster and would work for 1024
+    # however, just in case there's some caveat I haven't spotted, I will only implement it
+    # for non-1024 channel data
+
+    if (nchan == 1024):
+
+        logger.info("Defaulting to standard 1024 channel procedure...")
+
+        # complex structure required as with every channel removal, indexes of oar get reset
+        recheck=True
+        while recheck:
+            recheck=False
+            freqs = oar.get_frequencies()
+            for i,f in enumerate(freqs):
+                if f in reference_928ch_freqlist:
+                    pass
+                else:
+                    oar.remove_chan(i,i)
+                    recheck=True
+                    break
+    else:
+
+        logger.info("Applying new chopping algorithm (designed for non-1024 channel configurations...")
+
+        # assumes continuous block of channels to zap, which should be true or something has gone seriously wrong
+        # also assumes positive bandwidth
+        # calculate channel bandwidth and min/max frequencies
+        chbw = np.abs((reference_928ch_freqlist[0] - reference_928ch_freqlist[len(reference_928ch_freqlist) - 1])/(len(reference_928ch_freqlist) - 1))
+        minfreq = reference_928ch_freqlist[0] - chbw/2
+        maxfreq = reference_928ch_freqlist[len(reference_928ch_freqlist) - 1] + chbw/2
+
+        recheck=True
+        while recheck:
+            recheck=False
+            freqs = oar.get_frequencies()
+            if (freqs[0] < minfreq):
+                for i,f in enumerate(freqs):
+                    if (f < minfreq):
+                        pass
+                    else:
+                        oar.remove_chan(0, i-1)
+                        recheck=True
+                        break
+            elif (freqs[len(freqs) - 1] > maxfreq):
+                for i,f in enumerate(freqs):
+                    if (f <= maxfreq):
+                        pass
+                    else:
+                        oar.remove_chan(i, len(freqs) - 1)
+                        recheck=True
+                        break
+
     logger.info("Done extracting")
     # dedisperse is previously true
     if dd:
