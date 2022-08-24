@@ -324,11 +324,28 @@ def get_outputinfo(cparams,logger):
                             reqram = "512g"
                         """
                         # now calculating RAM requirements based on file size, per an empirically derived relation
+
+                        # new - 23/08/2022 - get channel count to branch settings for high channel count files
+                        if (len(archives) > 0):
+                            comm = "vap -c nchan {0}".format(archives[0])
+                            args = shlex.split(comm)
+                            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                            proc.wait()
+                            info = proc.stdout.read().decode("utf-8").split("\n")
+                            nchan = int(info[1].split()[1])
+                        else:
+                            nchan = 1024
+
                         # may yet require future tweaking
                         ram_slope = 10.6
                         ram_intercept = 0.4 # GB
                         ram_min = 0.6 # GB
-                        ram_factor = 1.20
+                        if (nchan > 1024):
+                            # adjusted up for high channel count files
+                            ram_factor = 1.40
+                        else:
+                            # normal allocation
+                            ram_factor = 1.20
                         #ram_factor_max = 15 # GB
                         
                         file_size = 0
@@ -337,6 +354,7 @@ def get_outputinfo(cparams,logger):
 
                         # calculate RAM request in GB
                         reqram = ram_factor * ((file_size/(1024**3)) * ram_slope + ram_intercept)
+
                         #inter_ram = ((file_size/(1024**3)) * ram_slope + ram_intercept)
                         #if (inter_ram * ram_factor - inter_ram > ram_factor_max):
                         #    reqram = inter_ram + ram_factor_max
@@ -358,6 +376,9 @@ def get_outputinfo(cparams,logger):
                         
                         # based now on empirical study of the processing time required by jobs
                         time_factor = 2.3
+                        if (nchan > 1024):
+                            # (extra factor for high channel count jobs)
+                            time_factor = time_factor * 1.55
                         effective_time = int(np.ceil((file_size/(1024**2)) * time_factor)) # seconds
 
                         if ( effective_time <= 14400 ): # 4 hours
