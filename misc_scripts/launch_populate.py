@@ -61,7 +61,7 @@ if not (os.path.isfile(args.infile)):
 pulsar_list = np.loadtxt(args.infile, dtype="str")
 
 for x in range(0, len(pulsar_list)):
-    
+
     print ("Now checking {0}...".format(str(pulsar_list[x])))
 
     # get the pulsar_id and check that it exists

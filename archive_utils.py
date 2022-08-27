@@ -498,7 +498,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                 if not orig_template is None:
 
                     temporary_template = template_bin_adjuster(orig_template, cloned_archive, output_dir, logger)
-                        
+
                 if not (int(cloned_archive.get_nsubint()) == 1 and int(cloned_archive.get_nchan()) == 1):
 
                     #RcvrStandard cleaner
@@ -566,14 +566,14 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
             cleaned_archives.append(archive)
 
         logger.info("NOTE: The archive_list points to the original uncleaned archives")
-    
+
     # if PSRDB activated, record S/N of cleaned archives
     if cparams["db_flag"]:
 
         logger.info("PSRDB functionality activated - recording cleaned S/N")
-        
+
         # Create client
-        db_client = GraphQLClient(cparams["db_url"], False)    
+        db_client = GraphQLClient(cparams["db_url"], False)
 
         # Extract the maximum snr from the cleaned archives
         max_snr = 0
@@ -586,7 +586,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
              snr = info[1].split("=")[1]
              if (float(snr) > float(max_snr)):
                  max_snr = snr
-        
+
         # Recall results field and update
         results = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
         logger.info("Recalled results of processing ID {0}".format(cparams["db_proc_id"]))
@@ -601,7 +601,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
             None,
             None,
             None,
-            results, 
+            results,
             db_client,
             cparams["db_url"],
             cparams["db_token"]
@@ -653,7 +653,7 @@ def template_bin_adjuster(template, archive, output_dir, logger):
             # create bin-scrunched clone and write to temporary file
             logger.info("Creating scrunched template by factor {}".format(b_factor))
             template_ar.bscrunch_to_nbin(archive_bins)
-            
+
     # the scrunch has now either been done or it has not
     # write out the temporary standard
     new_template = os.path.join(str(output_dir),"temporary_{}.std".format(archive_bins))
@@ -766,7 +766,7 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
             logger.info("PSRDB functionality activated - recording zapped RFI fraction based on dynamic spectra")
 
             # Create client
-            db_client = GraphQLClient(cparams["db_url"], False)            
+            db_client = GraphQLClient(cparams["db_url"], False)
 
             # we've already calculated the maximum RFI zap fraction - recall results field and update
             results = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
@@ -1106,7 +1106,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
                     # chopping functionality now replaced by abstracted utility function
                     chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
-                    
+
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
                         for num in range(0,len(decimation_info)):
@@ -1374,7 +1374,7 @@ def chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,hparams,logger
         nchan = 1024
     else:
         nchan = int(hparams["FOLD_OUTNCHAN"])
-    
+
     # in theory, the new chopping technique is faster and would work for 1024
     # however, just in case there's some caveat I haven't spotted, I will only implement it
     # for non-1024 channel data
@@ -1458,7 +1458,7 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
         parfile = None
     else:
         parfile = parfile[0]
-    
+
     if not header_params["BW"] == "544.0":
         logger.info("Flux calibrating the decimated data products of {0}".format(psrname))
         pid = cparams["pid"]
@@ -1529,7 +1529,7 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
 
             # Add flux estimation to PSRDB
             if cparams["db_flag"] and len(fluxcal_obs) > 0:
-                
+
                 logger.info("PSRDB functionality activated - recording flux density estimate")
 
                 # Create client
@@ -1564,7 +1564,6 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
                     logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_proc_id"]))
                 else:
                     logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(cparams["db_proc_id"]))
-                
 
             if pid == "TPA" or pid == "PTA":
                 logger.info("Removing non-flux calibrated archives from the decimated directory...") #change this in future
@@ -1614,11 +1613,11 @@ def generate_toas(output_dir,cparams,psrname,logger):
         for proc_archive in processed_archives:
             tim_name = os.path.split(proc_archive)[1].split('.ar')[0]+".tim"
             #Running pat
-            
+
             # NEW - August 2022 - Check for channel and subintegration count of decimated product
             # If they are too high, do not create TOAs - PAT will seize up and the job will time out
             # Experimentation will be needed to determine the appropriate limiting channel count
-            
+
             comm = "vap -c nchan,nsub {0}".format(proc_archive)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
@@ -1650,7 +1649,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
             else:
                 # report inability to create TOA
                 logger.info("ALERT: Decimated product channel count of {0} and subintegration count of {1} are too large for TOA production - skipping...".format(nchan, nsub))
-    
+
         # create the relevant entries in PSRDB to summarise the TOA production
         # create / recall the ephemeris and template entries
         if cparams["db_flag"]:
@@ -1659,7 +1658,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
 
             # Create client
             db_client = GraphQLClient(cparams["db_url"], False)
-            
+
             if not cparams["fluxcal"]:
 
                 # chose a suitable processed archive for summary TOA production
@@ -1683,7 +1682,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
                             if fluxcal_string in archive and chop_string not in archive:
                                 # third preference - unchopped fluxcal archive
                                 proc_archive = archive
-                    
+
                         if (proc_archive == None):
                             for archive in cleaned_archives:
                                 # fourth preference - unchopped unfluxcal archive
@@ -1696,7 +1695,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 # load and convert the ephemeris
                 eph = ephemeris.Ephemeris()
                 eph.load_from_file(copy_parfile)
-                
+
                 # recall the DM, RM and site code being used by this file
                 comm = "vap -c dm,rm,asite {0}".format(proc_archive)
                 args = shlex.split(comm)
@@ -1705,23 +1704,23 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 info = proc.stdout.read().decode("utf-8").split("\n")
                 dm = float(info[1].split()[1])
                 rm = float(info[1].split()[2])
-                site = info[1].split()[3]                
+                site = info[1].split()[3]
 
                 # call the ephemeris and template creation functions
                 eph_id = create_ephemeris(psrname, eph, dm, rm, cparams, db_client, logger)
                 template_id = create_template(psrname, template, cparams, db_client, logger)
-                
+
                 # check output and report
-                
+
                 logger.info("Used ephemeris ID {0}.".format(eph_id))
                 logger.info("Used template ID {0}.".format(template_id))
-                
+
                 # gather required TOA information
                 quality = True # assumed for the moment
 
                 # ensure this pat comment closely matches the one above
                 comm = 'pat -jFTp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, proc_archive)
-                # note that 'proc_archive' could be any type of decimated file 
+                # note that 'proc_archive' could be any type of decimated file
                 # (here taken asthe last entry in the processed_archives list)
                 # however, as the above command fully scrunches it, it doesn't matter what choice we made
                 args = shlex.split(comm)
@@ -1742,7 +1741,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
 
                 # link via entry in TOA table
                 toa_id = create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, db_client, logger)
-                
+
                 logger.info("Entry in table 'toas' successfully created - ID {0}".format(toa_id))
 
     else:
@@ -1872,8 +1871,8 @@ def generate_summary(output_dir, cparams, psrname, logger):
     split_path = output_dir.split("/")
     #psrname = split_path[7] - psrname is already defined in the function arguments
     path_args = len(split_path)
-    utcname = split_path[path_args - 4] 
-    # Counting backwards seems more logical than counting forwards, given that the absolute path may change 
+    utcname = split_path[path_args - 4]
+    # Counting backwards seems more logical than counting forwards, given that the absolute path may change
     # depending on where results are being stored, while the lower directory structure remains constant.
 
     # This will need modification once the S-Band receiver comes online. I have already made an appropriate start.
@@ -2032,7 +2031,7 @@ def secondary_cleanup(output_dir, cparams, psrname, logger):
                 cleaned_path = os.path.join(output_dir,"cleaned")
                 cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
                 fluxfiles = glob.glob(os.path.join(cleaned_path,"J*.fluxcal.ar"))
-                
+
                 # only delete files for which a matching fluxcal file exists
                 for x in range(0, len(fluxfiles)):
                     noflux_file = fluxfiles[x].replace('.fluxcal','')
@@ -2075,7 +2074,7 @@ def check_summary(output_dir, logger):
     for line in sumLines:
 
         lines_total += 1
-        
+
         if passString in line:
             lines_pass += 1
         if failString in line:
@@ -2098,13 +2097,13 @@ def calc_dynspec_zap_fraction(dynspec_file):
         # loop through and count
         zap_lines = 0
         for x in range(0, len(data)):
-            
+
             # check for zap condition
             if (float(data[x][4]) == 0) and (float(data[x][5]) == 0):
                 zap_lines = zap_lines + 1
 
         retval = float(zap_lines)/float(len(data))
-        
+
     else:
         raise Exception ("File {0} cannot be found".format(dynspec_file))
 
@@ -2128,10 +2127,10 @@ def generate_images(output_dir, cparams, psrname, logger):
     timing_path = os.path.join(output_dir, "timing")
     cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
     fluxcleanedfiles = glob.glob(os.path.join(cleaned_path,"J*fluxcal.ar"))
-    
+
     clean_file = None
     chop_string = ".ch."
-    
+
     # try for a fluxcal file first
     if (len(fluxcleanedfiles) == 1):
         clean_file = fluxcleanedfiles[0]
@@ -2200,7 +2199,7 @@ def generate_images(output_dir, cparams, psrname, logger):
         logger.info("Creating psrsplot images...")
 
         for x in range(0, len(plot_commands)):
-           
+
             # need to protect against unexpected image crashes
             try:
 
@@ -2281,7 +2280,7 @@ def generate_images(output_dir, cparams, psrname, logger):
         ]
 
         for x in range(0, len(matplot_commands)):
-            
+
             logger.info("Creating image type {0}...".format(matplot_commands[x]['type']))
 
             # create the plot
@@ -2342,7 +2341,7 @@ def generate_images(output_dir, cparams, psrname, logger):
             if ("global_toa_path" in cparams):
                 if (os.path.exists(cparams["global_toa_path"]) == False):
                     os.makedirs(cparams["global_toa_path"])
-                share_path = cparams["global_toa_path"]                        
+                share_path = cparams["global_toa_path"]
             else:
                 share_path = images_path
             share_file = os.path.join(share_path,global_image_name)
@@ -2389,7 +2388,7 @@ def generate_images(output_dir, cparams, psrname, logger):
     dynspec_commands = [
         {'ext': 'zap.dynspec', 'rank': 9, 'type': '{0}.zap-dynspec.hi'.format(local_pid)},
         {'ext': 'calib.dynspec', 'rank': 10, 'type': '{0}.calib-dynspec.hi'.format(local_pid)}
-    ]    
+    ]
 
     for x in range (0, len(dynspec_commands)):
 
@@ -2410,7 +2409,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 dimension_factor = 0.95
                 loop_counter = 0
                 size_check = False
-            
+
                 logger.info("Checking on file size of {0} to determine if downsampling is needed for PSRDB upload...".format(data[0]))
 
                 while not (size_check):
@@ -2456,7 +2455,7 @@ def generate_images(output_dir, cparams, psrname, logger):
         db_client = GraphQLClient(cparams["db_url"], False)
 
         for x in range (0, len(image_data)):
-        
+
             # test for image creation success and write to PSRDB
             if (os.path.exists(image_data[x]['file'])):
                 logger.info("Successfully created {0} - recording to PSRDB.".format(image_data[x]['file']))
@@ -2471,7 +2470,7 @@ def generate_images(output_dir, cparams, psrname, logger):
 # builds the toas used for the production of TOA image specific to this observation
 def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, cparams, psrname, logger):
 
-    # set up paths and filenames  
+    # set up paths and filenames
     toa_archive_ext = "temptoa.ar"
     dlyfix_script = "/fred/oz005/users/mkeith/dlyfix/dlyfix"
     toa_archive_file = os.path.join(toa_archive_path,toa_archive_name)
@@ -2489,9 +2488,9 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
 
     # option 1 - the config file included a catalog with parameters for specific pulsars
     if ("toa_display_list" in cparams and os.path.exists(cparams["toa_display_list"])):
-        
+
         logger.info("Generating TOA images based on a toa display list: {0}".format(cparams["toa_display_list"]))
-        
+
         # find the pulsar in the list and extract the relevant parameters
         comm = "grep {0} {1}".format(psrname, cparams["toa_display_list"])
         args = shlex.split(comm)
@@ -2502,7 +2501,7 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
         if ((len(info) == 1) and not (info[0] == '')):
 
             subinfo = info[0].split()
-            
+
             if (subinfo[0] == psrname):
                 # match found
                 logger.info("Unique match found for {0}".format(psrname))
@@ -2516,13 +2515,13 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
         else:
             logger.error("Unable to find a unique list entry for {0} - diverting to a default method".format(psrname))
             toa_config_success = False
-            
+
     # option 2 - no catalog, or pulsar not listed in the catalog; revert to a project-based default
     if (toa_config_success == False and "pid" in cparams):
 
         logger.info("PID-based TOA images are implemented, but may need fine tuning for your particular pulsar")
         logger.info("Please adjust the default settings for your project or provide a toa config catalog as part of the pipeline config file, and then reprocess.")
-        
+
         # check for which pid and assign parameters - these may need some fine tuning/expanding for more PIDs
         if (cparams["pid"] == "TPA"):
             toa_nchan = 1
@@ -2598,7 +2597,7 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
     info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
     toa_nchan = int(info[1].split()[1])
     obs_bw = float(info[1].split()[2])
-    obs_freq = float(info[1].split()[3])    
+    obs_freq = float(info[1].split()[3])
 
     if not (template == None) and (os.path.exists(template)):
 
@@ -2620,7 +2619,7 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
             if (os.path.exists(timtar)):
                 tartype = "{0}.single-tim".format(local_pid)
                 files_to_store.append({'filename': timtar, 'type': tartype})
-        
+
         if not (parfile == None) and (os.path.exists(parfile)):
 
             # use meerwatch functions to produce residual images for this observation
@@ -2655,7 +2654,7 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
     # new function - store requested files in PSRDB
     # this is a bit of a hack but I just need it to work
     if (cparams["db_flag"]):
-        
+
         logger.info("PSRDB functionality activated - recording single-obs TOA files to PSRDB")
         db_client = GraphQLClient(cparams["db_url"], False)
 
@@ -2679,14 +2678,14 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     # to wait any longer. Once PSRDB is fixed, I will re-write this section to get the job done correctly.
 
     # skeleton code for PSRDB
-    
+
     # this function will only run if DB mode is active - check
     #if (cparams["db_flag"]):
 
         # set up paths, filenames and required parameters
 
         # query for all processings run through a specific pipeline
-        
+
         # compile a TOA file using only those processings logged as 'complete'
 
     #else:
@@ -2718,7 +2717,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     toa_list = ""
     logger.info("Compiling global TOA list for pulsar {0} and project {1}...".format(psrname, cparams["pid"]))
     for x in range (0, len(toa_archives)):
-        
+
         # new - check that the archive still exists, and hasn't been deleted
         attempt_counter = 0
         if (os.path.exists(toa_archives[x]) and attempt_counter < 3):

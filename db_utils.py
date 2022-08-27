@@ -2,8 +2,8 @@
 Code containing utilities for interfacing PSRDB with MeerPIPE
 
 __author__ = "Andrew Cameron"
-__copyright__ = "Copyright (C) 2021 Andrew Cameron"
-__credits__ = ["Aditya Parthasarathy", "Andrew Jameson", "Stefan Oslowski"]
+__copyright__ = "Copyright (C) 2022 Andrew Cameron"
+__credits__ = ["Andrew Cameron","Aditya Parthasarathy", "Andrew Jameson", "Stefan Oslowski"]
 __license__ = "Public Domain"
 __version__ = "0.1"
 __maintainer__ = "Andrew Cameron"
@@ -212,7 +212,7 @@ def check_response(response):
     # tests for validity - expand as neccessary
     if (response.status_code == 200):
         valid = True
-    
+
     if not (valid):
         raise Exception("ERROR: Invalid GraphQL response detected (code %d)" % (response.status_code))
 
@@ -225,7 +225,7 @@ def check_pulsar_target(pulsar_id, target_id, client, url, token):
 
     # PSRDB setup
     pulsartargets = Pulsartargets(client, url, token)
-    
+
     # query
     response = pulsartargets.list(
         None,
@@ -237,7 +237,7 @@ def check_pulsar_target(pulsar_id, target_id, client, url, token):
     check_response(response)
     pt_content = json.loads(response.content)
     pt_data = pt_content['data']['allPulsartargets']['edges']
-    
+
     # check for validity
     if (len(pt_data) == 1):
         retval = True
@@ -301,11 +301,11 @@ def get_foldedobservation_obsid(utc, psr, loc, client, url, token):
 
     # Query for matching UTC
     response = foldedobservations.list(
-        None, 
+        None,
         psr,
         None,
         None,
-        None, 
+        None,
         None,
         None,
         None,
@@ -331,7 +331,7 @@ def get_foldedobservation_obsid(utc, psr, loc, client, url, token):
         check_response(response)
         target_content = json.loads(response.content)
         target_data = target_content['data']['allPulsartargets']['edges']
-        
+
         # if we have a target match, check location
         if (len(target_data) > 0):
             foldobs_location = os.path.normpath(foldobs_data[x]['node']['processing']['location'])
@@ -449,7 +449,7 @@ def get_fold_parent_procid(fold_id, client, url, token):
 
     # PSRDB setup
     foldings = Foldings(client, url, token)
-    
+
     # query for fold ID
     response = foldings.list(fold_id)
     check_response(response)
@@ -470,7 +470,7 @@ def get_launch_id(pipe_id, parent_id, pulsar_id, client, url, token):
 
     # PSRDB setup
     launches = Launches(client, url, token)
-    
+
     # Query for launch parameters
     response = launches.list(
         None,
@@ -522,7 +522,7 @@ def get_observation_utc(obs_id, client, url, token):
 
     # PSRDB setup
     observations = Observations(client, url, token)
-    
+
     # query for obs_id
     response = observations.list(obs_id)
     check_response(response)
@@ -709,7 +709,7 @@ def get_pipe_config(pipe_id, client, url, token):
     check_response(response)
     pipe_content = json.loads(response.content)
     pipe_data = pipe_content['data']['pipeline']
-    
+
     # Check for valid proc_id
     if not (pipe_data == None):
         results = json.loads(pipe_data['configuration'].replace("'", '"'))
@@ -855,7 +855,7 @@ def create_processing(obs_id, pipe_id, parent_id, location, client, url, token, 
     check_response(response)
     proc_content = json.loads(response.content)
     proc_data = proc_content['data']['allProcessings']['edges']
-    
+
     # Check for matches of non-query parameters
     match_counter = 0
     for x in range(0, len(proc_data)):
@@ -879,7 +879,7 @@ def create_processing(obs_id, pipe_id, parent_id, location, client, url, token, 
             location,
             job_state,
             job_output,
-            results, 
+            results,
             client,
             url,
             token
@@ -1254,7 +1254,7 @@ def create_pipelineimage(image, image_type, rank, cparams, client, logger):
 
     # PSRDB setup
     pipelineimages = Pipelineimages(client, cparams["db_url"], cparams["db_token"])
-    
+
     # Sanitise input
     image = os.path.normpath(image)
 
@@ -1385,7 +1385,7 @@ def create_pipelinefile(filename, filetype, cparams, client, logger):
 # ROLE   : Update the content of an existing Processing entry.
 #        : Unspecified parameters should be set to 'None'.
 # INPUTS : Integer, Integer, Integer, Integer, String, String,
-#          JSON object, JSON object, JSON object, GraphQL client, 
+#          JSON object, JSON object, JSON object, GraphQL client,
 #          String, String
 # RETURNS: Integer (success) | None (failure)
 def update_processing(proc_id, obs_id, pipe_id, parent_id, embargo_end, location, job_state, job_output, results, client, url, token):
@@ -1408,7 +1408,7 @@ def update_processing(proc_id, obs_id, pipe_id, parent_id, embargo_end, location
 
     # Check for valid proc_id
     if not (proc_data == None):
-        
+
         # Check for parameters
         if (obs_id == None):
             obs_id = processings.decode_id(proc_data['observation']['id'])
@@ -1743,7 +1743,7 @@ def update_psrdb_query(query):
     proc_query = shlex.split(query)
     proc = subprocess.Popen(proc_query, stdout=subprocess.PIPE)
     proc.wait()
-    
+
     # no output yet required
     return
 

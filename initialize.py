@@ -347,7 +347,7 @@ def get_outputinfo(cparams,logger):
                             # normal allocation
                             ram_factor = 1.20
                         #ram_factor_max = 15 # GB
-                        
+
                         file_size = 0
                         for subint in archives:
                             file_size += os.stat(subint).st_size # KB
@@ -373,7 +373,7 @@ def get_outputinfo(cparams,logger):
 
                         # Computing time requirements for this observation to be processed
                         # This is WIP - may need additional tweaking
-                        
+
                         # based now on empirical study of the processing time required by jobs
                         time_factor = 2.3
                         if (nchan > 1024):
@@ -386,7 +386,7 @@ def get_outputinfo(cparams,logger):
                             reqtime = 14400
                         else:
                             # dynamic time
-                            reqtime = effective_time 
+                            reqtime = effective_time
 
                         # maximum cap of 86399 seconds removed
 
@@ -483,7 +483,7 @@ def create_structure(output_dir,cparams,psrname,logger):
             os.makedirs(images_dir)
         else:
             logger.info("Images directory exists")
-        
+
         #if not os.path.exists(project_dir):
         #    logger.info("Project directory created")
         #    os.makedirs(project_dir)
@@ -535,7 +535,7 @@ def create_structure(output_dir,cparams,psrname,logger):
                 f.close()
             except:
                 logger.error("Could not open / create ephemeris file.")
-                
+
             # check for success and implement one further contingency
             if os.path.exists(os.path.join(ephem_dir,psrname+".par")):
                 logger.info("An ephemeris was generated from the psrcat database")

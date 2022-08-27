@@ -151,7 +151,7 @@ if (len(results_list) > 0):
 
     # check file or screen output
     if not (args.allStates):
-        
+
         if not (args.outfile == None):
             if not (args.outdir == None):
                 outpath = os.path.join(args.outdir, args.outfile)
@@ -199,12 +199,12 @@ if (len(results_list) > 0):
                 if (ref_job_state == arr[x][4]):
                     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4]))
                     count += 1
-                    
+
             outfile.close()
             print ("{0} written with {1} entries...".format(outpath, count))
 
             job_code += 1
 
 else:
-    
+
     print ("No processing entries found matching the specified criteria - please try again.")

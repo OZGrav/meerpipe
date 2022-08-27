@@ -23,20 +23,20 @@ import glob
 import pickle
 import json
 
-# PSRDB paths 
+# PSRDB paths
 PSRDB = "psrdb.py"
 
 #Importing pipeline utilities
 from initialize import (parse_config, setup_logging)
 
-from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives, calibrate_data, 
+from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives, calibrate_data,
                            dynamic_spectra, fluxcalibrate, cleanup, generate_summary, check_summary,
                            generate_images, secondary_cleanup, folding_resync)
 
 # PSRDB imports
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import (get_node_name, job_state_code, get_job_output, get_job_state, job_state_code, 
+from db_utils import (get_node_name, job_state_code, get_job_output, get_job_state, job_state_code,
                       update_processing)
 
 #Argument parsing
@@ -107,23 +107,23 @@ if (config_params["db_flag"]):
     )
     node_name = get_node_name()
     job_output['job_node'] = node_name
-    
+
     # testing
     # logger.info("About to update job state")
 
     # Complete the update and check for success
     update_id = update_processing(
-        config_params["db_proc_id"], 
-        None, 
-        None, 
-        None, 
-        None, 
-        None, 
-        job_state, 
-        job_output, 
-        None, 
-        db_client, 
-        config_params["db_url"], 
+        config_params["db_proc_id"],
+        None,
+        None,
+        None,
+        None,
+        None,
+        job_state,
+        job_output,
+        None,
+        db_client,
+        config_params["db_url"],
         config_params["db_token"]
     )
     if (update_id != config_params["db_proc_id"]) or (update_id == None):
@@ -187,7 +187,7 @@ try:
 
         # Trigger PSRDB resync
         folding_resync(config_params,logger)
-        
+
         logger.info ("##############")
 
 except:
@@ -227,7 +227,7 @@ if (config_params["db_flag"]):
         job_state,
         None,
         None,
-        db_client, 
+        db_client,
         config_params["db_url"],
         config_params["db_token"]
     )

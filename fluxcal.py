@@ -231,7 +231,6 @@ def get_tsky_updated(rajd, decjd):
     print ("Converting tsky (mK) to Jy and subtracting 3372mK (SARAO specs)")
     tsky_jy = (tsky-3372.0)*0.019
     print ("### Tsky in Jy: {0} ###".format(tsky_jy))
-    
     return tsky_jy
 
 
@@ -239,11 +238,11 @@ def get_tsky_updated(rajd, decjd):
 def get_tsky(gl,gb):
     "Get Tsky from Simon's code. Input arguments are GL and GB"
     "Convert Tsky to Jy and subtact 3372mK as per SARAO specs"
-    
+
     if gl > 180.0:
         gl = gl-360.0
         print ("GL: {0},GB: {1}".format(gl,gb))
-        
+
     #open the fits file and get the data
     # note that (I think) the data cover the entire 0-360 in gl and -90-90 in gb
     # but that the pixels not covered by the survey are set to nan.
@@ -271,7 +270,7 @@ def get_tsky(gl,gb):
 
     # this is the pixel for the gl,gb
     pix1 = (gl-crval1)/cdelt1 + crpix1
-    pix2 = (gb-crval2)/cdelt2 + crpix2        
+    pix2 = (gb-crval2)/cdelt2 + crpix2
 
     # convert to integer
     ipix1 = np.int(pix1+0.5)
@@ -298,7 +297,7 @@ def get_tsky(gl,gb):
         tsky = 3.0
     else:
         print ('Sky Temperature(mK): {0}'.format(tsky))
-        
+
     #Converting to Jy and subtracting 3372mK as per SARAO specifications
     print ("Converting tsky to Jy and subtracting 3372mK (SARAO specs)")
     tsky_jy = (tsky-3372.0)*0.019

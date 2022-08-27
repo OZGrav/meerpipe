@@ -6,7 +6,7 @@ Intention is to mimic the function of query_obs.py & reprocessing.py but in a si
 
 __author__ = "Andrew Cameron"
 __copyright__ = "Copyright (C) 2022 Andrew Cameron"
-__credits__ = ["Aditya Parthasarathy", "Andrew Jameson", "Stefan Oslowski"]                                                                                                                                                                 
+__credits__ = ["Andrew Cameron", "Aditya Parthasarathy", "Andrew Jameson", "Stefan Oslowski"]
 __license__ = "Public Domain"
 __version__ = "0.3"
 __maintainer__ = "Andrew Cameron"
@@ -29,8 +29,8 @@ import datetime
 from tables import *
 from joins import *
 from graphql_client import GraphQLClient
-from db_utils import (utc_normal2psrdb, utc_psrdb2normal, utc_normal2date, utc_psrdb2date, pid_getofficial, 
-                      check_response, pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config, 
+from db_utils import (utc_normal2psrdb, utc_psrdb2normal, utc_normal2date, utc_psrdb2date, pid_getofficial,
+                      check_response, pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config,
                       check_pipeline, get_foldedobservation_obsid, get_job_output)
 
 # Important paths
@@ -61,7 +61,7 @@ args = parser.parse_args()
 # ROLE   : Returns a list of folded observations matching the queried parameters
 #          UTC should be in PSRDB format, PID should be official code
 # INPUTS : String, String, String, String, GraphQL client, String, String
-# RETURNS: Array (success) | None (failure) 
+# RETURNS: Array (success) | None (failure)
 def get_foldedobservation_list(utc1, utc2, pulsar, pcode, client, url, token):
 
     # PSRDB setup
@@ -83,7 +83,7 @@ def get_foldedobservation_list(utc1, utc2, pulsar, pcode, client, url, token):
         utc1,
         utc2
     )
-    
+
     # check for a valid result
     if (len(foldobs_data) > 0):
         return foldobs_data
@@ -188,7 +188,7 @@ def check_for_processing(parent_id, obs_id, pipe_id, client, url, token):
     parent_id = int(parent_id)
     pipe_id = int(pipe_id)
     obs_id = int(obs_id)
-    
+
     # PSRDB setup
     processings = Processings(client, url, token)
     processings.set_field_names(True, False)
@@ -211,7 +211,6 @@ def check_for_processing(parent_id, obs_id, pipe_id, client, url, token):
             result = int(processings.decode_id(proc_data[x]['node']['id']))
 
     return result
-        
 
 # ROLE   : Determines which pipeline should be run based on the scheme outlined in the help menu
 # INPUTS : Arg dictionary, Int
@@ -279,7 +278,7 @@ def determine_pipelines(dbdata, ag, psr_id, client, url, token):
             else:
                 # it is an int
                 print ("User-specified pipeline ID ({0}) identified".format(pipe_id))
-                    
+
         # check result for validity
         if (pipe_id):
             pipe_test = check_pipeline(pipe_id, client, url, token)
@@ -327,7 +326,7 @@ def array_launcher(arr, ag, client, url, token):
             # determine which pipelines get launched
             pipeline_list = determine_pipelines(arr[x], ag, psr_id, client, url, token)
             if (pipeline_list):
-        
+
                 # set of pipelines determined - scroll through and launch
                 for y in range(0, len(pipeline_list)):
 
@@ -338,7 +337,6 @@ def array_launcher(arr, ag, client, url, token):
                         config_data = get_pipe_config(pipeline_list[y], client, url, token)
 
                         # run some sanity checks
-                    
                         # check if config data actually exists
                         # there may be a better way to handle this case, but for now...
                         if (len(config_data) == 0):
@@ -357,7 +355,6 @@ def array_launcher(arr, ag, client, url, token):
                             raise Exception(errorstring)
 
                         in_path = linearray[2]
-                        
                         # check if the paths are self-consistent
                         if (not ((in_path in obs_location) or (obs_location in in_path))):
                             errorstring="Config file ({0}) parameter 'input_path' is inconsistent with database file locations - skipping".format(config_data['config'])
@@ -378,16 +375,16 @@ def array_launcher(arr, ag, client, url, token):
 
                         # check for the unprocessed flag
                         if (ag.unprocessed):
-                            
+
                             # check if a processing already exists
                             if not (proc_id == None):
                                 print ("Skipping: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
                                 print ("Processing already exists!")
                                 continue
-                        
+
                         # if a previous proc_id does exist, check for the SLURM job id in case it's still running on the queue!
                         if not (proc_id == None):
-                            
+
                             job_out = get_job_output(proc_id, client, url, token)
                             if 'job_id' in job_out.keys():
                                 job_id = job_out['job_id']
@@ -437,7 +434,7 @@ def array_launcher(arr, ag, client, url, token):
                                     print ("Script-imposed SLURM queue limit of {0} exceeded.".format(ag.joblimit))
                                     print ("Current time is {0} - waiting {1} seconds...".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), delay))
                                     time.sleep(delay)
-                        
+
                         # new test mode ability
                         if not (ag.testrun):
                             proc_query = shlex.split(pipeline_launch_instruction)
@@ -453,7 +450,6 @@ def array_launcher(arr, ag, client, url, token):
                             errorfile.write("{}\n".format(errorstring))
                             errorfile.write("Pipeline = {0}\n".format(pipeline_list[y]))
                             errorfile.write("{}\n".format(json.dumps(arr[x])))
-                        
 
             else:
 
@@ -462,7 +458,7 @@ def array_launcher(arr, ag, client, url, token):
                 print ("\nSkipping...\n")
 
         else:
- 
+
             print ("Unable to identify a unique pulsar name matching the following entry")
             print (arr[x])
             print ("\nSkipping...\n")
@@ -543,7 +539,7 @@ if (args.list_in):
         if (len(linearray) == 0 or len(linearray) > 3):
             raise Exception("Input file has an incorrect number of fields (line {0})".format(x))
 
-        # check input for query parameters and test against 
+        # check input for query parameters and test against
         query_pulsar = None
         query_date = None
         query_PID = None
@@ -564,7 +560,7 @@ if (args.list_in):
             except:
                 print ("File UTC '{0}' has an incorrect format - skipping...".format(linearray[1]))
                 continue
-    
+
             if (args.utc1):
                 if (utc_normal2date(args.utc1) > utc_psrdb2date(query_date)):
                     print ("File UTC '{0}' is before specified command line start date '{1}' - skipping...".format(utc_psrdb2normal(query_date), args.utc1))
@@ -613,7 +609,7 @@ if (args.list_in):
         if not (query_PID == None):
             print ("Observation PID = {0}".format(query_PID))
         elif (args.pid):
-            query_PID = official_PID 
+            query_PID = official_PID
 
         dbdata = get_foldedobservation_list(start_date, end_date, query_pulsar, query_PID, db_client, db_url, db_token)
         print("PSRDB query complete.")

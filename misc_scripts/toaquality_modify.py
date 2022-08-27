@@ -61,10 +61,10 @@ if (args.toa_id == None and args.proc_id == None and args.fold_id == None):
 toas = Toas(client, url, token)
 print ("Compiling TOA entries matching: TOA_ID = {0} | PROC_ID = {1} | FOLD_ID = {2}".format(args.toa_id, args.proc_id, args.fold_id))
 response = toas.list(
-    args.toa_id, 
-    args.proc_id, 
-    args.fold_id, 
-    None, 
+    args.toa_id,
+    args.proc_id,
+    args.fold_id,
+    None,
     None
 )
 check_response(response)
@@ -94,8 +94,8 @@ for x in range(0, len(toa_data)):
 
     # update the entry
     update_response = update_toa_record(
-        toa_entry_id, 
-        None, 
+        toa_entry_id,
+        None,
         None,
         None,
         None,

@@ -57,7 +57,7 @@ proc_list = np.loadtxt(args.infile, dtype=int, ndmin=1)
 
 # scroll list
 for x in range(0, len(proc_list)):
-    
+
     # quick and dirty
     response = processings.list(proc_list[x])
     check_response(response)
@@ -97,7 +97,6 @@ for x in range(0, len(proc_list)):
         else:
             print ("Updated proc {0}".format(proc_list[x]))
 
-            
     else:
         print ("Invalid processing ID - {0}".format(proc_list[x]))
         continue

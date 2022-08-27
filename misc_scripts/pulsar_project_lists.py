@@ -87,7 +87,7 @@ for x in range (0, len(project_codes)):
     print ("Collecting list of pulsars for project code {0}...".format(project_codes[x]))
 
     data = observations.list(None, None, None, None, None, None, project_codes[x], None, None, None, None)
-    
+
     print ("Raw data compiled.")
 
     psr_list_raw = []
@@ -111,7 +111,7 @@ for x in range (0, len(project_codes)):
         outname = "{0}_{1}.list".format(args.outname, project_codes[x])
     else:
         outname = "{0}.list".format(project_codes[x])
-    
+
     outpath = os.path.join(args.outdir, outname)
 
     outfile = open(outpath, "w")

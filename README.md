@@ -2,7 +2,8 @@ Creating documentation...to be updated
 Contact Aditya Parthasaraty for details - adityapartha3112@gmail.com
 Contact Andrew Cameron for details of the forDB branch updates - andrewcameron@swin.edu.au
 
-Two branches : main for the PID processing
+Two branches : 
+main: for the PID processing
 forDB: for the database upgrades
 
 Additional notes re: forDB

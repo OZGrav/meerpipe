@@ -73,7 +73,7 @@ else:
 
 # and clean
 for obs in obsdirs:
-    
+
     if not args.testmode:
         logger.info("Now cleaning unwanted files from {0}".format(obs))
         secondary_cleanup(obs,config_params,split_psrpath[len(split_psrpath) - 1],logger)

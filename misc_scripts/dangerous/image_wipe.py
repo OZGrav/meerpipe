@@ -63,7 +63,7 @@ if not safety_response == "Y":
 # scroll list
 count = 0
 for x in range(0, len(proc_list)):
-    
+
     print ("Deleting images for processing ID {0}".format(proc_list[x]))
 
     # quick and dirty

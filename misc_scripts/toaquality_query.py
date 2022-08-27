@@ -77,7 +77,7 @@ for x in range(0, len(toa_data)):
 
     # check if the quality field matches
     quality = toa_entry['quality']
-    
+
     if not (args.allStates) and not (job_state == args.state):
         continue
 
@@ -97,7 +97,7 @@ if (len(results_list) > 0):
 
     # check file or screen output
     if not (args.allStates):
-        
+
         if not (args.outfile == None):
             if not (args.outdir == None):
                 outpath = os.path.join(args.outdir, args.outfile)
@@ -139,10 +139,10 @@ if (len(results_list) > 0):
                 if (qual == arr[x][4]):
                     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(arr[x][0], arr[x][1], arr[x][2], arr[x][3], arr[x][4], arr[x][5]))
                     count += 1
-                    
+
             outfile.close()
             print ("{0} written with {1} entries...".format(outpath, count))
 
 else:
-    
+
     print ("No TOA entries found matching the specified criteria - please try again.")

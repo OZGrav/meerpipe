@@ -37,14 +37,14 @@ from datetime import timedelta
 from initialize import (parse_config, create_structure, get_outputinfo, setup_logging)
 
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives,
-                           calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary, 
+                           calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary,
                            check_summary, generate_images, secondary_cleanup, folding_resync)
 
 # PSRDB imports
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_foldedobservation_obsid, 
-                      get_project_embargo, get_observation_project_code, get_project_id, job_state_code, 
+from db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_foldedobservation_obsid,
+                      get_project_embargo, get_observation_project_code, get_project_id, job_state_code,
                       get_node_name, get_folding_id, check_pipeline, create_processing, update_processing,
                       get_fold_parent_procid)
 
@@ -128,7 +128,7 @@ elif args.batch:
 
 # Begin configuring PSRDB operations if enabled
 if (args.db_flag):
-    
+
     # get token
     env_query = 'echo $PSRDB_TOKEN'
     db_token = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
@@ -291,15 +291,15 @@ if toggle:
 
             # create remaining parameters to start processing and update proc entry
             project_id = get_project_id(
-                get_observation_project_code(obs_id, db_client, db_url, db_token), 
+                get_observation_project_code(obs_id, db_client, db_url, db_token),
                 db_client,
                 db_url,
                 db_token
             )
             embargo_period = get_project_embargo(
-                project_id, 
-                db_client, 
-                db_url, 
+                project_id,
+                db_client,
+                db_url,
                 db_token
             )
             embargo_end = utc_date2psrdb(utc_normal2date(obs_utc) + embargo_period)
@@ -312,14 +312,14 @@ if toggle:
                 proc_id,
                 obs_id,
                 args.db_pipe,
-                parent_id, 
+                parent_id,
                 embargo_end,
                 location,
                 job_state,
                 job_output,
                 results,
                 db_client,
-                db_url, 
+                db_url,
                 db_token
             )
             if (update_id != proc_id) or (update_id == None):
@@ -429,9 +429,9 @@ if toggle:
             """
 
         else:
-        
+
             config_params["slurm"] = "False"
-    
+
             # describes pipeline operation on a host node, not being routed to the OZSTAR HPC nodes
 
             if (args.db_flag):
@@ -478,7 +478,7 @@ if toggle:
                 logger.info("Added archive: {0}".format(added_archives))
  
                 if not config_params["fluxcal"]:
-                    #Calibration 
+                    #Calibration
                     calibrated_archives = calibrate_data(added_archives,output_dir,config_params,logger)
                     logger.info("Calibrated archives: {0}".format(calibrated_archives))
           
@@ -515,7 +515,7 @@ if toggle:
 
                     # Produce images
                     generate_images(output_dir,config_params,psrnames[obs_num],logger)
-                    
+
                     # Secondary cleanup
                     secondary_cleanup(output_dir,config_params,psrnames[obs_num],logger)
 

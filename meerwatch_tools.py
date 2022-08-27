@@ -26,7 +26,7 @@ def weighted_rms(toas):
     denominator = 0
 
     for x in range (0, len(toas)):
-        
+
         weight = 1.0 / (toas['err'][x]**2)
         numerator += weight * (toas['res'][x]**2)
         denominator += weight
@@ -44,11 +44,11 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
     temp_file = os.path.join(out_dir, temp_file)
     comp_file = os.path.join(out_dir, comp_file)
 
-    # if a select file is given, include it                                                                                                                                                                                                  
+    # if a select file is given, include it
     if sel_file is not None:
         tempo2_call += " -select {}".format(sel_file)
 
-    # call tempo2 to produce residuals that can be read in                                                                                                                                                                               
+    # call tempo2 to produce residuals that can be read in
     with open(temp_file, 'w') as f:
         if verb:
             print("Running tempo2 command: {}".replace("\n", "\\n").format(tempo2_call.format(par_file, tim_file)))
@@ -86,7 +86,7 @@ def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out
     if out_dir:
         out_file = os.path.join(out_dir, out_file)
 
-    # use semi-fixed color normalisation                                                                                                                                                                                                     
+    # use semi-fixed color normalisation
     f_min = cfrq-bw/2.0
     f_max = cfrq+bw/2.0
 
@@ -151,7 +151,7 @@ def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out
         ax.set_title("Single-observation TOAs ({0})".format(pid), fontsize=fs)
     else:
         ax.set_xlabel("MJD", fontsize=fs)
-        
+
         # new - include WRMS as part of the plot
         if (len(toas) > 0):
             wrms = weighted_rms(toas)/(1e-6)
