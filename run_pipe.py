@@ -376,9 +376,9 @@ if toggle:
                 job_file.write("source /fred/oz005/pipelines/meerpipe/virtual-envs/meerpipe_db/bin/activate\n")
                 job_file.write("export PSRDB_TOKEN=`get_ingest_token.sh`\n")
                 job_file.write("python slurm_pipe.py -obsname {0}archivelist.npy -outputdir {0}output.npy -psrname {0}psrname.npy".format(output_dir))
-
+                                                 
             logger.info("Slurm job - {0} created".format(job_name))
-
+                                               
             logger.info("Deploying {0}".format(job_name))
             com_sbatch = 'sbatch {0}'.format(os.path.join(output_dir,str(job_name)))
             args_sbatch = shlex.split(com_sbatch)
@@ -420,9 +420,9 @@ if toggle:
                 time.sleep(1)
 
             logger.info("{0} deployed.".format(job_name))
-
-            """
-            logger.info("Cleaning up")
+                                                 
+            """                                  
+            logger.info("Cleaning up")           
             os.remove(os.path.join(output_dir,"archivelist.npy"))
             os.remove(os.path.join(output_dir,"output.npy"))
             os.remove(os.path.join(output_dir,"psrname.npy"))
@@ -496,10 +496,8 @@ if toggle:
                     processed_archives = decimate_data(cleaned_archives,output_dir,config_params,logger)
                     #logger.info("Processed archives {0}".format(processed_archives))
 
-
                     #Generating dynamic spectra from calibrated archives
                     dynamic_spectra(output_dir,config_params,psrnames[obs_num],logger)
-
 
                     #Flux calibrating the decimated data products
                     fluxcalibrate(output_dir,config_params,psrnames[obs_num],logger)

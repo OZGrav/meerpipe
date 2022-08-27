@@ -148,10 +148,10 @@ def get_radec_new(parfile):
             elat_val = float(info.split()[1])
 
         # convert ecliptic to J2000
-        pos = SkyCoord(elong_val, elat_val, unit='deg', frame='geocentricmeanecliptic')
-        pos = pos.transform_to('icrs')
-        rajd = pos.ra.to('deg').value
-        decjd = pos.dec.to('deg').value
+        pos = SkyCoord(elong_val, elat_val, unit='deg', frame='geocentrictrueecliptic')
+        newvar = pos.transform_to('icrs')
+        rajd = newvar.ra.degree
+        decjd = newvar.dec.degree
 
     print("RA and Dec from par file: {} {}".format(rajd, decjd))
     return(rajd, decjd)
@@ -226,82 +226,17 @@ def get_tsky_updated(rajd, decjd):
         tsky = tsky_default
         
     print ('### Sky Temperature(mK) used for flux calibration: {0} ###'.format(tsky))
+
         
     #Converting to Jy and subtracting 3372mK as per SARAO specifications
     print ("Converting tsky (mK) to Jy and subtracting 3372mK (SARAO specs)")
     tsky_jy = (tsky-3372.0)*0.019
-    print ("### Tsky in Jy: {0} ###".format(tsky_jy))
-    return tsky_jy
+    print ("### Tsky (old) in Jy: {0} ### (deprecated)".format(tsky_jy))
 
-
-
-def get_tsky(gl,gb):
-    "Get Tsky from Simon's code. Input arguments are GL and GB"
-    "Convert Tsky to Jy and subtact 3372mK as per SARAO specs"
-
-    if gl > 180.0:
-        gl = gl-360.0
-        print ("GL: {0},GB: {1}".format(gl,gb))
-
-    #open the fits file and get the data
-    # note that (I think) the data cover the entire 0-360 in gl and -90-90 in gb
-    # but that the pixels not covered by the survey are set to nan.
-    # WARNING: The survey only goes to +25 declination
-    # WARNING: The Galactic centre pixels are blanked out, I'm looking into it.
-    #CHIPASS_PATH = "/fred/oz005/meerpipe/configuration_files/additional_info" - TEMP SWITCH FOR LOCAL TESTING - ADC
-    CHIPASS_PATH = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/configuration_files/additional_info"
-    hdul = fits.open(os.path.join(CHIPASS_PATH,'CHIPASS_Gal.fits'))
-    data = hdul[0].data
-
-
-    # naxis1 is the number of pixels on axis1
-    # crval1 is the longitude of the crpix1 pixel
-    # cdelt1 is increment per pixel
-    # ditto for axis2
-    # note that crval1,crval2 = 0 in this file
-    naxis1 = hdul[0].header['NAXIS1']
-    crpix1 = hdul[0].header['CRPIX1']
-    cdelt1 = hdul[0].header['CDELT1']
-    crval1 = hdul[0].header['CRVAL1']
-    naxis2 = hdul[0].header['NAXIS2']
-    crpix2 = hdul[0].header['CRPIX2']
-    cdelt2 = hdul[0].header['CDELT2']
-    crval2 = hdul[0].header['CRVAL2']
-
-    # this is the pixel for the gl,gb
-    pix1 = (gl-crval1)/cdelt1 + crpix1
-    pix2 = (gb-crval2)/cdelt2 + crpix2
-
-    # convert to integer
-    ipix1 = np.int(pix1+0.5)
-    ipix2 = np.int(pix2+0.5)
-
-    print('Pixel1: {0},Pixel2: {1}'.format(ipix1,ipix2))
-
-    # none of these should ever really happen
-    if ipix1 < 0:
-        print('ERROR:, location is not in the image !!')
-    if ipix1 > naxis1:
-        print('ERROR:, location is not in the image !!')
-    if ipix2 < 0:
-        print('ERROR:, location is not in the image !!')
-    if ipix2 > naxis2:
-        print('ERROR:, location is not in the image !!')
-
-    # get tsky for the appropriate pixel
-    tsky = data[ipix2,ipix1]
-
-    # check that gl,gb is covered by the survey
-    if np.isnan(tsky):
-        print('Undefined tsky, using default of 3.0')
-        tsky = 3.0
-    else:
-        print ('Sky Temperature(mK): {0}'.format(tsky))
-
-    #Converting to Jy and subtracting 3372mK as per SARAO specifications
-    print ("Converting tsky to Jy and subtracting 3372mK (SARAO specs)")
-    tsky_jy = (tsky-3372.0)*0.019
-    print ("Tsky in Jy: {0}".format(tsky_jy))
+    #New conversion - Jan 2022
+    new_scaling_factor = 1.7202+0.0002
+    tsky_jy = (new_scaling_factor*(tsky-3372))*0.019
+    print ("Tsky (new) in Jy: {0}".format(tsky_jy))
     
     return tsky_jy
 
@@ -367,6 +302,7 @@ def get_median_offrms(offrms_freq_dictionary):
 
     print ("Number of channels used: {0}".format(len(selected_offrms)))
     print ("Frequencies used: {0}".format(sorted(selected_freqs)))
+    print ("Selected Offrms values: {0}".format(sorted(selected_offrms)))
     
     median = np.median(selected_offrms)
     print ("Median off-pulse rms: {0}".format(median))
@@ -409,11 +345,8 @@ print ("Processing {0}:{1}".format(psr_name, obs_name))
 print ("============================================")
 print ("Reference par file = {0}".format(str(args.parfile)))
 
-#Get Tsky in Jy
-#gl,gb = get_glgb(psr_name)
-#tsky_jy = get_tsky(gl,gb)
-
 # Get the RA and Dec from the par file if possible
+print (args.parfile)
 if str(args.parfile) != "None":
     rajd, decjd = get_radec_new(str(args.parfile))
 
