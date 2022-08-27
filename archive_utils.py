@@ -153,7 +153,12 @@ def get_pptatemplate(backend,psrname,cfreq,nbin,logger):
 
 def get_meertimetemplate(psrname,output_path,cparams,logger):
     if cparams["meertime_templates"]:
-        notemplate_list = np.loadtxt(os.path.join(cparams["meertime_templates"],"notemplate.list"),dtype=str)
+
+        if (os.path.exists(os.path.join(cparams["meertime_templates"],"notemplate.list"))):
+            notemplate_list = np.loadtxt(os.path.join(cparams["meertime_templates"],"notemplate.list"),dtype=str)
+        else:
+            notemplate_list = []
+
         if os.path.exists(os.path.join(cparams["meertime_templates"],str(psrname)+".std")):
             if os.path.exists(os.path.join(cparams["meertime_templates"],str(psrname)+"_p2.std")):
                 psr_template = os.path.join(cparams["meertime_templates"],str(psrname)+"_p2.std")
@@ -536,7 +541,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
                         logger.info("Applying channel threshold of {0} and subint threshold of {0}".format(chan_thresh,subint_thresh))
 
-                        if os.path.split(template)[-1] == "Gaussian.std":
+                        if os.path.split(orig_template)[-1] == "Gaussian.std":
                             logger.info("Since using a Gaussian template - typically the observation S/N is very low. So RFI exicision is done without a template")
                             surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={0},subintthresh={1}'.format(chan_thresh,subint_thresh)
                         else:

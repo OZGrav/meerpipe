@@ -555,7 +555,12 @@ def create_structure(output_dir,cparams,psrname,logger):
                 f.close()
 
         #Copying pulsar template
-        notemplate_list = np.loadtxt(os.path.join(template_dir,"notemplate.list"),dtype=str)
+        # NEW - Safeguard in case notemplate.list does not exist
+        if (os.path.exists(os.path.join(template_dir,"notemplate.list"))):
+            notemplate_list = np.loadtxt(os.path.join(template_dir,"notemplate.list"),dtype=str)
+        else:
+            notemplate_list = []
+
         if os.path.exists(os.path.join(template_dir,psrname+".std")):
             logger.info("Template for {0} found".format(psrname))
             if os.path.exists(os.path.join(template_dir,psrname+"_p2.std")):
