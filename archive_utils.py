@@ -1635,8 +1635,9 @@ def generate_toas(output_dir,cparams,psrname,logger):
         parfile = glob.glob(os.path.join(str(output_dir),"{0}_p3.par".format(psrname)))[0]
         copy_parfile = os.path.join(timing_path,"{0}_p3.par".format(psrname))
 
-    os.rename(parfile,copy_parfile)
-    logger.info("Ephemeris copied to the timing directory") 
+    if os.path.exists(parfile):
+        os.rename(parfile,copy_parfile)
+        logger.info("Ephemeris copied to the timing directory") 
  
     decimated_path = os.path.join(str(output_dir),"decimated")
     processed_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
@@ -1814,17 +1815,22 @@ def cleanup(output_dir, cparams, psrname, logger):
     if os.path.exists(os.path.join(output_dir,"{0}.std".format(psrname))):
         stdfile = glob.glob(os.path.join(output_dir,"{0}.std".format(psrname)))[0]
         stdfile_timing = os.path.join(timing_dir,"{0}.std".format(psrname))
+        os.rename(stdfile,stdfile_timing)
     elif os.path.exists(os.path.join(output_dir,"{0}_p2.std".format(psrname))):
         stdfile = glob.glob(os.path.join(output_dir,"{0}_p2.std".format(psrname)))[0]
         stdfile_timing = os.path.join(timing_dir,"{0}_p2.std".format(psrname))
+        os.rename(stdfile,stdfile_timing)
     elif os.path.exists(os.path.join(output_dir,"{0}_p3.std".format(psrname))):
         stdfile = glob.glob(os.path.join(output_dir,"{0}_p3.std".format(psrname)))[0]
         stdfile_timing = os.path.join(timing_dir,"{0}_p3.std".format(psrname))
+        os.rename(stdfile,stdfile_timing)
     elif os.path.exists(os.path.join(output_dir,"Gaussian.std")):
         stdfile = glob.glob(os.path.join(output_dir,"Gaussian.std"))[0]
         stdfile_timing = os.path.join(timing_dir,"Gaussian.std")
-    os.rename(stdfile,stdfile_timing)
-   
+        os.rename(stdfile,stdfile_timing)
+
+    logger.info("Timing standard renamed")
+
     #Renaming cleaned and decimated archives
     cleaned_dir = os.path.join(output_dir,"cleaned")
     decimated_dir = os.path.join(output_dir,"decimated")
@@ -2018,6 +2024,10 @@ def generate_summary(output_dir, cparams, psrname, logger):
         timing_path = os.path.join(output_dir,"timing")
         timingfiles = glob.glob(os.path.join(timing_path,"J*tim"))
         
+        # setup to prevent invalid variable access
+        parfile = []
+        stdfile = []
+
         if len(glob.glob(os.path.join(timing_path,"{0}.par".format(psrname))))>0:
             parfile = glob.glob(os.path.join(timing_path,"{0}.par".format(psrname)))
         elif len(glob.glob(os.path.join(timing_path,"{0}_p2.par".format(psrname))))>0:

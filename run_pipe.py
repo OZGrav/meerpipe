@@ -475,50 +475,59 @@ if toggle:
             try:
                 #Add the archive files per observation directory into a single file
                 added_archives = add_archives(archive_list[obs_num],output_dir,config_params,psrnames[obs_num],logger)
-                logger.info("Added archive: {0}".format(added_archives))
+                logger.info("PIPE - Added archive: {0}".format(added_archives))
  
                 if not config_params["fluxcal"]:
                     #Calibration
                     calibrated_archives = calibrate_data(added_archives,output_dir,config_params,logger)
-                    logger.info("Calibrated archives: {0}".format(calibrated_archives))
+                    logger.info("PIPE - Calibrated archives: {0}".format(calibrated_archives))
           
                 if not config_params["fluxcal"]:
                     #RFI zapping using coastguard on the calibrated archives
                     cleaned_archives = mitigate_rfi(calibrated_archives,output_dir,config_params,psrnames[obs_num],logger)
-                    logger.info("Cleaned archives: {0}".format(cleaned_archives))
+                    logger.info("PIPE - Cleaned archives: {0}".format(cleaned_archives))
                 elif config_params["fluxcal"]:
                     #RFI cleaning the added archives
                     cleaned_archives = mitigate_rfi(added_archives,output_dir,config_params,psrnames[obs_num],logger)
-                    logger.info("Cleaned archives: {0}".format(cleaned_archives))
+                    logger.info("PIPE - Cleaned archives: {0}".format(cleaned_archives))
 
                 if not config_params["fluxcal"]:
                     #Checking flags and creating appropriate data products
                     processed_archives = decimate_data(cleaned_archives,output_dir,config_params,logger)
                     #logger.info("Processed archives {0}".format(processed_archives))
+                    logger.info("PIPE - Data decimation complete.")
 
                     #Generating dynamic spectra from calibrated archives
                     dynamic_spectra(output_dir,config_params,psrnames[obs_num],logger)
+                    logger.info("PIPE - Dynamic spectra complete.")
 
                     #Flux calibrating the decimated data products
                     fluxcalibrate(output_dir,config_params,psrnames[obs_num],logger)
+                    logger.info("PIPE - Flux calibration complete.")
 
                     #Performing a clean up
                     cleanup(output_dir, config_params, psrnames[obs_num], logger)
-                
+                    logger.info("PIPE - First-stage cleanup complete.")
+
                     #Forming ToAs from the processed archives
                     generate_toas(output_dir,config_params,psrnames[obs_num],logger)
+                    logger.info("PIPE - TOA generation complete.")
 
                     #Generating summary file
                     generate_summary(output_dir,config_params,psrnames[obs_num],logger)
+                    logger.info("PIPE - Summary generation complete.")
 
                     # Produce images
                     generate_images(output_dir,config_params,psrnames[obs_num],logger)
+                    logger.info("PIPE - Image generation complete.")
 
                     # Secondary cleanup
                     secondary_cleanup(output_dir,config_params,psrnames[obs_num],logger)
+                    logger.info("PIPE - Second-stage cleanup complete.")
 
                     # Trigger PSRDB resync
                     folding_resync(config_params,logger)
+                    logger.info("PIPE - Folding resync complete.")
 
                     logger.info ("##############")
 
