@@ -1355,7 +1355,9 @@ def create_pipelinefile(filename, filetype, cparams, client, logger):
         pipefile_id = pipefile_content['data']['createPipelinefile']['pipelinefile']['id']
         retval = int(pipefile_id)
         logger.info("No match found, new pipelinefile entry created, ID = {0}".format(retval))
+
     elif (matches == 1):
+
         # entry already exists - update and return
         logger.info("Match found, pipelinefile ID = {0}".format(pipefile_id))
         retval = int(pipefile_id)

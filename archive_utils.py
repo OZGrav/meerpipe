@@ -57,13 +57,12 @@ def get_ephemeris(psrname,output_path,cparams,logger):
     Routine to return the path of the ephemeris file for a given pulsar name
     """
     if cparams["meertime_ephemerides"]:
-        if os.path.exists(os.path.join(cparams["meertime_ephemerides"],psrname+".par")):
-            if os.path.exists(os.path.join(cparams["meertime_ephemerides"],psrname+"_p2.par")):
-                par_path = os.path.join(cparams["meertime_ephemerides"],psrname+"_p2.par")
-            elif os.path.exists(os.path.join(cparams["meertime_ephemerides"],psrname+"_p3.par")):
-                par_path = os.path.join(cparams["meertime_ephemerides"],psrname+"_p3.par")
-            else:
-                par_path = os.path.join(cparams["meertime_ephemerides"],psrname+".par")
+        if os.path.exists(os.path.join(cparams["meertime_ephemerides"],psrname+"_p2.par")):
+            par_path = os.path.join(cparams["meertime_ephemerides"],psrname+"_p2.par")
+        elif os.path.exists(os.path.join(cparams["meertime_ephemerides"],psrname+"_p3.par")):
+            par_path = os.path.join(cparams["meertime_ephemerides"],psrname+"_p3.par")
+        else:
+            par_path = os.path.join(cparams["meertime_ephemerides"],psrname+".par")
     else:
         ephem = os.path.join(output_path,"meertime_ephemerides")
         par_path = os.path.join(ephem,psrname+".par")
@@ -1616,6 +1615,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
     logger.info("Generating ToAs")
     output_path = cparams["output_path"]
     orig_psrname = psrname
+    local_pid = cparams["pid"].lower()
 
     #Setting required paths
     timing_path = os.path.join(str(output_dir),"timing")
@@ -1734,6 +1734,13 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 # load and convert the ephemeris
                 eph = ephemeris.Ephemeris()
                 eph.load_from_file(copy_parfile)
+
+                # NEW - 30/08/2022
+                # Now uploading the ephemeris file to the pipelinefiles table in PSRDB
+                file_type = "{0}.parfile".format(local_pid)
+                if (os.path.exists(copy_parfile)):
+                    logger.info("File {0} identified (type {1}) - recording to PSRDB.".format(copy_parfile, file_type))
+                    create_pipelinefile(copy_parfile, file_type, cparams, db_client, logger)
 
                 # recall the DM, RM and site code being used by this file
                 comm = "vap -c dm,rm,asite {0}".format(proc_archive)
