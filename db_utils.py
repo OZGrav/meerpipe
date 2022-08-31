@@ -1331,6 +1331,7 @@ def create_pipelinefile(filename, filetype, cparams, client, logger):
     # Query matching Pipelinefiles entries and check for equivalence
     response = pipelinefiles.list(
         None,
+        None,
         int(cparams["db_proc_id"])
     )
     check_response(response)
