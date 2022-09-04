@@ -31,9 +31,9 @@ The raw and processed data from meerpipe can be accessed via this [data portal](
 
 ## Dependencies
 
-MeerGuard: A customised version of CoastGuard (https://github.com/plazar/coast_guard) for wide-bandwidth data is available here: https://github.com/danielreardon/MeerGuard
+MeerGuard: A customised version of [CoastGuard](https://github.com/plazar/coast_guard) for wide-bandwidth data is available [here](https://github.com/danielreardon/MeerGuard).
 
-Scintools: Meerpipe uses Scintools for producing the dynamic spectra and the associated plots. Code repository: https://github.com/danielreardon/scintools
+Scintools: Meerpipe uses Scintools for producing the dynamic spectra and the associated plots. The code can be found [here](https://github.com/danielreardon/scintools).
 
 ## Running the pipeline
 
