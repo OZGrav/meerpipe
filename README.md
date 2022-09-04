@@ -58,3 +58,14 @@ optional arguments:
  1) Dr. Aditya Parthasarathy (MPIfR): adityapartha3112@gmail.com
  2) Dr. Andrew Cameron (Swinburne University of Technology): andrewcameron@swin.edu.au
 
+Papers that have used `Meerpipe`:
+1. [The MeerTime Pulsar Timing Array: A census of emission properties and timing potential](https://ui.adsabs.harvard.edu/abs/2022PASA...39...27S/abstract)
+2. [The thousand-pulsar-array programme on MeerKAT VII: polarisation properties of pulsars in the Magellanic Clouds](https://ui.adsabs.harvard.edu/abs/2022MNRAS.509.5209J/abstract)
+3. [The Thousand-Pulsar-Array programme on MeerKAT - VI. Pulse widths of a large and diverse sample of radio pulsars](https://ui.adsabs.harvard.edu/abs/2021MNRAS.508.4249P/abstract)
+4. [The thousand-pulsar-array programme on MeerKAT IV: Polarization properties of young, energetic pulsars](https://ui.adsabs.harvard.edu/abs/2021MNRAS.505.4483S/abstract)
+5. [The Thousand-Pulsar-Array programme on MeerKAT - II. Observing strategy for pulsar monitoring with subarrays](https://ui.adsabs.harvard.edu/abs/2021MNRAS.505.4456S/abstract)
+6. [The relativistic binary programme on MeerKAT: science objectives and first results](https://ui.adsabs.harvard.edu/abs/2021MNRAS.504.2094K/abstract)
+7. [The Thousand-Pulsar-Array programme on MeerKAT - V. Scattering analysis of single-component pulsars](https://ui.adsabs.harvard.edu/abs/2021MNRAS.504.1115O/abstract)
+8. [https://ui.adsabs.harvard.edu/abs/2021MNRAS.503.5367B/abstract](https://ui.adsabs.harvard.edu/abs/2021MNRAS.503.5367B/abstract)
+9. [Measurements of pulse jitter and single-pulse variability in millisecond pulsars using MeerKAT](https://ui.adsabs.harvard.edu/abs/2021MNRAS.502..407P/abstract)
+10. [The Thousand-Pulsar-Array programme on MeerKAT - I. Science objectives and first results](https://ui.adsabs.harvard.edu/abs/2020MNRAS.493.3608J/abstract)
