@@ -340,6 +340,8 @@ def get_outputinfo(cparams,logger):
                         ram_slope = 10.6
                         ram_intercept = 0.4 # GB
                         ram_min = 0.6 # GB
+                        ram_max = 767 # GB - MAXIMUM RAM AVAILABLE ON OZSTAR
+
                         if (nchan > 1024):
                             # adjusted up for high channel count files
                             ram_factor = 1.40
@@ -363,7 +365,9 @@ def get_outputinfo(cparams,logger):
 
                         if reqram < ram_min:
                             reqram = ram_min
-
+                        elif reqram > ram_max:
+                            reqram = ram_max
+                        
                         # report result in MB
                         reqram_str = "{0}m".format(int(np.ceil(reqram*1024)))
 
