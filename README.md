@@ -1,18 +1,3 @@
-Creating documentation...to be updated
-Contact Aditya Parthasaraty for details - adityapartha3112@gmail.com
-Contact Andrew Cameron for details of the forDB branch updates - andrewcameron@swin.edu.au
-
-Two branches : 
-main: for the PID processing
-forDB: for the database upgrades
-
-Additional notes re: forDB
- * Before launching the script, run `source env_setup.csh; source /home/acameron/virtual-envs/meerpipe_db/bin/activate.csh'. Equivalent .sh files are available depending on your choice of shell.
- * Internal hardcoded software paths may be set differently due to testing requirements. This should be phased out in future with incorporation of `-softpath' options.
- * Subject to the above conditions, the code operates just as it did before. DB-functionality should only be used for testing, and is activated via the `-db_flag' and associated parameters in `run_pipe.py'.
-
-OLD STUFF ABOVE HERE!
-
 ## Overview
 
 Meerpipe is a python-based data analysis pipeline that produces the cleaned and calibrated data that forms the basis of all pulsar timing projects with the MeerKAT radio telescope as part of the [MeerTime project](http://www.meertime.org/). For an overview of MeerTime and the various science themes, please refer to [Bailes et al. 2020](https://arxiv.org/abs/2005.14366)  
@@ -74,7 +59,9 @@ Scintools: Meerpipe uses Scintools for producing the dynamic spectra and the ass
 
 ## Running the pipeline
 
-The primary launch script for the "forDB" branch is `db_specified_processing.py`. This script is some senses a wrapper script which interfaces with `run_pipe.py`, but contains its own specific functionality to launch new jobs using the PSRDB database.
+As the "forDB" branch is intrinsically linked with OzStar and its local implementation of PSRDB, it is likely not possible for the code to be run externally with the database functionality activated. Furthermore, in order to control the integrity of PSRDB, operators wishing to use the PSRDB functionality of meerpipe within OzStar should contact Andrew Cameron (details below) before proceding as various permissions will need to be established beforehand. The following information is primarily intended to provide context regarding the pipeline's operation for those using the resulting data products.
+
+The primary manual launch script for the "forDB" branch is `db_specified_processing.py`. This script is some senses a wrapper script which interfaces with `run_pipe.py`, but contains its own specific functionality to launch new jobs using the PSRDB database.
 
 ```
 usage: db_specified_launcher.py [-h] [-utc1 UTC1] [-utc2 UTC2] [-psr PULSAR]
@@ -125,7 +112,7 @@ The remaining flags are reasonably self-explanatory with reference to the provid
 
 This would process all observations of PSR J1535-5848 from the month of August 2022 through the TPA pipeline configuration, using the OzStar SLURM HPC queue system, but only if they had not been previously processed. If you wish to overwrite the results of previous processings, do not use the `-unprocessed` flag.
 
-Note that the code can still be run in the same way as the "main" branch, without using `db_specified_launcher.py` and without turning on any of the PSRDB functionality. Launched jobs will not be checked against PSRDB for correctness, results will not be written to PSRDB and the user will need to specify their own configuration file. For further details, refer to the README file from the "main" branch.
+**Note:** The "forDB" code can still be run in the same way as the "main" branch, without using `db_specified_launcher.py` and without turning on any of the PSRDB functionality. Launched jobs will not be checked against PSRDB for correctness, results will not be written to PSRDB and the user will need to specify their own configuration file. This may be beneficial, as the "forDB" branch contains a number of minor bugfixes and quality of life improvements not yet migrated to the "main" branch. For further details, refer to the README file from the "main" branch.
 
 ## Further information
  
