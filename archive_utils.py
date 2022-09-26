@@ -2339,13 +2339,32 @@ def generate_images(output_dir, cparams, psrname, logger):
         snr_cumulative = 0
         snr_report = os.path.join(images_path, "snr.dat")
         for x in range(0, nsub):
-            #logger.info ("S/N loop = {}".format(x))
-            comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
+            # new method - September 2022
+            
+            # step 1. create a zapped copy of the file with only the required subints
+            comm = "paz -X '0 {0}' -e paz {1}".format(x, scrunched_file)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            zapped_file = float(proc.stdout.read().decode("utf-8").rstrip().split()[1])
+
+            # step 2. fully scrunch the file in time
+            comm = "pam -m -T {0}".format(scrunched_file)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+
+            # step 3. extract the cumulative snr via psrstat
+            comm = "psrstat -j Fp -c snr=pdmp -c snr {1}".format(scrunched_file)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
             proc.wait()
             snr = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
             snr_cumulative = np.sqrt(snr_cumulative**2 + snr**2)
+
+            # step 4. extract the single snr via psrstat
+            # TODO
+
             # time (end) | snr (single) | snr (cumulative)
             snr_data.append([length*x/nsub, snr, snr_cumulative])
         np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
