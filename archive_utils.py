@@ -2336,37 +2336,55 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # collect and write snr data
         snr_data = []
-        snr_cumulative = 0
         snr_report = os.path.join(images_path, "snr.dat")
         for x in range(0, nsub):
             # new method - September 2022
-            
+
+            #logger.info("Begin: x = {}".format(x))
+
             # step 1. create a zapped copy of the file with only the required subints
             comm = "paz -X '0 {0}' -e paz {1}".format(x, scrunched_file)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
             proc.wait()
-            zapped_file = float(proc.stdout.read().decode("utf-8").rstrip().split()[1])
+            zapped_file = proc.stdout.read().decode("utf-8").rstrip().split()[1]
 
+            #logger.info("End step 1")
+            
             # step 2. fully scrunch the file in time
-            comm = "pam -m -T {0}".format(scrunched_file)
+            comm = "pam -m -T {0}".format(zapped_file)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
             proc.wait()
+
+            #logger.info("End step 2")
 
             # step 3. extract the cumulative snr via psrstat
-            comm = "psrstat -j Fp -c snr=pdmp -c snr {1}".format(scrunched_file)
+            comm = "psrstat -j Fp -c snr=pdmp -c snr {0}".format(zapped_file)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
             proc.wait()
-            snr = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
-            snr_cumulative = np.sqrt(snr_cumulative**2 + snr**2)
+            snr_cumulative = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
+
+            #logger.info("End step 3")
 
             # step 4. extract the single snr via psrstat
-            # TODO
+            comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            snr_single = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
 
-            # time (end) | snr (single) | snr (cumulative)
-            snr_data.append([length*x/nsub, snr, snr_cumulative])
+            #logger.info("End step 4")
+
+            # step 5. write to file
+            snr_data.append([length*x/nsub, snr_single, snr_cumulative])
+
+            #logger.info("End step 5")
+
+            # cleanup
+            os.remove(zapped_file)
+            
         np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
 
         logger.info("Analysis complete.")
