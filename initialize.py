@@ -340,7 +340,7 @@ def get_outputinfo(cparams,logger):
                         ram_slope = 10.6
                         ram_intercept = 0.4 # GB
                         ram_min = 0.6 # GB
-                        ram_max = 767 # GB - MAXIMUM RAM AVAILABLE ON OZSTAR
+                        ram_max = 750 # GB - MAXIMUM RAM AVAILABLE ON OZSTAR
 
                         if (nchan > 1024):
                             # adjusted up for high channel count files
