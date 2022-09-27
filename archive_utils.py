@@ -2340,8 +2340,6 @@ def generate_images(output_dir, cparams, psrname, logger):
         for x in range(0, nsub):
             # new method - September 2022
 
-            #logger.info("Begin: x = {}".format(x))
-
             # step 1. create a zapped copy of the file with only the required subints
             comm = "paz -X '0 {0}' -e paz {1}".format(x, scrunched_file)
             args = shlex.split(comm)
@@ -2349,15 +2347,11 @@ def generate_images(output_dir, cparams, psrname, logger):
             proc.wait()
             zapped_file = proc.stdout.read().decode("utf-8").rstrip().split()[1]
 
-            #logger.info("End step 1")
-            
             # step 2. fully scrunch the file in time
             comm = "pam -m -T {0}".format(zapped_file)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
             proc.wait()
-
-            #logger.info("End step 2")
 
             # step 3. extract the cumulative snr via psrstat
             comm = "psrstat -j Fp -c snr=pdmp -c snr {0}".format(zapped_file)
@@ -2366,8 +2360,6 @@ def generate_images(output_dir, cparams, psrname, logger):
             proc.wait()
             snr_cumulative = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
 
-            #logger.info("End step 3")
-
             # step 4. extract the single snr via psrstat
             comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
             args = shlex.split(comm)
@@ -2375,12 +2367,8 @@ def generate_images(output_dir, cparams, psrname, logger):
             proc.wait()
             snr_single = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
 
-            #logger.info("End step 4")
-
             # step 5. write to file
             snr_data.append([length*x/nsub, snr_single, snr_cumulative])
-
-            #logger.info("End step 5")
 
             # cleanup
             os.remove(zapped_file)
