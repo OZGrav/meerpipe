@@ -1478,21 +1478,31 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
     #parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{}*par".format(psrname)))
     #parfile = glob.glob(os.path.join(str(output_dir),"{0}.par".format(psrname)))
 
-    parfile = []
+    #parfile = []
+    parfile = None
+    #logger.info("Parfile = {}".format(parfile))
 
     if len(glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}.par".format(psrname)))) > 0:
-        parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{0}.par".format(psrname)))
+        parfile = glob.glob(os.path.join(cparams['meertime_ephemerides'], "{0}.par".format(psrname)))[0]
     elif len(glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p2.par".format(psrname)))) > 0:
-        parfile = glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p2.par".format(psrname)))
+        parfile = glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p2.par".format(psrname)))[0]
     elif len(glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p3.par".format(psrname)))) > 0:
-        parfile = glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p3.par".format(psrname)))
+        parfile = glob.glob(os.path.join(cparams["meertime_ephemerides"],"{0}_p3.par".format(psrname)))[0]
 
-    if len(parfile) == 0:
-        logger.warning("No par file found for "+psrname)
-        parfile = None
-    else:
-        parfile = parfile[0]
+    #logger.info("Parfile = {}".format(parfile))
+
+    if not parfile == None:
         logger.info("Parfile found: {}".format(parfile))
+    else:
+        logger.warning("No par file found for {}".format(psrname))
+        parfile = None
+
+    #if len(parfile) == 0:
+        #logger.warning("No par file found for "+psrname)
+        #parfile = None
+    #else:
+        #parfile = parfile[0]
+        #logger.info("Parfile found: {}".format(parfile))
 
     if not header_params["BW"] == "544.0":
         logger.info("Flux calibrating the decimated data products of {0}".format(psrname))
