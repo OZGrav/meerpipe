@@ -2329,7 +2329,7 @@ def generate_images(output_dir, cparams, psrname, logger):
         logger.info("Creating S/N images...")
 
         # make scrunched file for analysis
-        comm = "pam -Fp -e Fp.temp -u {0} {1}".format(images_path, clean_file)
+        comm = "pam -Fp -e Fp.temp -u {0} {1}".format(loc_path, clean_file)
         args = shlex.split(comm)
         proc = subprocess.Popen(args,stdout=subprocess.PIPE)
         proc.wait()
@@ -2352,6 +2352,8 @@ def generate_images(output_dir, cparams, psrname, logger):
         snr_report = os.path.join(images_path, "snr.dat")
         for x in range(0, nsub):
             # new method - September 2022
+
+            logger.info("Loop {} starting...".format(x))
 
             # step 1. create a zapped copy of the file with only the required subints
             comm = "paz -X '0 {0}' -e paz {1}".format(x, scrunched_file)
@@ -2385,6 +2387,8 @@ def generate_images(output_dir, cparams, psrname, logger):
 
             # cleanup
             os.remove(zapped_file)
+
+            logger.info("Loop {} ending...".format(x))
             
         np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
 
