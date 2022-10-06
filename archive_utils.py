@@ -37,6 +37,7 @@ import psrchive as ps
 
 #Coastguard imports
 from coast_guard import cleaners
+from coast_guard import clean_utils
 
 #Slack imports
 import json
@@ -2335,6 +2336,11 @@ def generate_images(output_dir, cparams, psrname, logger):
         proc.wait()
         info = proc.stdout.read().decode("utf-8").rstrip().split()
         scrunched_file = info[0]
+
+        # new - psrchive side functionality
+        scrunched_arch = ps.Archive_load(scrunched_file)
+        zapped_arch = scrunched_arch.clone()
+
         # get parameters for looping
         comm = "vap -c nsub,length {0}".format(scrunched_file)
         args = shlex.split(comm)
@@ -2350,23 +2356,35 @@ def generate_images(output_dir, cparams, psrname, logger):
         # collect and write snr data
         snr_data = []
         snr_report = os.path.join(images_path, "snr.dat")
+
         for x in range(0, nsub):
-            # new method - September 2022
+            # new method - October 2022
 
-            logger.info("Loop {} starting...".format(x))
+            #logger.info("Loop {} starting...".format(x))
 
-            # step 1. create a zapped copy of the file with only the required subints
-            comm = "paz -X '0 {0}' -e paz {1}".format(x, scrunched_file)
-            args = shlex.split(comm)
-            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            proc.wait()
-            zapped_file = proc.stdout.read().decode("utf-8").rstrip().split()[1]
+            # step 1. work backward through the file zapping out one subint at a time
+            asub = nsub - x - 1
+            if (x > 0):
+                # don't need to zap anything - analysing the complete archive
+                clean_utils.zero_weight_subint(zapped_arch,asub + 1)
+
+            # step 2. scrunch and write to disk
+            tscr_arch = zapped_arch.clone()
+            tscr_arch.tscrunch()
+            zapped_file = os.path.join(loc_path, "zaptemp.ar")
+            tscr_arch.unload(zapped_file)
+
+            #comm = "paz -X '0 {0}' -e paz {1}".format(x, scrunched_file)
+            #args = shlex.split(comm)
+            #proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            #proc.wait()
+            #zapped_file = proc.stdout.read().decode("utf-8").rstrip().split()[1]
 
             # step 2. fully scrunch the file in time
-            comm = "pam -m -T {0}".format(zapped_file)
-            args = shlex.split(comm)
-            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            proc.wait()
+            #comm = "pam -m -T {0}".format(zapped_file)
+            #args = shlex.split(comm)
+            #proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            #proc.wait()
 
             # step 3. extract the cumulative snr via psrstat
             comm = "psrstat -j Fp -c snr=pdmp -c snr {0}".format(zapped_file)
@@ -2376,19 +2394,22 @@ def generate_images(output_dir, cparams, psrname, logger):
             snr_cumulative = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
 
             # step 4. extract the single snr via psrstat
-            comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
+            #comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
+            comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(asub, scrunched_file)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
             proc.wait()
             snr_single = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
 
             # step 5. write to file
-            snr_data.append([length*x/nsub, snr_single, snr_cumulative])
+            #snr_data.append([length*x/nsub, snr_single, snr_cumulative])
+            snr_data.append([length*asub/nsub, snr_single, snr_cumulative])
 
             # cleanup
             os.remove(zapped_file)
+            del(tscr_arch)
 
-            logger.info("Loop {} ending...".format(x))
+            #logger.info("Loop {} ending...".format(x))
             
         np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
 
