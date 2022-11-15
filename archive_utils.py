@@ -2751,17 +2751,6 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
         f.close()
         logger.info("TOA data generated and stored in {0}".format(timfile))
 
-        # package the timfile for storage
-        if (os.path.exists(timfile)):
-            timtar = timfile.replace(".tim", ".tar.gz")
-            comm = "tar -zcvf {0} {1}".format(timtar, timfile)
-            args = shlex.split(comm)
-            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            proc.wait()
-            if (os.path.exists(timtar)):
-                tartype = "{0}.single-tim".format(local_pid)
-                files_to_store.append({'filename': timtar, 'type': tartype})
-
         if not (parfile == None) and (os.path.exists(parfile)):
 
             # use meerwatch functions to produce residual images for this observation
@@ -2789,6 +2778,18 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
         else:
             logger.error("No parfile provided! - Skipping single-obs TOA image generation...")
             result = False
+    
+        # package the timfile for storage
+        if (os.path.exists(timfile)):
+            timzip = "{}.gz".format(timfile)
+            comm = "gzip -9 {0}".format(timfile)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            if (os.path.exists(timzip)):
+                ziptype = "{0}.single-tim".format(local_pid)
+                files_to_store.append({'filename': timzip, 'type': ziptype})
+
     else:
         logger.error("No template provided! - Skipping single-obs TOA image generation...")
         result = False
@@ -2949,17 +2950,6 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
         f.close()
         logger.info("Global TOA data generated and stored in {0}".format(timfile))
 
-        # package the timfile for storage
-        if (os.path.exists(timfile)):
-            timtar = timfile.replace(".tim", ".tar.gz")
-            comm = "tar -zcvf {0} {1}".format(timtar, timfile)
-            args = shlex.split(comm)
-            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            proc.wait()
-            if (os.path.exists(timtar)):
-                tartype = "{0}.global-tim".format(local_pid)
-                files_to_store.append({'filename': timtar, 'type': tartype})
-
         if not (parfile == None) and (os.path.exists(parfile)):
 
             # use meerwatch functions to produce residual images for this observation
@@ -2985,6 +2975,17 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
         else:
             logger.error("No parfile provided! - Skipping global-obs TOA image generation...")
             result = False
+
+        # package the timfile for storage
+        if (os.path.exists(timfile)):
+            timzip = "{}.gz".format(timfile)
+            comm = "gzip -9 {0}".format(timfile)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            if (os.path.exists(timzip)):
+                ziptype = "{0}.global-tim".format(local_pid)
+                files_to_store.append({'filename': timzip, 'type': ziptype})
 
     else:
         logger.error("No template provided! - Skipping global-obs TOA image generation...")
