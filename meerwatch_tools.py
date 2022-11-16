@@ -33,16 +33,50 @@ def weighted_rms(toas):
 
     return np.sqrt(numerator / denominator)
 
-def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False):
+# new - 15/11/2022 - addinging an "align" flag which will allow separately generated residuals of the same pulsar to be lined up
+def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False, align=False):
 
+    if verb:
+        print ("Generating residuals from provided files {} and {}...".format(par_file, tim_file))
+
+    # prepare tempo2 call and files
     tempo2_call = "tempo2 -nofit -set START 40000 -set FINISH 99999 "\
                   "-output general2 -s \"{{bat}} {{post}} {{err}} "\
-                  "{{freq}} BLAH\n\" -nobs 10000000 -npsr 1 -f {} {}"
-    awk_cmd = "awk '{print $1,$2,$3*1e-6,$4}'"
+                  "{{freq}} {{post_phase}} BLAH\n\" -nobs 10000000 -npsr 1 -f {} {}"
+    awk_cmd = "awk '{print $1,$2,$3*1e-6,$4,$5}'"
     temp_file = os.path.basename(tim_file).replace('.tim', '_res.txt')
     comp_file = os.path.basename(tim_file).replace('.tim', '_res_comp.txt')
     temp_file = os.path.join(out_dir, temp_file)
     comp_file = os.path.join(out_dir, comp_file)
+
+    # if phase aligning the residuals, add the fake TOA to a modified tim file
+    if (align):
+
+        if verb:
+            print("TOA alignment requested.")
+
+        fake_str = "ALIGNFAKE"
+        fake_toa = "{} 1284.0 57754.0 10 meerkat\n".format(fake_str)
+        newtim_file = "{0}.{1}".format(tim_file, fake_str)
+
+        # open the files and modify the contents, inserting fake TOA as last entry
+        tim_fh = open(tim_file, 'r')
+        newtim_fh = open(newtim_file, 'w')
+        orig_toas = tim_fh.readlines()
+        tim_fh.close()
+
+        # copy contents
+        for line in orig_toas:
+            newtim_fh.write(line)
+        # add fake TOA
+        newtim_fh.write(fake_toa)
+        newtim_fh.close()
+
+        # reset variables for later tempo2 call
+        tim_file = newtim_file
+
+        if verb:
+            print("Created temporary tim file {}".format(tim_file))
 
     # if a select file is given, include it
     if sel_file is not None:
@@ -64,8 +98,53 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
     if verb:
         print("Finished running tempo2")
 
+    # cleanup temporary tim file if necessary
+    if (align):
+        if (fake_str in tim_file):
+            os.remove(tim_file)
+            if verb:
+                print("Deleted temporary tim file {}".format(tim_file))
+
     # load in the toa residuals
-    toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3), dtype=[('mjd', 'f8'), ('res', 'f4'), ('err', 'f4'), ('freq', 'f4')])
+    toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3, 4), dtype=[('mjd', 'f16'), ('res', 'f8'), ('err', 'f4'), ('freq', 'f8'), ('res_phase','f8')])
+
+    # if alignment requested, then identify the offset of the fake residual, rotate by that amount,
+    # then delete the fake residual and re-write the file
+    if (align):
+
+        if verb:
+            print("Rotating residuals to account for TOA alignment")
+
+        # get the offset of the fake TOA - this will be the last in the list
+        fake_index = len(toas) - 1
+        fake_time_offset = toas[fake_index]['res']
+        fake_phase_offset = toas[fake_index]['res_phase']
+
+        # rotate the real residuals
+        for x in range (0, fake_index):
+
+            # subtract out the phase offset of the fake toa and then modulo it back to within range
+            new_res_phase = toas[x]['res_phase'] - fake_phase_offset
+            if (new_res_phase > 0.5):
+                new_res_phase = new_res_phase - 1.0
+            elif (new_res_phase <= -0.5):
+                new_res_phase = new_res_phase + 1.0
+
+            # now redo the time offset
+            new_res = (new_res_phase / toas[x]['res_phase']) * toas[x]['res']
+
+            # reset the toa entry
+            toas[x]['res_phase'] = new_res_phase
+            toas[x]['res'] = new_res
+
+        # delete the fake residual
+        toas = np.delete(toas, fake_index, 0)
+
+        # re-write the residual file
+        np.savetxt(temp_file, toas, fmt='%.15f %.20f %.10f %.15f %.20f')
+
+        if verb:
+            print("Realignment complete - results written back to {}".format(temp_file))
 
     if toas.size == 1:
         if verb:
@@ -76,7 +155,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
         print("No ToAs from tempo2 for {}".format(tim_file))
     else:
         # write out the compressed residuals
-        np.savetxt(comp_file, toas, fmt="%12.6f\t%.4e\t%.2e\t%9.4f")
+        np.savetxt(comp_file, toas, fmt="%12.6f\t%.4e\t%.2e\t%9.4f\t%.4e")
 
     return(toas)
 
