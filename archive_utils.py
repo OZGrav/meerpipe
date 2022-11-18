@@ -384,56 +384,87 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
 
         archive_utc = os.path.split(add_archive)[1].split("_")[-1].split('.add')[0]
         archive_utc_datetime = datetime.datetime.strptime(archive_utc, '%Y-%m-%d-%H:%M:%S')
-        reference_calib_date = datetime.datetime.strptime("2020-04-10-00:00:00",'%Y-%m-%d-%H:%M:%S')
 
-        if (archive_utc_datetime - reference_calib_date).total_seconds() > 0:
-            if header_params["BW"] == "544.0":
-                logger.info("Polarisation calibration not available (yet) for UHF data. Just correcting headers")
-            else:
+        # multiple reference dates now available
+        LBAND_reference_calib_date = datetime.datetime.strptime("2020-04-10-00:00:00",'%Y-%m-%d-%H:%M:%S')
+        UHF_reference_calib_date = datetime.datetime.strptime("2021-08-18-00:00:00",'%Y-%m-%d-%H:%M:%S')
+
+        # swapping predence order here - frequency first
+        if header_params["BW"] == "544.0":
+
+            # UHF branch
+
+            if (archive_utc_datetime - UHF_reference_calib_date).total_seconds() > 0:
+
+                # data past reference date - correct headers only
                 logger.info("Data already polarisation calibrated. Just correcting headers.")
 
-            calibrated_path = os.path.join(str(output_dir),"calibrated")
+                calibrated_path = os.path.join(str(output_dir),"calibrated")
 
-            if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
-                pac_com = 'pac -XP {0} -O {1} -e calib '.format(add_archive,calibrated_path)
-                proc_pac = shlex.split(pac_com)
-                p_pac = subprocess.Popen(proc_pac)
-                p_pac.wait()
-            else:
-                logger.info("Calibrated data already exists")
+                if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
+                    pac_com = 'pac -XP {0} -O {1} -e calib '.format(add_archive,calibrated_path)
+                    proc_pac = shlex.split(pac_com)
+                    p_pac = subprocess.Popen(proc_pac)
+                    p_pac.wait()
+                else:
+                    logger.info("Calibrated data already exists")
 
-            calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
+                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
 
+            elif (archive_utc_datetime - UHF_reference_calib_date).total_seconds() <=0:
 
-        elif (archive_utc_datetime - reference_calib_date).total_seconds() <=0:
-            logger.info("Polarisation calibration manually applied using Jones matrices")
+                logger.info("NOT YET IMPLEMENTED.")
 
-            calibrated_path = os.path.join(str(output_dir),"calibrated")
+        else:
 
-            #Identify the jones matrix file to use for polarization calibration. 
-            calib_utcs = sorted(glob.glob(os.path.join(calibrators_path,"*jones")))
+            # L-Band branch
+
+            if (archive_utc_datetime - LBAND_reference_calib_date).total_seconds() > 0:
+
+                # data past reference date - correct headers only
+                logger.info("Data already polarisation calibrated. Just correcting headers.")
+
+                calibrated_path = os.path.join(str(output_dir),"calibrated")
+
+                if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
+                    pac_com = 'pac -XP {0} -O {1} -e calib '.format(add_archive,calibrated_path)
+                    proc_pac = shlex.split(pac_com)
+                    p_pac = subprocess.Popen(proc_pac)
+                    p_pac.wait()
+                else:
+                    logger.info("Calibrated data already exists")
+
+                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
+
+            elif (archive_utc_datetime - LBAND_reference_calib_date).total_seconds() <=0:
+
+                # apply Jones matrices
+                logger.info("Polarisation calibration manually applied using Jones matrices")
+
+                calibrated_path = os.path.join(str(output_dir),"calibrated")
+
+                #Identify the jones matrix file to use for polarization calibration.
+                calib_utcs = sorted(glob.glob(os.path.join(calibrators_path,"*jones")))
             
-            calibrator_archive = get_calibrator(archive_utc,calib_utcs,header_params,logger)
+                calibrator_archive = get_calibrator(archive_utc,calib_utcs,header_params,logger)
 
-            logger.info("Found jones matrix file:{0}".format(calibrator_archive))
+                logger.info("Found jones matrix file:{0}".format(calibrator_archive))
 
-            if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
-                pac_com = 'pac -Q {0} {1} -O {2} -e calib '.format(calibrator_archive,add_archive,calibrated_path)
-                proc_pac = shlex.split(pac_com)
-                p_pac = subprocess.Popen(proc_pac)
-                p_pac.wait()
+                if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
+                    pac_com = 'pac -Q {0} {1} -O {2} -e calib '.format(calibrator_archive,add_archive,calibrated_path)
+                    proc_pac = shlex.split(pac_com)
+                    p_pac = subprocess.Popen(proc_pac)
+                    p_pac.wait()
 
-                calibrated_file = glob.glob(os.path.join(calibrated_path,"*calibP"))[0]
-                name = os.path.split(calibrated_file)[1].split(".calibP")[0]+".calib"
-                new_file = os.path.join(calibrated_path,name)
-                os.rename(calibrated_file,new_file)
-                logger.info("Calibrated file renamed")
-            else:
-                logger.info("Calibrated data already exists")
+                    calibrated_file = glob.glob(os.path.join(calibrated_path,"*calibP"))[0]
+                    name = os.path.split(calibrated_file)[1].split(".calibP")[0]+".calib"
+                    new_file = os.path.join(calibrated_path,name)
+                    os.rename(calibrated_file,new_file)
+                    logger.info("Calibrated file renamed")
+                else:
+                    logger.info("Calibrated data already exists")
 
-            calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
-
-
+                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
 
     #Setting polc=1 in calibrated archives
     for carchive in calibrated_archives:
