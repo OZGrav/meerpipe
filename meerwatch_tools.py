@@ -110,13 +110,9 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     # load in the toa residuals
     toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3, 4), dtype=[('mjd', 'f16'), ('res', 'f8'), ('err', 'f4'), ('freq', 'f8'), ('res_phase','f8')])
 
-
     # if alignment requested, then identify the offset of the fake residual, rotate by that amount,
     # then delete the fake residual and re-write the file
     if (align):
-
-        if verb:
-            print("Rotating residuals to account for TOA alignment")
 
         # check the size of the toas and handle appropriately
         if toas.size == 1:
@@ -130,27 +126,15 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
 
         else:
 
+            if verb:
+                print("Rotating residuals to account for TOA alignment")
+
             # get the offset of the fake TOA - this will be the last in the list
             fake_index = toas.size - 1
-            fake_time_offset = toas[fake_index]['res']
             fake_phase_offset = toas[fake_index]['res_phase']
 
             # rotate the real residuals
-            for x in range (0, fake_index):
-
-                # subtract out the phase offset of the fake toa and then modulo it back to within range
-                new_res_phase = toas[x]['res_phase'] - fake_phase_offset
-                if (new_res_phase > 0.5):
-                    new_res_phase = new_res_phase - 1.0
-                elif (new_res_phase <= -0.5):
-                    new_res_phase = new_res_phase + 1.0
-
-                # now redo the time offset
-                new_res = (new_res_phase / toas[x]['res_phase']) * toas[x]['res']
-
-                # reset the toa entry
-                toas[x]['res_phase'] = new_res_phase
-                toas[x]['res'] = new_res
+            rotate_toas(toas, fake_phase_offset, verb=True)
 
             # delete the fake residual
             toas = np.delete(toas, fake_index, 0)
@@ -173,8 +157,42 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
 
     return(toas)
 
+# new - rotate contents of an array per the specified phase offset
+# modifies the copy of the toas provided - no need to return
+def rotate_toas(toas, phase_offset, verb=False):
 
-def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None):
+    if verb:
+        print("Rotating by phase {}.".format(phase_offset))
+
+    # scroll through entries and modify
+    for x in range (0, toas.size):
+
+        # subtract out the phase offset of the fake toa and then modulo it back to within range
+        new_res_phase = toas[x]['res_phase'] - phase_offset
+        if (new_res_phase > 0.5):
+            new_res_phase = new_res_phase - 1.0
+        elif (new_res_phase <= -0.5):
+            new_res_phase = new_res_phase + 1.0
+
+        # now redo the time offset
+        new_res = (new_res_phase / toas[x]['res_phase']) * toas[x]['res']
+
+        # reset the toa entry
+        toas[x]['res_phase'] = new_res_phase
+        toas[x]['res'] = new_res
+
+    if verb:
+        print("Rotation complete.")
+
+def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None, rebase=False):
+
+    # new - optionally rebaseline the residuals before display to account for the new re-alignment procedures
+    if rebase:
+        toa_mean = np.mean(toas['res_phase'])
+
+        # create toa copy to rotate
+        toas = np.copy(toas)
+        rotate_toas(toas, toa_mean, verb=True)
 
     if out_dir:
         out_file = os.path.join(out_dir, out_file)
