@@ -95,6 +95,8 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
         p3 = sproc.Popen(shplit(awk_cmd), stdin=sproc.PIPE, stdout=f)
         p3.communicate(input=p2_data)
 
+    f.close()
+
     if verb:
         print("Finished running tempo2")
 
@@ -108,6 +110,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     # load in the toa residuals
     toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3, 4), dtype=[('mjd', 'f16'), ('res', 'f8'), ('err', 'f4'), ('freq', 'f8'), ('res_phase','f8')])
 
+
     # if alignment requested, then identify the offset of the fake residual, rotate by that amount,
     # then delete the fake residual and re-write the file
     if (align):
@@ -115,36 +118,47 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
         if verb:
             print("Rotating residuals to account for TOA alignment")
 
-        # get the offset of the fake TOA - this will be the last in the list
-        fake_index = len(toas) - 1
-        fake_time_offset = toas[fake_index]['res']
-        fake_phase_offset = toas[fake_index]['res_phase']
+        # check the size of the toas and handle appropriately
+        if toas.size == 1:
+        
+            # fake residual is the only residual - abort
+            toas = np.array([])
+            np.savetxt(temp_file, toas)
+        
+            if verb:
+                print ("Fake residual is the only residual found - aborting and writing blank residuals")
 
-        # rotate the real residuals
-        for x in range (0, fake_index):
+        else:
 
-            # subtract out the phase offset of the fake toa and then modulo it back to within range
-            new_res_phase = toas[x]['res_phase'] - fake_phase_offset
-            if (new_res_phase > 0.5):
-                new_res_phase = new_res_phase - 1.0
-            elif (new_res_phase <= -0.5):
-                new_res_phase = new_res_phase + 1.0
+            # get the offset of the fake TOA - this will be the last in the list
+            fake_index = toas.size - 1
+            fake_time_offset = toas[fake_index]['res']
+            fake_phase_offset = toas[fake_index]['res_phase']
 
-            # now redo the time offset
-            new_res = (new_res_phase / toas[x]['res_phase']) * toas[x]['res']
+            # rotate the real residuals
+            for x in range (0, fake_index):
 
-            # reset the toa entry
-            toas[x]['res_phase'] = new_res_phase
-            toas[x]['res'] = new_res
+                # subtract out the phase offset of the fake toa and then modulo it back to within range
+                new_res_phase = toas[x]['res_phase'] - fake_phase_offset
+                if (new_res_phase > 0.5):
+                    new_res_phase = new_res_phase - 1.0
+                elif (new_res_phase <= -0.5):
+                    new_res_phase = new_res_phase + 1.0
 
-        # delete the fake residual
-        toas = np.delete(toas, fake_index, 0)
+                # now redo the time offset
+                new_res = (new_res_phase / toas[x]['res_phase']) * toas[x]['res']
 
-        # re-write the residual file
-        np.savetxt(temp_file, toas, fmt='%.15f %.20f %.10f %.15f %.20f')
+                # reset the toa entry
+                toas[x]['res_phase'] = new_res_phase
+                toas[x]['res'] = new_res
 
-        if verb:
-            print("Realignment complete - results written back to {}".format(temp_file))
+            # delete the fake residual
+            toas = np.delete(toas, fake_index, 0)
+            # re-write the residual file
+            np.savetxt(temp_file, toas, fmt='%.15f %.20f %.10f %.15f %.20f')
+
+            if verb:
+                print("Realignment complete - results written back to {}".format(temp_file))
 
     if toas.size == 1:
         if verb:
