@@ -19,6 +19,7 @@ import json
 import subprocess
 import shlex
 import numpy as np
+import time
 
 # PSRDB imports
 from tables import *
@@ -128,25 +129,46 @@ for x in range(0, len(proc_list)):
                         filetype = y['node']['fileType']
                         filename = os.path.join(target_tg_location, timzip)
 
-                        update_id = update_pipelinefile(
-                            pipefile_id,
-                            filename,
-                            filetype,
-                            int(proc_list[x]),
-                            client,
-                            url,
-                            token
-                        )
+                        print ("Replacing pipelinefile {} with: {} ({})".format(pipefile_id, filename, filetype))
+
+                        success = False
+                        tries = 0
+                        max_tries = 3
                         
+                        while (not success) and (tries < max_tries):
+                            
+                            try:
+                                update_id = update_pipelinefile(
+                                    int(pipefile_id),
+                                    str(filename),
+                                    str(filetype),
+                                    int(proc_list[x]),
+                                    client,
+                                    url,
+                                    token
+                                )
+                            except:
+                                tries = tries + 1
+                                print ("PSRDB pipelinefiles update failure (try {}/{})- retrying...".format(tries, max_tries))
+                                time.sleep(1)
+                            else:
+                                success = True
+
+                        if not success:
+                            err_str = "Unable to update pipelinefile ID {} - proc ID {}".format(pipefile_id, proc_list[x])
+                            error_handle.write(err_str)
+                            error_handle.close()
+                            raise Exception(err_str)
+
                         if (update_id != int(pipefile_id)) or (update_id == None):
                             print ("WARNING: Failure to update 'pipelinefiles' entry {0}.".format(str(pipefile_id)))
-                            error_handle.write("Failure to update 'pipelinefiles' entry {0}.".format(str(pipefile_id)))
+                            error_handle.write("Failure to update 'pipelinefiles' entry {0} for processing {1}.\n".format(str(pipefile_id), str(proc_list[x])))
                         else:
                             print ("Updated pipelinefile {0}".format(pipefile_id))
 
                     else:
                         # not safe - report error
-                        error_handle.write("Not safe to delete {} for processing {} - check and retry".format(fn, proc_list[x]))
+                        error_handle.write("Not safe to delete {} for processing {} - check and retry.\n".format(fn, proc_list[x]))
                         continue
 
                     
