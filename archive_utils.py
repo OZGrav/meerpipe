@@ -325,8 +325,14 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
     archive_utc = datetime.datetime.strptime(archive_utc, '%Y-%m-%d-%H:%M:%S')
     time_diff=[]
     cals_tocheck = []
+    # extra step for UHF calibration
+    substr = "_sub"
+
     for calib_utc in calib_utcs:
         utc = os.path.split(calib_utc)[1].split('.jones')[0]
+        # extra step for UHF calibration
+        if (substr in utc):
+            utc = utc.split(substr)[0]
         utc = datetime.datetime.strptime(utc, '%Y-%m-%d-%H:%M:%S')
         if (archive_utc-utc).total_seconds() > 0:
             time_diff.append(calib_utc)
@@ -334,12 +340,13 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
     if not header_params==None:
         #Obtaining the reference antenna and comparing it with the antenna list for the data. 
         reference_strings = ['reference', 'antenna', 'name:']
+        desired_strings = ['desired', 'antenna', 'name:']
         for item in reversed(time_diff):
             with open (item,'r') as f:
                 lines = f.readlines()
                 for line in lines:
                     sline = line.split()
-                    if all(elem in sline for elem in reference_strings):
+                    if all(elem in sline for elem in reference_strings) or all(elem in sline for elem in desired_strings):
                         while "#" in sline: sline.remove("#")
                         reference_antenna = sline[-1]
                         print (reference_antenna)
@@ -389,6 +396,9 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
         LBAND_reference_calib_date = datetime.datetime.strptime("2020-04-10-00:00:00",'%Y-%m-%d-%H:%M:%S')
         UHF_reference_calib_date = datetime.datetime.strptime("2021-08-18-00:00:00",'%Y-%m-%d-%H:%M:%S')
 
+        # abstracting repeated code
+        calibrated_path = os.path.join(str(output_dir),"calibrated")
+
         # swapping predence order here - frequency first
         if header_params["BW"] == "544.0":
 
@@ -398,8 +408,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
 
                 # data past reference date - correct headers only
                 logger.info("Data already polarisation calibrated. Just correcting headers.")
-
-                calibrated_path = os.path.join(str(output_dir),"calibrated")
 
                 if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
                     pac_com = 'pac -XP {0} -O {1} -e calib '.format(add_archive,calibrated_path)
@@ -413,7 +421,34 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
 
             elif (archive_utc_datetime - UHF_reference_calib_date).total_seconds() <=0:
 
-                logger.info("NOT YET IMPLEMENTED.")
+                # apply Jones matrices
+                logger.info("Polarisation calibration manually applied using Jones matrices")
+
+                # check subdirectory for UHF cals - update cal path
+                calibrators_path = os.path.join(calibrators_path,"UHF")
+
+                #Identify the jones matrix file to use for polarization calibration.
+                calib_utcs = sorted(glob.glob(os.path.join(calibrators_path,"*jones")))
+
+                calibrator_archive = get_calibrator(archive_utc,calib_utcs,header_params,logger)
+
+                logger.info("Found jones matrix file:{0}".format(calibrator_archive))
+
+                if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
+                    pac_com = 'pac -Q {0} {1} -O {2} -e calib '.format(calibrator_archive,add_archive,calibrated_path)
+                    proc_pac = shlex.split(pac_com)
+                    p_pac = subprocess.Popen(proc_pac)
+                    p_pac.wait()
+
+                    calibrated_file = glob.glob(os.path.join(calibrated_path,"*calibP"))[0]
+                    name = os.path.split(calibrated_file)[1].split(".calibP")[0]+".calib"
+                    new_file = os.path.join(calibrated_path,name)
+                    os.rename(calibrated_file,new_file)
+                    logger.info("Calibrated file renamed")
+                else:
+                    logger.info("Calibrated data already exists")
+
+                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
 
         else:
 
@@ -423,8 +458,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
 
                 # data past reference date - correct headers only
                 logger.info("Data already polarisation calibrated. Just correcting headers.")
-
-                calibrated_path = os.path.join(str(output_dir),"calibrated")
 
                 if not os.path.exists(os.path.join(calibrated_path,"{0}.calib".format(archive_name))):
                     pac_com = 'pac -XP {0} -O {1} -e calib '.format(add_archive,calibrated_path)
@@ -440,8 +473,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
 
                 # apply Jones matrices
                 logger.info("Polarisation calibration manually applied using Jones matrices")
-
-                calibrated_path = os.path.join(str(output_dir),"calibrated")
 
                 #Identify the jones matrix file to use for polarization calibration.
                 calib_utcs = sorted(glob.glob(os.path.join(calibrators_path,"*jones")))
