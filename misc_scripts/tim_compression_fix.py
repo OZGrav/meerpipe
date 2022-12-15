@@ -124,6 +124,7 @@ for x in range(0, len(proc_list)):
                         comm = "gzip -9 {0}".format(original_file)
                         args = shlex.split(comm)
                         proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                        proc.wait()
                         
                         # update the entry in the database
                         filetype = y['node']['fileType']

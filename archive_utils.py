@@ -1088,13 +1088,25 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                     logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
                         cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+
+                        # Adjust for 4096 channel count
+                        if (header_params["NCHAN"] == "4096"):
+                            # add a new decimation product
+                            decimation_info.append('-f 4 -T -S')
+
                         for item in decimation_info:
                             if not item == "all":
                                 #Scaling the scrunch factors to 1024 channels (only for UHF data)
                                 if item == "-f 116 -T -S":
-                                    item = "-f 128 -T -S"
+                                    if (header_params["NCHAN"] == "4096"):
+                                        item = "-f 512 -T -S"
+                                    else:
+                                        item = "-f 128 -T -S"
                                 if item == "-f 29 -T -S":
-                                    item = "-f 32 -T -S"
+                                    if (header_params["NCHAN"] == "4096"):
+                                        item = "-f 128 -T -S"
+                                    else:
+                                        item = "-f 32 -T -S"
 
                                 extension = get_extension(item,False)
                                 if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
