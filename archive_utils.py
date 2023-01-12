@@ -1,4 +1,4 @@
-b"""
+"""
 Code containing utilities for parsing/processing pulsar archive files
 
 __author__ = "Aditya Parthasarathy"
