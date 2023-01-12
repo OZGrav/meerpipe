@@ -1,4 +1,4 @@
-"""
+b"""
 Code containing utilities for parsing/processing pulsar archive files
 
 __author__ = "Aditya Parthasarathy"
@@ -2346,7 +2346,7 @@ def generate_images(output_dir, cparams, psrname, logger):
             {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'title': 'Polarisation Profile ({0})'.format(cparams["pid"]), 'rank': 2, 'type': '{0}.profile-pol.hi'.format(local_pid)},
             {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'title': 'Phase vs. Frequency ({0})'.format(cparams["pid"]), 'rank': 4, 'type': '{0}.phase-freq.hi'.format(local_pid)},
             {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'title': 'Phase vs. Time ({0})'.format(cparams["pid"]), 'rank': 3, 'type': '{0}.phase-time.hi'.format(local_pid)},
-            {'comm': 'psrplot -p b -x -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'title': 'Cleaned bandpass ({0})'.format(cparams["pid"]), 'rank': 8, 'type': '{0}.bandpass.hi'.format(local_pid)},
+            {'comm': 'psrplot -p b -x -jT -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'title': 'Cleaned bandpass ({0})'.format(cparams["pid"]), 'rank': 8, 'type': '{0}.bandpass.hi'.format(local_pid)},
         ]
 
         # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
