@@ -50,7 +50,9 @@ from meerwatch_tools import get_res_fromtim, plot_toas_fromarr
 from util import ephemeris
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage, get_results, update_processing, update_folding, get_procid_by_location, get_toa_id, check_toa_nominal
+from db_utils import (create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage,
+                      get_results, update_processing, update_folding, get_procid_by_location, get_toa_id, check_toa_nominal, 
+                      get_proc_embargo)
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -2911,6 +2913,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     # set up paths, filenames and required parameters
     local_pid = cparams["pid"].lower()
     timfile = os.path.join(image_path, "{0}.{1}_global.tim".format(local_pid, psrname))
+    public_timfile = os.path.join(image_path, "{0}.{1}_global_public.tim".format(local_pid, psrname))
     image_file = os.path.join(image_path, image_name)
     files_to_store = []
 
@@ -2932,7 +2935,8 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
 
     # begin the scroll
     toa_list = ""
-    logger.info("Compiling global TOA list for pulsar {0} and project {1}...".format(psrname, cparams["pid"]))
+    unembargoed_toa_list = ""
+    logger.info("Compiling global TOA lists for pulsar {0} and project {1}...".format(psrname, cparams["pid"]))
     for x in range (0, len(toa_archives)):
 
         # new - check that the archive still exists, and hasn't been deleted
@@ -2953,6 +2957,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
 
                 # flag setup
                 allow_toa = False
+                embargoed = False
 
                 #if (telescope_comp == telescope) and (obs_bw_comp == obs_bw) and (obs_freq_comp == obs_freq):
                 if (telescope_comp == telescope):
@@ -2962,7 +2967,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                     # new PSRDB step - check that the TOAs haven't been flagged as bad yet
                     if (cparams["db_flag"]):
 
-                        logger.info("PSRDB functionality activated - checkeing TOA table for flagged TOAs")
+                        logger.info("PSRDB functionality activated - checking TOA table for flagged & embargoed TOAs")
                         db_client = GraphQLClient(cparams["db_url"], False)
 
                         # step 1 - get processing ID matching the location of the data being checked
@@ -2993,12 +2998,34 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                                 logger.info("Could not find unique TOA ID matching processing ID {0}".format(toa_proc_id))
                                 logger.info("Allowing TOAs by default...")
 
+                            # step 4 - check for embargo
+                            logger.info("Checking embargo dates for processing {0}".format(toa_proc_id))
+                            embargo_date = get_proc_embargo(toa_proc_id, db_client, cparams["db_url"], cparams["db_token"])
+                            todays_date = datetime.datetime.utcnow()
+
+                            if ((todays_date - embargo_date).total_seconds() > 0):
+                                logger.info("TOA is not embargoed.")
+                                embargoed = False
+                            else:
+                                logger.info("TOA is embargoed.")
+                                embargoed = True
+
                         else:
                             logger.info("Could not find unique processing ID matching location {0}".format(location))
                             logger.info("Allowing TOAs by default...")
+
+
                 if (allow_toa):
                     logger.info("{0} added to global TOA list".format(toa_archives[x]))
                     toa_list = "{0} {1}".format(toa_list, toa_archives[x])
+
+                    # check for embargo
+                    if not (embargoed):
+                        logger.info("{0} added to unembargoed TOA list".format(toa_archives[x]))
+                        unembargoed_toa_list = "{0} {1}".format(unembargoed_toa_list, toa_archives[x])
+                    else:
+                        logger.info("{0} excluded from unembargoed TOA list".format(toa_archives[x]))
+                    
                 else:
                     # no match
                     logger.info("{0} excluded from global TOA list".format(toa_archives[x]))
@@ -3013,53 +3040,62 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
 
     # toa list generation complete - build TOAs
     logger.info("TOA list generation complete.")
+
+    # prepare TOA and residual lists for generation
+    command_list = [
+        {'tim': timfile, 'toas': toa_list, 'image': image_file, 'embargo': False, 'type': 'global'},
+        {'tim': public_timfile, 'toas': unembargoed_toa_list, 'image': None, 'embargo': True, 'type': 'global-pub'}
+    ]
     
     if not (template == None) and (os.path.exists(template)):
 
-        # ensure this pat comment closely matches the one in generate_toas()
-        comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_list)
-        args = shlex.split(comm)
-        f = open(timfile, "w")
-        subprocess.call(args, stdout=f)
-        f.close()
-        logger.info("Global TOA data generated and stored in {0}".format(timfile))
-
-        if not (parfile == None) and (os.path.exists(parfile)):
-
-            # use meerwatch functions to produce residual images for this observation
-            logger.info("Calling modified MeerWatch residual generation...")
-            residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
-            if (len(residuals) > 0):
-                logger.info("Producing global TOA image from modified MeerWatch residuals...")
-                plot_toas_fromarr(residuals, pid=cparams["pid"], mjd=obs_mjd, out_file=image_file, sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
-
-                # check if file creation was successful and return
-                result = os.path.exists(image_file)
-
-                # new - now preferencing the compressed residual file for upload
-                residual_file = os.path.join(os.path.dirname(timfile), os.path.basename(timfile).replace('.tim', '_res_comp.txt'))
-                if not os.path.exists(residual_file):
-                    residual_file = os.path.join(os.path.dirname(timfile), os.path.basename(timfile).replace('.tim', '_res.txt'))
-                residual_type = "{0}.global-res".format(local_pid)
-                files_to_store.append({'filename': residual_file, 'type': residual_type})
-
-            else:
-                logger.error("Insufficient TOAs to generate global-obs image - skipping...")
-                result = False
-        else:
-            logger.error("No parfile provided! - Skipping global-obs TOA image generation...")
-            result = False
-
-        # package the timfile for storage
-        if (os.path.exists(timfile)):
-            timzip = "{}.gz".format(timfile)
-            comm = "gzip -9 {0}".format(timfile)
+        for x in range (0, len(command_list)):
+            logger.info("Embargo setting = {0}".format(command_list[x]['embargo']))
+            # ensure this pat comment closely matches the one in generate_toas()
+            comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, command_list[x]['toas'])
             args = shlex.split(comm)
-            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            proc.wait()
-            if (os.path.exists(timzip)):
-                ziptype = "{0}.global-tim".format(local_pid)
-                files_to_store.append({'filename': timzip, 'type': ziptype})
+            f = open(command_list[x]['tim'], "w")
+            subprocess.call(args, stdout=f)
+            f.close()
+            logger.info("Global TOA data generated and stored in {0}".format(command_list[x]['tim']))
+
+            if not (parfile == None) and (os.path.exists(parfile)):
+
+                # use meerwatch functions to produce residual images for this observation
+                logger.info("Calling modified MeerWatch residual generation...")
+                residuals = get_res_fromtim(command_list[x]['tim'], parfile, sel_file=selfile, out_dir=image_path, verb=True)
+                if (len(residuals) > 0):
+                    if not (command_list[x]['image'] == None):
+                        logger.info("Producing global TOA image from modified MeerWatch residuals...")
+                        plot_toas_fromarr(residuals, pid=cparams["pid"], mjd=obs_mjd, out_file=command_list['image'], sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
+
+                        # check if file creation was successful and return
+                        result = os.path.exists(command_list[x]['image'])
+
+                    # new - now preferencing the compressed residual file for upload
+                    residual_file = os.path.join(os.path.dirname(command_list[x]['tim']), os.path.basename(command_list[x]['tim']).replace('.tim', '_res_comp.txt'))
+                    if not os.path.exists(residual_file):
+                        residual_file = os.path.join(os.path.dirname(command_list[x]['tim']), os.path.basename(command_list[x]['tim']).replace('.tim', '_res.txt'))
+                    residual_type = "{0}.{1}-res".format(local_pid, command_list[x]['type'])
+                    files_to_store.append({'filename': residual_file, 'type': residual_type})
+
+                else:
+                    logger.error("Insufficient TOAs to generate global-obs image - skipping...")
+                    result = False
+            else:
+                logger.error("No parfile provided! - Skipping global-obs TOA image generation...")
+                result = False
+
+            # package the timfile for storage
+            if (os.path.exists(command_list[x]['tim'])):
+                timzip = "{}.gz".format(command_list[x]['tim'])
+                comm = "gzip -9 {0}".format(command_list[x]['tim'])
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                proc.wait()
+                if (os.path.exists(timzip)):
+                    ziptype = "{0}.{1}-tim".format(local_pid,command_list[x]['type'])
+                    files_to_store.append({'filename': timzip, 'type': ziptype})
 
     else:
         logger.error("No template provided! - Skipping global-obs TOA image generation...")
