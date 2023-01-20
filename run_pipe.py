@@ -61,6 +61,7 @@ parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm",action=
 parser.add_argument("-pid",dest="pid",help="Process pulsars as PID (Ignores original PID)")
 parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value (GB). Automatic allocation is ignored")
 parser.add_argument("-forcetime", dest="forcetime", type=str, help="Force runtime to this value (HH:MM:SS). Automatic allocation is ignored")
+parser.add_argument("-images", dest="images", help="Rebuild the pipeline images only - do not reprocess the data itself.", action="store_true")
 parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
 parser.add_argument("-softpath", help="Change software path", default="/fred/oz005/meerpipe/")
 
@@ -157,6 +158,12 @@ if (args.db_flag):
     config_params["db_flag"] = True
 else:
     config_params["db_flag"] = False
+
+# configure image options
+if (args.images):
+    config_params["images"] = True
+else:
+    config_params["images"] = False
 
 if toggle:
 
