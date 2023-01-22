@@ -2856,7 +2856,7 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
         # package the timfile for storage
         if (os.path.exists(timfile)):
             timzip = "{}.gz".format(timfile)
-            comm = "gzip -9 {0}".format(timfile)
+            comm = "gzip -f -9 {0}".format(timfile)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
             proc.wait()
@@ -3053,7 +3053,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
         # package the timfile for storage
         if (os.path.exists(timfile)):
             timzip = "{}.gz".format(timfile)
-            comm = "gzip -9 {0}".format(timfile)
+            comm = "gzip -f -9 {0}".format(timfile)
             args = shlex.split(comm)
             proc = subprocess.Popen(args,stdout=subprocess.PIPE)
             proc.wait()

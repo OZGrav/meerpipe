@@ -47,7 +47,7 @@ parser.add_argument("-list_in", dest="list_in", help="List of observations to pr
 parser.add_argument("-runas", dest="runas", help="Specify an override pipeline to use in processing the observations. \nOptions:\n'PIPE' - launch each observation through multiple pipelines as defined by the 'launches' PSRDB table (default).\n'OBS' - use the observation PID to define pipeline selection.\n<int> - specify a specific PSRDB pipeline ID.\n<pid> - specify a MeerTIME project code (e.g. 'PTA', 'RelBin'), which will launch a default pipeline.", default="PIPE")
 parser.add_argument("-slurm", dest="slurm", help="Processes all jobs using the OzStar Slurm queue.",action="store_true")
 parser.add_argument("-unprocessed", dest="unprocessed", help="Launch only those observations which have not yet been processed by the specified pipelines.", action="store_true")
-parser.add_argument("-images", dest="images", help="Rebuild the pipeline images only - do not reprocess the data itself.", action="store_true")
+parser.add_argument("-images", dest="images", help="Rebuild the pipeline images only - do not reprocess the data itself. This will override the config 'overwrite' flag.", action="store_true")
 parser.add_argument("-job_limit", dest="joblimit", type=int, help="Max number of jobs to accept to the queue at any given time - script will wait and monitor for queue to reduce below this number before sending more.", default=1000)
 parser.add_argument("-forceram", dest="forceram", type=float, help="Specify RAM to use for job execution (GB). Recommended only for single-job launches.")
 parser.add_argument("-forcetime", dest="forcetime", type=str, help="Specify time to use for job execution (HH:MM:SS). Recommended only for single-job launches.")
