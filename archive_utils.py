@@ -3067,7 +3067,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                 if (len(residuals) > 0):
                     if not (command_list[x]['image'] == None):
                         logger.info("Producing global TOA image from modified MeerWatch residuals...")
-                        plot_toas_fromarr(residuals, pid=cparams["pid"], mjd=obs_mjd, out_file=command_list[x]['image'], sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq)
+                        plot_toas_fromarr(residuals, pid=cparams["pid"], mjd=obs_mjd, out_file=command_list[x]['image'], sequential=False, verb=True, bw=obs_bw, cfrq=obs_freq, outlier_factor=4.0)
 
                         # check if file creation was successful and return
                         result = os.path.exists(command_list[x]['image'])
