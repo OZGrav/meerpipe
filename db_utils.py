@@ -582,6 +582,33 @@ def get_project_embargo(pid, client, url, token):
     else:
         return
 
+# ROLE   : Return an embargo date/time given a Processing ID
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: Datetime object (success) | None (failure)
+def get_proc_embargo(proc_id, client, url, token):
+
+    # PSRDB setup
+    processings = Processings(client, url, token)
+
+    # Query for processing ID
+    response = processings.list(
+        proc_id,
+        None,
+        None,
+        None,
+        None
+    )
+    check_response(response)
+    proc_content = json.loads(response.content)
+    proc_data = proc_content['data']['processing']
+
+    # Check for valid processing ID
+    if not (proc_data == None):
+        embargoEnd = proc_data['embargoEnd']
+        return pd.to_datetime(embargoEnd)
+    else:
+        return
+
 # ROLE   : Return the job state of a given Processing ID
 # INPUTS : Integer, GraphQL client, String, String
 # RETURNS: JSON object (success) | None (failure)
