@@ -2754,8 +2754,11 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
             toa_tobs = 1800
             toa_config_success = True
         elif (cparams["pid"] == "PTA"):
-            toa_nchan = 4
-            toa_tobs = 600
+            #toa_nchan = 4
+            #toa_tobs = 600
+            # default reset as per specifications of Matt Miles - 23/01/2023
+            toa_nchan = 16
+            toa_nchan = 1000
             toa_config_success = True
         else:
             # redundant but just in case
