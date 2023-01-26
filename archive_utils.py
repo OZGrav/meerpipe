@@ -1739,14 +1739,6 @@ def generate_toas(output_dir,cparams,psrname,logger):
         select_file.write("LOGIC -snr < 10 REJECT \n")
         select_file.close()
 
-        # PORTRAIT MODE - need the channel count of the passed template
-        comm = "vap -c nchan {0}".format(template)
-        args = shlex.split(comm)
-        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-        proc.wait()
-        info = proc.stdout.read().decode("utf-8").split("\n")
-        template_nchan = int(info[1].split()[1])
-
         for proc_archive in processed_archives:
             tim_name = os.path.split(proc_archive)[1].split('.ar')[0]+".tim"
             #Running pat
@@ -1768,15 +1760,11 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 if not os.path.exists(os.path.join(timing_path,tim_name)):
                     logger.info("Creating ToAs with pat")
                     logger.info(proc_archive)
-                    # PORTRAIT MODE TOGGLE
-                    if (template_nchan >= nchan):
-                        # PORTRAIT MODE ON
-                        portrait_str = "-P"
-                    else:
-                        # PORTRAIT MODE OFF
-                        portrait_str = ""
 
-                    arg = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template,proc_archive)
+                    # check PORTRAIT toggle
+                    portrait_str = get_portrait_toggle(template, nchan, logger)
+
+                    arg = 'pat -jp {2} -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template,proc_archive, portrait_str)
                     proc = shlex.split(arg)
                     f = open("{0}/{1}".format(timing_path,tim_name), "w")
                     subprocess.call(proc, stdout=f)
@@ -1871,6 +1859,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 quality = True # assumed for the moment
 
                 # ensure this pat comment closely matches the one above
+                # summary TOA only - unaffected by PORTRAIT modes
                 comm = 'pat -jFTp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, proc_archive)
                 # note that 'proc_archive' could be any type of decimated file
                 # (here taken asthe last entry in the processed_archives list)
@@ -1899,7 +1888,30 @@ def generate_toas(output_dir,cparams,psrname,logger):
     else:
         logger.error("Template does not exist or does not have 1024 phase bins. Skipping ToA generation.")
 
+# determines whether to toggle portrait mode and returns the appropriate PAT string
+def get_portrait_toggle(template, ref_nchan, logger):
 
+    # set default
+    portrait_str = ""
+
+    # check for a valid template
+    if not (template == None) and (os.path.exists(template)):
+
+        # get template channel count
+        comm = "vap -c nchan {0}".format(template)
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").split("\n")
+        template_nchan = int(info[1].split()[1])
+
+        # check for toggle
+        if (template_nchan >= ref_nchan):
+            # PORTRAIT MODE ON
+            portrait_str = "-P"
+            logger.info("Portrait mode activated for current timing data product...")
+
+    return portrait_str
 
 def cleanup(output_dir, cparams, psrname, logger):
     #Routine to rename, remove and clean the final output files produced by the pipeline
@@ -2838,8 +2850,11 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
 
     if not (template == None) and (os.path.exists(template)):
 
+        # check PORTRAIT toggle
+        portrait_str = get_portrait_toggle(template, toa_nchan, logger)
+
         # ensure this pat comment closely matches the one in generate_toas()
-        comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive)
+        comm = 'pat -jp {2} -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive, portrait_str)
         args = shlex.split(comm)
         f = open(timfile, "w")
         subprocess.call(args, stdout=f)
@@ -2942,7 +2957,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     toa_str = "images/image_toas.ar"
     toa_archives = glob.glob(os.path.join(cparams["output_path"],"{0}/{1}/*/*/*/{2}".format(cparams["pid"], psrname, toa_str)))
     # get parameters with reference to the local toa_archive
-    comm = "vap -c telescop,bw,freq,mjd {0}".format(local_toa_archive)
+    comm = "vap -c telescop,bw,freq,mjd,nchan {0}".format(local_toa_archive)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
@@ -2951,6 +2966,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     obs_bw = float(info[1].split()[2])
     obs_freq = float(info[1].split()[3])
     obs_mjd = float(info[1].split()[4])
+    obs_nchan = float(info[1].split()[5])
 
     # begin the scroll
     toa_list = ""
@@ -3070,8 +3086,12 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
 
         for x in range (0, len(command_list)):
             logger.info("Embargo setting = {0}".format(command_list[x]['embargo']))
+
+            # check PORTRAIT toggle
+            portrait_str = get_portrait_toggle(template, obs_nchan, logger)
+
             # ensure this pat comment closely matches the one in generate_toas()
-            comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, command_list[x]['toas'])
+            comm = 'pat -jp {2} -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, command_list[x]['toas'], portrait_str)
             args = shlex.split(comm)
             f = open(command_list[x]['tim'], "w")
             subprocess.call(args, stdout=f)
