@@ -1739,6 +1739,14 @@ def generate_toas(output_dir,cparams,psrname,logger):
         select_file.write("LOGIC -snr < 10 REJECT \n")
         select_file.close()
 
+        # PORTRAIT MODE - need the channel count of the passed template
+        comm = "vap -c nchan {0}".format(template)
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").split("\n")
+        template_nchan = int(info[1].split()[1])
+
         for proc_archive in processed_archives:
             tim_name = os.path.split(proc_archive)[1].split('.ar')[0]+".tim"
             #Running pat
@@ -1760,6 +1768,14 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 if not os.path.exists(os.path.join(timing_path,tim_name)):
                     logger.info("Creating ToAs with pat")
                     logger.info(proc_archive)
+                    # PORTRAIT MODE TOGGLE
+                    if (template_nchan >= nchan):
+                        # PORTRAIT MODE ON
+                        portrait_str = "-P"
+                    else:
+                        # PORTRAIT MODE OFF
+                        portrait_str = ""
+
                     arg = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template,proc_archive)
                     proc = shlex.split(arg)
                     f = open("{0}/{1}".format(timing_path,tim_name), "w")
@@ -2758,7 +2774,7 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
             #toa_tobs = 600
             # default reset as per specifications of Matt Miles - 23/01/2023
             toa_nchan = 16
-            toa_nchan = 1000
+            toa_tobs = 1000
             toa_config_success = True
         else:
             # redundant but just in case
