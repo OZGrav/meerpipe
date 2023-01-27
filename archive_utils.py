@@ -2325,32 +2325,40 @@ def generate_images(output_dir, cparams, psrname, logger):
     cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
     fluxcleanedfiles = glob.glob(os.path.join(cleaned_path,"J*fluxcal.ar"))
 
+    # new 27/01/2023 - TOA image file must always be the chopped file, invert logic for selection
     clean_file = None
+    toa_file = None
     chop_string = ".ch."
 
     # try for a fluxcal file first
     if (len(fluxcleanedfiles) == 1):
         clean_file = fluxcleanedfiles[0]
+        toa_file = fluxcleanedfiles[0]
     elif (len(fluxcleanedfiles) == 2):
         if (chop_string in fluxcleanedfiles[0]) and (chop_string not in fluxcleanedfiles[1]):
             clean_file = fluxcleanedfiles[1]
+            toa_file = fluxcleanedfiles[0]
         elif (chop_string in fluxcleanedfiles[1]) and (chop_string not in fluxcleanedfiles[0]):
             clean_file = fluxcleanedfiles[0]
+            toa_file = fluxcleanedfiles[1]
 
     # if none is available, go for a regular file (e.g. if we have UHF obs)
     if (clean_file == None):
         if (len(cleanedfiles) == 1):
             clean_file = cleanedfiles[0]
+            toa_file = cleanedfiles[0]
         elif (len(cleanedfiles) == 2):
             if (chop_string in cleanedfiles[0]) and (chop_string not in cleanedfiles[1]):
                 clean_file = cleanedfiles[1]
+                toa_file = cleanedfiles[0]
             elif (chop_string in cleanedfiles[1]) and (chop_string not in cleanedfiles[0]):
                 clean_file = cleanedfiles[0]
+                toa_file = cleanedfiles[1]
 
     # create empty array for storing image data
     image_data = []
 
-    if (clean_file != None):
+    if (clean_file != None and toa_file != None):
 
         # we've got the file we want to analyse, now let's make some pretty pictures
 
@@ -2592,7 +2600,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 share_path = images_path
             share_file = os.path.join(share_path,global_image_name)
 
-            if (build_image_toas(output_dir, clean_file, toa_archive_name, images_path, cparams, psrname, logger)):
+            if (build_image_toas(output_dir, toa_file, toa_archive_name, images_path, cparams, psrname, logger)):
                 logger.info("Successfully created {0} - now producing residual images".format(toa_archive_file))
 
                 # generate single TOA image

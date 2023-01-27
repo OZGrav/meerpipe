@@ -978,7 +978,7 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
     while not (success):
 
         if (counter == SIMUL_WRITE_CHECKS):
-            raise Exception("Stalement detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
+            raise Exception("Stalemate detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
 
         counter = counter + 1
 
@@ -1199,7 +1199,7 @@ def create_template(psrname, template, cparams, client, logger):
     while not (success):
 
         if (counter == SIMUL_WRITE_CHECKS):
-            raise Exception("Stalement detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
+            raise Exception("Stalemate detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
 
         counter = counter + 1
 
