@@ -1512,7 +1512,7 @@ def chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,hparams,logger
             freqs = oar.get_frequencies()
             if (freqs[0] < minfreq):
                 for i,f in enumerate(freqs):
-                    if (f < minfreq):
+                    if (f <= minfreq):
                         pass
                     else:
                         oar.remove_chan(0, i-1)
