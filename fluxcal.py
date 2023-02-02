@@ -234,7 +234,7 @@ def get_tsky_updated(rajd, decjd):
     print ("### Tsky (old) in Jy: {0} ### (deprecated)".format(tsky_jy))
 
     #New conversion - Jan 2022
-    new_scaling_factor = 1.7202+0.0002
+    new_scaling_factor = 1.7202 # +0.0002 - commented out as a likely error - 01/02/2023
     tsky_jy = (new_scaling_factor*(tsky-3372))*0.019
     print ("Tsky (new) in Jy: {0}".format(tsky_jy))
     
