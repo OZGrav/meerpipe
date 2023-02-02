@@ -1512,7 +1512,7 @@ def chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,hparams,logger
             freqs = oar.get_frequencies()
             if (freqs[0] < minfreq):
                 for i,f in enumerate(freqs):
-                    if (f < minfreq):
+                    if (f <= minfreq):
                         pass
                     else:
                         oar.remove_chan(0, i-1)
@@ -1760,7 +1760,11 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 if not os.path.exists(os.path.join(timing_path,tim_name)):
                     logger.info("Creating ToAs with pat")
                     logger.info(proc_archive)
-                    arg = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template,proc_archive)
+
+                    # check PORTRAIT toggle
+                    portrait_str = get_portrait_toggle(template, nchan, logger)
+
+                    arg = 'pat -jp {2} -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template,proc_archive, portrait_str)
                     proc = shlex.split(arg)
                     f = open("{0}/{1}".format(timing_path,tim_name), "w")
                     subprocess.call(proc, stdout=f)
@@ -1855,6 +1859,7 @@ def generate_toas(output_dir,cparams,psrname,logger):
                 quality = True # assumed for the moment
 
                 # ensure this pat comment closely matches the one above
+                # summary TOA only - unaffected by PORTRAIT modes
                 comm = 'pat -jFTp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, proc_archive)
                 # note that 'proc_archive' could be any type of decimated file
                 # (here taken asthe last entry in the processed_archives list)
@@ -1883,7 +1888,30 @@ def generate_toas(output_dir,cparams,psrname,logger):
     else:
         logger.error("Template does not exist or does not have 1024 phase bins. Skipping ToA generation.")
 
+# determines whether to toggle portrait mode and returns the appropriate PAT string
+def get_portrait_toggle(template, ref_nchan, logger):
 
+    # set default
+    portrait_str = ""
+
+    # check for a valid template
+    if not (template == None) and (os.path.exists(template)):
+
+        # get template channel count
+        comm = "vap -c nchan {0}".format(template)
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").split("\n")
+        template_nchan = int(info[1].split()[1])
+
+        # check for toggle
+        if (template_nchan >= ref_nchan):
+            # PORTRAIT MODE ON
+            portrait_str = "-P"
+            logger.info("Portrait mode activated for current timing data product...")
+
+    return portrait_str
 
 def cleanup(output_dir, cparams, psrname, logger):
     #Routine to rename, remove and clean the final output files produced by the pipeline
@@ -2297,32 +2325,40 @@ def generate_images(output_dir, cparams, psrname, logger):
     cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
     fluxcleanedfiles = glob.glob(os.path.join(cleaned_path,"J*fluxcal.ar"))
 
+    # new 27/01/2023 - TOA image file must always be the chopped file, invert logic for selection
     clean_file = None
+    toa_file = None
     chop_string = ".ch."
 
     # try for a fluxcal file first
     if (len(fluxcleanedfiles) == 1):
         clean_file = fluxcleanedfiles[0]
+        toa_file = fluxcleanedfiles[0]
     elif (len(fluxcleanedfiles) == 2):
         if (chop_string in fluxcleanedfiles[0]) and (chop_string not in fluxcleanedfiles[1]):
             clean_file = fluxcleanedfiles[1]
+            toa_file = fluxcleanedfiles[0]
         elif (chop_string in fluxcleanedfiles[1]) and (chop_string not in fluxcleanedfiles[0]):
             clean_file = fluxcleanedfiles[0]
+            toa_file = fluxcleanedfiles[1]
 
     # if none is available, go for a regular file (e.g. if we have UHF obs)
     if (clean_file == None):
         if (len(cleanedfiles) == 1):
             clean_file = cleanedfiles[0]
+            toa_file = cleanedfiles[0]
         elif (len(cleanedfiles) == 2):
             if (chop_string in cleanedfiles[0]) and (chop_string not in cleanedfiles[1]):
                 clean_file = cleanedfiles[1]
+                toa_file = cleanedfiles[0]
             elif (chop_string in cleanedfiles[1]) and (chop_string not in cleanedfiles[0]):
                 clean_file = cleanedfiles[0]
+                toa_file = cleanedfiles[1]
 
     # create empty array for storing image data
     image_data = []
 
-    if (clean_file != None):
+    if (clean_file != None and toa_file != None):
 
         # we've got the file we want to analyse, now let's make some pretty pictures
 
@@ -2564,7 +2600,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 share_path = images_path
             share_file = os.path.join(share_path,global_image_name)
 
-            if (build_image_toas(output_dir, clean_file, toa_archive_name, images_path, cparams, psrname, logger)):
+            if (build_image_toas(output_dir, toa_file, toa_archive_name, images_path, cparams, psrname, logger)):
                 logger.info("Successfully created {0} - now producing residual images".format(toa_archive_file))
 
                 # generate single TOA image
@@ -2822,8 +2858,11 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
 
     if not (template == None) and (os.path.exists(template)):
 
+        # check PORTRAIT toggle
+        portrait_str = get_portrait_toggle(template, toa_nchan, logger)
+
         # ensure this pat comment closely matches the one in generate_toas()
-        comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive)
+        comm = 'pat -jp {2} -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive, portrait_str)
         args = shlex.split(comm)
         f = open(timfile, "w")
         subprocess.call(args, stdout=f)
@@ -2926,7 +2965,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     toa_str = "images/image_toas.ar"
     toa_archives = glob.glob(os.path.join(cparams["output_path"],"{0}/{1}/*/*/*/{2}".format(cparams["pid"], psrname, toa_str)))
     # get parameters with reference to the local toa_archive
-    comm = "vap -c telescop,bw,freq,mjd {0}".format(local_toa_archive)
+    comm = "vap -c telescop,bw,freq,mjd,nchan {0}".format(local_toa_archive)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
@@ -2935,6 +2974,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     obs_bw = float(info[1].split()[2])
     obs_freq = float(info[1].split()[3])
     obs_mjd = float(info[1].split()[4])
+    obs_nchan = float(info[1].split()[5])
 
     # begin the scroll
     toa_list = ""
@@ -3054,8 +3094,12 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
 
         for x in range (0, len(command_list)):
             logger.info("Embargo setting = {0}".format(command_list[x]['embargo']))
+
+            # check PORTRAIT toggle
+            portrait_str = get_portrait_toggle(template, obs_nchan, logger)
+
             # ensure this pat comment closely matches the one in generate_toas()
-            comm = 'pat -jp -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, command_list[x]['toas'])
+            comm = 'pat -jp {2} -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, command_list[x]['toas'], portrait_str)
             args = shlex.split(comm)
             f = open(command_list[x]['tim'], "w")
             subprocess.call(args, stdout=f)
