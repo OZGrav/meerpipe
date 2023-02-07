@@ -203,6 +203,23 @@ def get_obsheadinfo(obsheader_path):
     file.close()
     return params
 
+def get_rcvr(params):
+    """
+    Determine which receiver is in use
+    External conditions may be required for this function, depending on use
+    """
+    bw = params["BW"]
+    freq = float(params["FREQ"])
+
+    if (bw == "544.0") and (freq < 816) and (freq > 815):
+        rcvr = "UHF"
+    elif (freq < 1284) and (freq > 1283):
+        rcvr = "LBAND"
+    else:
+        rcvr = None
+
+    return rcvr
+
 
 #--------------------------------------------------- Processing utilities -------------------------------
 
@@ -401,8 +418,10 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
         # abstracting repeated code
         calibrated_path = os.path.join(str(output_dir),"calibrated")
 
-        # swapping predence order here - frequency first
-        if header_params["BW"] == "544.0":
+        # swapping predence order here - receiver first
+        rcvr = get_rcvr(header_params)
+
+        if rcvr == "UHF":
 
             # UHF branch
 
@@ -452,7 +471,7 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
 
                 calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
 
-        else:
+        elif rcvr == "LBAND":
 
             # L-Band branch
 
@@ -498,6 +517,11 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
                     logger.info("Calibrated data already exists")
 
                 calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
+
+        else:
+
+            # unrecognised receiver choice
+            logger.warning("Unknown receiver ({0}) - unable to calibrate data.".format(rcvr))
 
     #Setting polc=1 in calibrated archives
     for carchive in calibrated_archives:
@@ -1581,7 +1605,10 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
         #parfile = parfile[0]
         #logger.info("Parfile found: {}".format(parfile))
 
-    if not header_params["BW"] == "544.0":
+    # determine receiver based on header information
+    rcvr = get_rcvr(header_params)
+
+    if (rcvr == "UHF") or (rcvr == "LBAND") :
         logger.info("Flux calibrating the decimated data products of {0}".format(psrname))
         pid = cparams["pid"]
         decimated_path = os.path.join(str(output_dir), "decimated")
@@ -1695,7 +1722,7 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
             logger.warning("Flux calibration failed")
 
     else:
-        logger.info("Flux calibration not implemented for UHF data")
+        logger.info("Unknown receiver ({0}) - flux calibration not yet implemented.".format(rcvr))
         pass
 
 def generate_toas(output_dir,cparams,psrname,logger):
@@ -1982,8 +2009,14 @@ def cleanup(output_dir, cparams, psrname, logger):
 
     obsheader_path = glob.glob(os.path.join(str(output_dir),"*obs.header"))[0]
     header_params = get_obsheadinfo(obsheader_path)
+    rcvr = get_rcvr(header_params)
 
-    if not header_params["BW"] == "544.0":
+    #if not header_params["BW"] == "544.0":
+    #    decimated_files = sorted(glob.glob(os.path.join(decimated_dir,"J*fluxcal")))
+    #else:
+    #    decimated_files = sorted(glob.glob(os.path.join(decimated_dir,"J*ar")))
+
+    if (rcvr == "UHF") or (rcvr == "LBAND"):
         decimated_files = sorted(glob.glob(os.path.join(decimated_dir,"J*fluxcal")))
     else:
         decimated_files = sorted(glob.glob(os.path.join(decimated_dir,"J*ar")))
@@ -2015,7 +2048,8 @@ def cleanup(output_dir, cparams, psrname, logger):
                 ext_pol = "I"
 
 
-            if not header_params["BW"] == "544.0":
+            #if not header_params["BW"] == "544.0":
+            if (rcvr == "UHF") or (rcvr == "LBAND"):
                 if ext_nsubint == "T":
                     new_extension = "zap.{0}{1}{2}.fluxcal.ar".format(ext_nch,ext_nsubint,ext_pol)
                 else:

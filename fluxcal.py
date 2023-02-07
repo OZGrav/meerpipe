@@ -356,6 +356,8 @@ def get_median_offrms(offrms_freq_dictionary, rcvr):
         ref_freq = 800
         hi_freq = 805
         lo_freq = 795
+        #hi_freq = 810
+        #lo_freq = 790
 
     print ("Computing median of off-pulse rms values of channels centered at {0} MHz.. ({1})".format(ref_freq, rcvr))
     selected_offrms = []
