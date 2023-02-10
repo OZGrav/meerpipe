@@ -600,11 +600,11 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                 else:
                     orig_template = None
 
-                # NEW - produce tempoerary template that has been checked for bin count
+                # NEW - produce tempoerary template that has been checked for bin count and has been de-dedispersed
                 # this template will be generated separately from the original template, making it safe to delete
                 if not orig_template is None:
 
-                    temporary_template = template_bin_adjuster(orig_template, cloned_archive, output_dir, logger)
+                    temporary_template = template_adjuster(orig_template, cloned_archive, output_dir, logger)
 
                 if not (int(cloned_archive.get_nsubint()) == 1 and int(cloned_archive.get_nchan()) == 1):
 
@@ -738,9 +738,12 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
     return cleaned_archives
 
-# utility function - adjustes a template to match the phase bins of the provided file, if possible
+# Utility function - adjustes a template to match the requirements of RFI mitigation
+# This includes:
+# - matching the phase bins of the provided file, if possible
+# - de-dedispersing the template, if required
 # returns a copy of the template which can be safely deleted as needed
-def template_bin_adjuster(template, archive, output_dir, logger):
+def template_adjuster(template, archive, output_dir, logger):
 
     # setup
     template_ar = ps.Archive_load(str(template))
@@ -765,6 +768,12 @@ def template_bin_adjuster(template, archive, output_dir, logger):
             # create bin-scrunched clone and write to temporary file
             logger.info("Creating scrunched template by factor {}".format(b_factor))
             template_ar.bscrunch_to_nbin(archive_bins)
+
+    # NEW 10/02/2023 - check for dedispersion and channel count
+    if (template_ar.get_dedispersed() and template_ar.get_nchan() == 1):
+
+        # convert the archive to undo dedispersion (vap -c dmc == 0)
+        template_ar.set_dedispersed(False)
 
     # the scrunch has now either been done or it has not
     # write out the temporary standard
@@ -804,7 +813,7 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
             archive_name = archive_name.split('.')[0]
 
             # account for phase bin differences
-            temporary_template = template_bin_adjuster(orig_template, clean_ar, output_dir, logger)
+            temporary_template = template_adjuster(orig_template, clean_ar, output_dir, logger)
 
             logger.info("Archive name:{0} and extension: {1}".format(archive_name, extension))
             
