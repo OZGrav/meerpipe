@@ -750,6 +750,14 @@ def template_adjuster(template, archive, output_dir, logger):
     template_bins = int(template_ar.get_nbin())
     archive_bins = int(archive.get_nbin())
 
+    # NEW 10/02/2023 - check for dedispersion and channel count
+    if (template_ar.get_dedispersed() and template_ar.get_nchan() == 1):
+
+        # convert the archive to undo dedispersion (vap -c dmc == 0)
+        logger.info("De-dedispersing the temporary template...")
+        template_ar.set_dedispersed(False)
+        logger.info("Template successfully de-dedispersed.")
+
     # if bin counts don't match
     if not (template_bins == archive_bins):
 
@@ -768,12 +776,6 @@ def template_adjuster(template, archive, output_dir, logger):
             # create bin-scrunched clone and write to temporary file
             logger.info("Creating scrunched template by factor {}".format(b_factor))
             template_ar.bscrunch_to_nbin(archive_bins)
-
-    # NEW 10/02/2023 - check for dedispersion and channel count
-    if (template_ar.get_dedispersed() and template_ar.get_nchan() == 1):
-
-        # convert the archive to undo dedispersion (vap -c dmc == 0)
-        template_ar.set_dedispersed(False)
 
     # the scrunch has now either been done or it has not
     # write out the temporary standard
