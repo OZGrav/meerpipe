@@ -2087,6 +2087,7 @@ def cleanup(output_dir, cparams, psrname, logger):
 
 
 def generate_summary(output_dir, cparams, psrname, logger):
+
     #Routine to create a summary file for each UTC - final stage of processing pipeline
 
     output_dir = str(output_dir)
@@ -2149,6 +2150,9 @@ def generate_summary(output_dir, cparams, psrname, logger):
         #Checking if cleaned files exists
         cleaned_path = os.path.join(output_dir,"cleaned")
         cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
+
+        # Holding this code to be re-used when S-Band is deployed.
+        """
         if (rcvr == "UHF"):
             if (len(cleanedfiles) == 2):
                 if ((".ch" in cleanedfiles[0] or ".ch" in cleanedfiles[1]) and not (".ch" in cleanedfiles[0] and ".ch" in cleanedfiles[1])):
@@ -2170,7 +2174,16 @@ def generate_summary(output_dir, cparams, psrname, logger):
                 sfile.write("CleanedChoppedFluxFile: CHECK \n")
             elif len(cleanedfiles) < 4 and len(cleanedfiles) > 2:
                 sfile.write("CleanedChoppedFluxFile: FAIL \n")
+        """
 
+        if len(cleanedfiles)  == 2:
+            sfile.write("CleanedFluxFiles: CHECK \n")
+        elif len(cleanedfiles) < 2:
+            sfile.write("CleanedFluxFiles: FAIL \n")
+        elif len(cleanedfiles) == 4:
+            sfile.write("CleanedChoppedFluxFile: CHECK \n")
+        elif (len(cleanedfiles) < 4 and len(cleanedfiles) > 2) or (len(cleanedfiles) > 4):
+            sfile.write("CleanedChoppedFluxFile: FAIL \n")
 
         #Checking if decimated files exist
         decimated_path = os.path.join(output_dir,"decimated")
