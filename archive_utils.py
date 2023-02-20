@@ -1944,7 +1944,7 @@ def get_portrait_toggle(template, ref_nchan, logger):
         template_nchan = int(info[1].split()[1])
 
         # check for toggle
-        if (template_nchan >= ref_nchan):
+        if (template_nchan >= ref_nchan) and not (template_nchan == 1):
             # PORTRAIT MODE ON
             portrait_str = "-P"
             logger.info("Portrait mode activated for current timing data product...")
