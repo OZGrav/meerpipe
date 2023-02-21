@@ -2881,7 +2881,7 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
 
     # rename the file to desired name
     logger.info("Renaming the archive to {0}".format(toa_archive_file))
-    comm = "mv {0} {1}".format(toa_archive_temp, toa_archive_file)
+    comm = "mv -f {0} {1}".format(toa_archive_temp, toa_archive_file)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
@@ -3021,7 +3021,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
     # if they match, build their TOAs into the file
     # assumes that the output path of the current config file contains all neccessary observations
     toa_str = "images/image_toas.ar"
-    toa_archives = glob.glob(os.path.join(cparams["output_path"],"{0}/{1}/*/*/*/{2}".format(cparams["pid"], psrname, toa_str)))
+    toa_archives = sorted(glob.glob(os.path.join(cparams["output_path"],"{0}/{1}/*/*/*/{2}".format(cparams["pid"], psrname, toa_str))))
     # get parameters with reference to the local toa_archive
     comm = "vap -c telescop,bw,freq,mjd,nchan {0}".format(local_toa_archive)
     args = shlex.split(comm)
