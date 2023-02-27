@@ -278,11 +278,18 @@ if toggle:
                 logger.info("Found parent_id {1} from  matching entry in 'foldings' - ID = {0}".format(fold_id, parent_id))
 
             # get or create processing entry
+            # NEW - 27/02/2023 - don't overwrite results if image-only run
+            if (config_params["images"]):
+                res_ovr = False
+            else:
+                res_ovr = True
+
             proc_id = create_processing(
                 obs_id,
                 args.db_pipe,
                 parent_id,
                 location,
+                res_ovr,
                 db_client,
                 db_url,
                 db_token,
@@ -312,7 +319,13 @@ if toggle:
             embargo_end = utc_date2psrdb(utc_normal2date(obs_utc) + embargo_period)
             job_state = job_state_code(0)
             job_output = json.loads('{}')
-            results = json.loads('{}')
+
+            if (config_params["images"]):
+                # if reprocessing only the images, do not overwrite the results field from the previous run
+                logger.info("Images-only run - not resetting JSON results field of processing {}".format(proc_id))
+                results = None
+            else:
+                results = json.loads('{}')
 
             # now update the proc entry with the new information
             update_id = update_processing(
@@ -365,7 +378,12 @@ if toggle:
             with open(os.path.join(output_dir,str(job_name)),'w') as job_file:
                 job_file.write("#!/bin/bash \n")
                 job_file.write("#SBATCH --job-name={0}_{1} \n".format(psrnames[obs_num],obs_num))
-                job_file.write("#SBATCH --output={0}meerpipe_out_{1}_{2} \n".format(str(output_dir),psrnames[obs_num],obs_num))
+
+                outlog_str = "{0}meerpipe_out_{1}_{2}".format(str(output_dir),psrnames[obs_num],obs_num)
+                if (config_params["images"]):
+                    outlog_str = "{0}_images".format(outlog_str)
+
+                job_file.write("#SBATCH --output={0} \n".format(outlog_str))
                 job_file.write("#SBATCH --ntasks=1 \n")
                 job_file.write("#SBATCH --mem={0} \n".format(required_ram))
                 job_file.write("#SBATCH --time={0} \n".format(timestring))

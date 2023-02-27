@@ -855,9 +855,9 @@ def create_launch(pipe_id, parent_id, pulsar_id, client, url, token):
 
 # ROLE   : Creates a Processing entry with the specified parameters.
 #        : If a matching entry exists, that is returned instead.
-# INPUTS : Integer, Integer, Integer, String, GraphQL client, String, String, Logger object
+# INPUTS : Integer, Integer, Integer, String, Boolean, GraphQL client, String, String, Logger object
 # RETURNS: Integer (success) | None (failure)
-def create_processing(obs_id, pipe_id, parent_id, location, client, url, token, logger):
+def create_processing(obs_id, pipe_id, parent_id, location, results_overwrite, client, url, token, logger):
 
     # PSRDB setup
     pipelines = Pipelines(client, url, token)
@@ -897,6 +897,11 @@ def create_processing(obs_id, pipe_id, parent_id, location, client, url, token, 
         logger.info("Found existing entry in 'processings' matching launch parameters, ID = {0}".format(proc_id))
         logger.info("Updating to default starting parameters")
         retval = int(proc_id)
+
+        # check for results overwrite
+        if not (results_overwrite):
+            results = None
+
         update_id = update_processing(
             proc_id,
             obs_id,
