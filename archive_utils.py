@@ -2672,8 +2672,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
                     logger.info("Successfully created global observation residual image {0}".format(global_image_file))
                     image_data.append({'file': global_image_file, 'rank': 11, 'type': '{0}.toa-global.hi'.format(local_pid)})
-                    #logger.info("THIS IMAGE IS NOT LOGGED IN THE DATABASE DUE TO LIMITATIONS OF PSRDB - TO BE FIXED IN A FUTURE UPDATE.")
-
+                  
                     # copy the global TOA image to the shared path
                     if not (global_image_file == share_file):
                         copyfile(global_image_file, share_file)
