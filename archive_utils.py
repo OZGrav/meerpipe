@@ -2413,6 +2413,20 @@ def generate_images(output_dir, cparams, psrname, logger):
                 clean_file = cleanedfiles[0]
                 toa_file = cleanedfiles[1]
 
+    # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
+    # instead create locally and move
+
+    if (cparams['slurm'] == "True"):
+        logger.info("SLURM environment recognised")
+        env_query = 'echo $JOBFS'
+        jobfs_dir = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+        logger.info("JOBFS dir = {}".format(jobfs_dir))
+        loc_path = jobfs_dir
+    else:
+        loc_path = "/tmp"
+
+    logger.info("Loc_path = {}".format(loc_path))
+
     # create empty array for storing image data
     image_data = []
 
@@ -2420,341 +2434,338 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # we've got the file we want to analyse, now let's make some pretty pictures
 
-        # basic pav images
-        #plot_commands = [
-        #    {'comm': 'pav -FTDp', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
-        #    {'comm': 'pav -FTS', 'name': 'profile_fts', 'rank': 2, 'type': 'profile.pol'},
-        #    {'comm': 'pav -GTdp', 'name': 'phase_freq', 'rank': 3, 'type': 'phase.freq'},
-        #    {'comm': 'pav -FYdp', 'name': 'phase_time', 'rank': 4, 'type': 'phase.time'}
-        #]
+        # skip this portion depending on image reprocessing specifications
+        if ((cparams["image_flag"] and cparams["image_type"] == "ALL") or not cparams["image_flag"]):
 
-        # get channel number of cleaned file
-        comm = "vap -c nchan {0}".format(clean_file)
-        args = shlex.split(comm)
-        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-        proc.wait()
-        info = proc.stdout.read().decode("utf-8").split("\n")
-        nchan = int(info[1].split()[1])
+            # basic pav images
+            #plot_commands = [
+            #    {'comm': 'pav -FTDp', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
+            #    {'comm': 'pav -FTS', 'name': 'profile_fts', 'rank': 2, 'type': 'profile.pol'},
+            #    {'comm': 'pav -GTdp', 'name': 'phase_freq', 'rank': 3, 'type': 'phase.freq'},
+            #    {'comm': 'pav -FYdp', 'name': 'phase_time', 'rank': 4, 'type': 'phase.time'}
+            #]
 
-        # basic psrplot images - mimicking ingest images
-        plot_commands = [
-            {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'title': 'Stokes I Profile ({0})'.format(cparams["pid"]), 'rank': 1, 'type': '{0}.profile-int.hi'.format(local_pid)} ,
-            {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'title': 'Polarisation Profile ({0})'.format(cparams["pid"]), 'rank': 2, 'type': '{0}.profile-pol.hi'.format(local_pid)},
-            {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'title': 'Phase vs. Frequency ({0})'.format(cparams["pid"]), 'rank': 4, 'type': '{0}.phase-freq.hi'.format(local_pid)},
-            {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'title': 'Phase vs. Time ({0})'.format(cparams["pid"]), 'rank': 3, 'type': '{0}.phase-time.hi'.format(local_pid)},
-            {'comm': 'psrplot -p b -x -jT -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'title': 'Cleaned bandpass ({0})'.format(cparams["pid"]), 'rank': 8, 'type': '{0}.bandpass.hi'.format(local_pid)},
-        ]
+            # get channel number of cleaned file
+            comm = "vap -c nchan {0}".format(clean_file)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            info = proc.stdout.read().decode("utf-8").split("\n")
+            nchan = int(info[1].split()[1])
 
-        # ideally we would write the pav images directly to destination, but pav won't use overly long file strings
-        # instead create locally and move
+            # basic psrplot images - mimicking ingest images
+            plot_commands = [
+                {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'title': 'Stokes I Profile ({0})'.format(cparams["pid"]), 'rank': 1, 'type': '{0}.profile-int.hi'.format(local_pid)} ,
+                {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'title': 'Polarisation Profile ({0})'.format(cparams["pid"]), 'rank': 2, 'type': '{0}.profile-pol.hi'.format(local_pid)},
+                {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'title': 'Phase vs. Frequency ({0})'.format(cparams["pid"]), 'rank': 4, 'type': '{0}.phase-freq.hi'.format(local_pid)},
+                {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'title': 'Phase vs. Time ({0})'.format(cparams["pid"]), 'rank': 3, 'type': '{0}.phase-time.hi'.format(local_pid)},
+                {'comm': 'psrplot -p b -x -jT -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'title': 'Cleaned bandpass ({0})'.format(cparams["pid"]), 'rank': 8, 'type': '{0}.bandpass.hi'.format(local_pid)},
+            ]
 
-        if (cparams['slurm'] == "True"):
-            logger.info("SLURM environment recognised")
-            env_query = 'echo $JOBFS'
-            jobfs_dir = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
-            logger.info("JOBFS dir = {}".format(jobfs_dir))
-            loc_path = jobfs_dir
-        else:
-            loc_path = "/tmp"
+            logger.info("Creating psrsplot images...")
 
-        logger.info("Loc_path = {}".format(loc_path))
+            for x in range(0, len(plot_commands)):
 
-        logger.info("Creating psrsplot images...")
+                # need to protect against unexpected image crashes
+                try:
 
-        for x in range(0, len(plot_commands)):
+                    logger.info("Creating image type {0}...".format(plot_commands[x]['type']))
 
-            # need to protect against unexpected image crashes
-            try:
+                    # create / overwrite the image
+                    image_name = "{0}.png".format(plot_commands[x]['name'])
+                    image_file = os.path.join(images_path,image_name)
+                    tmp_image_file = os.path.join(loc_path,image_name)
 
-                logger.info("Creating image type {0}...".format(plot_commands[x]['type']))
+                    if (os.path.exists(image_file)):
+                        os.remove(image_file)
+                    # comm = "{0} -g {1}/png {2}".format(plot_commands[x]['comm'], image_name, clean_file)
+                    comm = "{0} {2} -g 1024x768 -c above:l= -c above:c='{3}' -D {1}/png".format(plot_commands[x]['comm'], tmp_image_file, clean_file, plot_commands[x]['title'])
+                    args = shlex.split(comm)
+                    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                    proc.wait()
 
-                # create / overwrite the image
-                image_name = "{0}.png".format(plot_commands[x]['name'])
-                image_file = os.path.join(images_path,image_name)
-                tmp_image_file = os.path.join(loc_path,image_name)
+                    # move resulting image
+                    try:
+                        logger.info("Renaming {0} to {1}...".format(tmp_image_file, image_file))
+                        os.rename(tmp_image_file, image_file)
+                    except:
+                        logger.info("Rename attempt failed - copying {0} to {1} instead...".format(tmp_image_file, image_file))
+                        os.system("cp {0} {1}".format(tmp_image_file, image_file))
 
-                if (os.path.exists(image_file)):
-                    os.remove(image_file)
-                # comm = "{0} -g {1}/png {2}".format(plot_commands[x]['comm'], image_name, clean_file)
-                comm = "{0} {2} -g 1024x768 -c above:l= -c above:c='{3}' -D {1}/png".format(plot_commands[x]['comm'], tmp_image_file, clean_file, plot_commands[x]['title'])
+                    # log results to array for later recording
+                    image_data.append({'file': image_file, 'rank': plot_commands[x]['rank'], 'type': plot_commands[x]['type']})
+
+                except:
+                    logger.error("Attempt to create image type {0} failed - skipping...".format(plot_commands[x]['type']))
+
+        # skip this portion depending on image reprocessing specifications
+        if ((cparams["image_flag"] and cparams["image_type"] == "ALL") or not cparams["image_flag"]):
+
+            # psrstat images - snr/time
+
+            logger.info("Creating S/N images...")
+
+            # make scrunched file for analysis
+            comm = "pam -Fp -e Fp.temp -u {0} {1}".format(loc_path, clean_file)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            info = proc.stdout.read().decode("utf-8").rstrip().split()
+            scrunched_file = info[0]
+
+            # new - psrchive side functionality
+            scrunched_arch = ps.Archive_load(scrunched_file)
+            zapped_arch = scrunched_arch.clone()
+
+            # get parameters for looping
+            comm = "vap -c nsub,length {0}".format(scrunched_file)
+            args = shlex.split(comm)
+            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+            proc.wait()
+            info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+            nsub = int(info[1].split()[1])
+            length = float(info[1].split()[2])
+
+            logger.info("Beginning S/N analysis...")
+            #logger.info("NSUB = {0} | LENGTH = {1}".format(nsub, length))
+
+            # collect and write snr data
+            snr_data = []
+            snr_report = os.path.join(images_path, "snr.dat")
+
+            for x in range(0, nsub):
+                # new method - October 2022
+
+                #logger.info("Loop {} starting...".format(x))
+
+                # step 1. work backward through the file zapping out one subint at a time
+                asub = nsub - x - 1
+                if (x > 0):
+                    # don't need to zap anything - analysing the complete archive
+                    clean_utils.zero_weight_subint(zapped_arch,asub + 1)
+
+                # step 2. scrunch and write to disk
+                tscr_arch = zapped_arch.clone()
+                tscr_arch.tscrunch()
+                zapped_file = os.path.join(loc_path, "zaptemp.ar")
+                tscr_arch.unload(zapped_file)
+
+                #comm = "paz -X '0 {0}' -e paz {1}".format(x, scrunched_file)
+                #args = shlex.split(comm)
+                #proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                #proc.wait()
+                #zapped_file = proc.stdout.read().decode("utf-8").rstrip().split()[1]
+
+                # step 2. fully scrunch the file in time
+                #comm = "pam -m -T {0}".format(zapped_file)
+                #args = shlex.split(comm)
+                #proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                #proc.wait()
+
+                # step 3. extract the cumulative snr via psrstat
+                comm = "psrstat -j Fp -c snr=pdmp -c snr {0}".format(zapped_file)
                 args = shlex.split(comm)
                 proc = subprocess.Popen(args,stdout=subprocess.PIPE)
                 proc.wait()
+                snr_cumulative = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
 
-                # move resulting image
-                try:
-                    logger.info("Renaming {0} to {1}...".format(tmp_image_file, image_file))
-                    os.rename(tmp_image_file, image_file)
-                except:
-                    logger.info("Rename attempt failed - copying {0} to {1} instead...".format(tmp_image_file, image_file))
-                    os.system("cp {0} {1}".format(tmp_image_file, image_file))
+                # step 4. extract the single snr via psrstat
+                #comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
+                comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(asub, scrunched_file)
+                args = shlex.split(comm)
+                proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                proc.wait()
+                snr_single = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
 
-                # log results to array for later recording
-                image_data.append({'file': image_file, 'rank': plot_commands[x]['rank'], 'type': plot_commands[x]['type']})
+                # step 5. write to file
+                #snr_data.append([length*x/nsub, snr_single, snr_cumulative])
+                snr_data.append([length*asub/nsub, snr_single, snr_cumulative])
 
-            except:
-                logger.error("Attempt to create image type {0} failed - skipping...".format(plot_commands[x]['type']))
+                # cleanup
+                os.remove(zapped_file)
+                del(tscr_arch)
 
-        # psrstat images - snr/time
+                #logger.info("Loop {} ending...".format(x))
+            
+            np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
 
-        logger.info("Creating S/N images...")
+            logger.info("Analysis complete.")
 
-        # make scrunched file for analysis
-        comm = "pam -Fp -e Fp.temp -u {0} {1}".format(loc_path, clean_file)
-        args = shlex.split(comm)
-        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-        proc.wait()
-        info = proc.stdout.read().decode("utf-8").rstrip().split()
-        scrunched_file = info[0]
+            # plot results - single subint snr
+            matplot_commands = [
+                {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR ({0})'.format(cparams["pid"]), 'name': 'SNR_single', 'rank': 7, 'type': '{0}.snr-single.hi'.format(local_pid)},
+                {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR ({0})'.format(cparams["pid"]), 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr-cumul.hi'.format(local_pid)},
+            ]
 
-        # new - psrchive side functionality
-        scrunched_arch = ps.Archive_load(scrunched_file)
-        zapped_arch = scrunched_arch.clone()
+            for x in range(0, len(matplot_commands)):
 
-        # get parameters for looping
-        comm = "vap -c nsub,length {0}".format(scrunched_file)
-        args = shlex.split(comm)
-        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-        proc.wait()
-        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
-        nsub = int(info[1].split()[1])
-        length = float(info[1].split()[2])
+                logger.info("Creating image type {0}...".format(matplot_commands[x]['type']))
 
-        logger.info("Beginning S/N analysis...")
-        #logger.info("NSUB = {0} | LENGTH = {1}".format(nsub, length))
+                # create the plot
+                image_name = "{0}.png".format(matplot_commands[x]['name'])
+                image_file = os.path.join(images_path,image_name)
+                plt.clf()
+                plt.plot(matplot_commands[x]['x-axis'],matplot_commands[x]['y-axis'])
+                plt.xlabel(matplot_commands[x]['xlabel'])
+                plt.ylabel(matplot_commands[x]['ylabel'])
+                plt.title(matplot_commands[x]['title'])
+                plt.savefig(image_file)
+                plt.clf()
 
-        # collect and write snr data
-        snr_data = []
-        snr_report = os.path.join(images_path, "snr.dat")
-
-        for x in range(0, nsub):
-            # new method - October 2022
-
-            #logger.info("Loop {} starting...".format(x))
-
-            # step 1. work backward through the file zapping out one subint at a time
-            asub = nsub - x - 1
-            if (x > 0):
-                # don't need to zap anything - analysing the complete archive
-                clean_utils.zero_weight_subint(zapped_arch,asub + 1)
-
-            # step 2. scrunch and write to disk
-            tscr_arch = zapped_arch.clone()
-            tscr_arch.tscrunch()
-            zapped_file = os.path.join(loc_path, "zaptemp.ar")
-            tscr_arch.unload(zapped_file)
-
-            #comm = "paz -X '0 {0}' -e paz {1}".format(x, scrunched_file)
-            #args = shlex.split(comm)
-            #proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            #proc.wait()
-            #zapped_file = proc.stdout.read().decode("utf-8").rstrip().split()[1]
-
-            # step 2. fully scrunch the file in time
-            #comm = "pam -m -T {0}".format(zapped_file)
-            #args = shlex.split(comm)
-            #proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            #proc.wait()
-
-            # step 3. extract the cumulative snr via psrstat
-            comm = "psrstat -j Fp -c snr=pdmp -c snr {0}".format(zapped_file)
-            args = shlex.split(comm)
-            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            proc.wait()
-            snr_cumulative = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
-
-            # step 4. extract the single snr via psrstat
-            #comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(x, scrunched_file)
-            comm = "psrstat -j Fp -c snr=pdmp -c subint={0} -c snr {1}".format(asub, scrunched_file)
-            args = shlex.split(comm)
-            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-            proc.wait()
-            snr_single = float(proc.stdout.read().decode("utf-8").rstrip().split("=")[1])
-
-            # step 5. write to file
-            #snr_data.append([length*x/nsub, snr_single, snr_cumulative])
-            snr_data.append([length*asub/nsub, snr_single, snr_cumulative])
+                # log the plot
+                image_data.append({'file': image_file, 'rank': matplot_commands[x]['rank'], 'type': matplot_commands[x]['type']})
 
             # cleanup
-            os.remove(zapped_file)
-            del(tscr_arch)
+            os.remove(scrunched_file)
 
-            #logger.info("Loop {} ending...".format(x))
-            
-        np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
+        # skip this portion depending on image reprocessing specifications
+        if (cparams["image_flag"] and (cparams["image_type"] == "ALL" or cparams["image_type"] == "TOAs") or not cparams["image_flag"]):
 
-        logger.info("Analysis complete.")
+            # generate TOA-based images
+            # produce toas - need to recall the template used through the toas table
+            logger.info("Obtaining templates and ephemerides for generating TOA images...")
+            template_list = glob.glob(os.path.join(str(timing_path),"{0}.std".format(psrname)))
+            if (len(template_list) > 0):
+                template = template_list[0]
+            else:
+                template = None
 
-        # plot results - single subint snr
-        matplot_commands = [
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR ({0})'.format(cparams["pid"]), 'name': 'SNR_single', 'rank': 7, 'type': '{0}.snr-single.hi'.format(local_pid)},
-            {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR ({0})'.format(cparams["pid"]), 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr-cumul.hi'.format(local_pid)},
+            parfile_list = glob.glob(os.path.join(str(timing_path),"{0}.par".format(psrname)))
+            if (len(parfile_list) > 0):
+                parfile = parfile_list[0]
+            else:
+                parfile = None
+
+            selfile_list = glob.glob(os.path.join(str(timing_path),"{0}.select".format(psrname)))
+            if (len(selfile_list) > 0):
+                selfile = selfile_list[0]
+            else:
+                selfile = None
+
+            toa_archive_name = "image_toas.ar"
+            toa_archive_file = os.path.join(images_path, toa_archive_name)
+            single_image_name = "toas_single.png"
+            single_image_file = os.path.join(images_path,single_image_name)
+            global_image_name = "{0}.{1}_global.png".format(local_pid, psrname)
+            global_image_file = os.path.join(images_path,global_image_name)
+
+            # slight hack for central frequency
+            path_dir = os.path.normpath(str(output_dir))
+            split_path = path_dir.split("/")
+            path_args = len(split_path)
+            path_freq = str(split_path[path_args - 1])
+
+            logger.info("Path freq = {0}".format(path_freq))
+
+            # only build TOAs for L-band data so far - fix this later!
+            if (path_freq == "1284" or path_freq == "1283"):
+                if ("global_toa_path" in cparams):
+                    if (os.path.exists(cparams["global_toa_path"]) == False):
+                        os.makedirs(cparams["global_toa_path"])
+                    share_path = cparams["global_toa_path"]
+                else:
+                    share_path = images_path
+                share_file = os.path.join(share_path,global_image_name)
+
+                if (build_image_toas(output_dir, toa_file, toa_archive_name, images_path, cparams, psrname, logger)):
+                    logger.info("Successfully created {0} - now producing residual images".format(toa_archive_file))
+
+                    # generate single TOA image
+                    if (generate_singleres_image(output_dir, toa_archive_file, single_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
+                        logger.info("Successfully created single observation residual image {0}".format(single_image_file))
+                        image_data.append({'file': single_image_file, 'rank': 5, 'type': '{0}.toa-single.hi'.format(local_pid)})
+                    else:
+                        logger.error("Single observation residual TOA image generation was unsuccessful!")
+
+                    # generate global TOA image
+                    if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
+                        logger.info("Successfully created global observation residual image {0}".format(global_image_file))
+                        image_data.append({'file': global_image_file, 'rank': 11, 'type': '{0}.toa-global.hi'.format(local_pid)})
+                  
+                        # copy the global TOA image to the shared path
+                        if not (global_image_file == share_file):
+                            copyfile(global_image_file, share_file)
+
+                    else:
+                        logger.error("Global observation residual TOA image generation was unsuccessful!")
+
+                else:
+                    logger.error("Generation of TOA archive was unsuccessful.")
+
+            else:
+                logger.info("TOA plot generation only currently enabled for L-Band observations.")
+
+        else:
+            logger.error("Could not identify suitable file for image generation.")
+            logger.error("Skipping generation of relevant images.")
+
+    # skip this portion depending on image reprocessing specifications
+    if ((cparams["image_flag"] and cparams["image_type"] == "ALL") or not cparams["image_flag"]):
+
+        # now link to dynamic spectra images
+        ds_path = os.path.join(output_dir,"scintillation")
+        logger.info("Adding dynamic spectra images found in {0}...".format(ds_path))
+
+        # look for two fixed dynspec images
+        dynspec_commands = [
+            {'ext': 'zap.dynspec', 'rank': 9, 'type': '{0}.zap-dynspec.hi'.format(local_pid)},
+            {'ext': 'calib.dynspec', 'rank': 10, 'type': '{0}.calib-dynspec.hi'.format(local_pid)}
         ]
 
-        for x in range(0, len(matplot_commands)):
+        for x in range (0, len(dynspec_commands)):
 
-            logger.info("Creating image type {0}...".format(matplot_commands[x]['type']))
-
-            # create the plot
-            image_name = "{0}.png".format(matplot_commands[x]['name'])
-            image_file = os.path.join(images_path,image_name)
-            plt.clf()
-            plt.plot(matplot_commands[x]['x-axis'],matplot_commands[x]['y-axis'])
-            plt.xlabel(matplot_commands[x]['xlabel'])
-            plt.ylabel(matplot_commands[x]['ylabel'])
-            plt.title(matplot_commands[x]['title'])
-            plt.savefig(image_file)
-            plt.clf()
-
-            # log the plot
-            image_data.append({'file': image_file, 'rank': matplot_commands[x]['rank'], 'type': matplot_commands[x]['type']})
-
-        # cleanup
-        os.remove(scrunched_file)
-
-        # generate TOA-based images
-        # produce toas - need to recall the template used through the toas table
-        logger.info("Obtaining templates and ephemerides for generating TOA images...")
-        template_list = glob.glob(os.path.join(str(timing_path),"{0}.std".format(psrname)))
-        if (len(template_list) > 0):
-            template = template_list[0]
-        else:
-            template = None
-
-        parfile_list = glob.glob(os.path.join(str(timing_path),"{0}.par".format(psrname)))
-        if (len(parfile_list) > 0):
-            parfile = parfile_list[0]
-        else:
-            parfile = None
-
-        selfile_list = glob.glob(os.path.join(str(timing_path),"{0}.select".format(psrname)))
-        if (len(selfile_list) > 0):
-            selfile = selfile_list[0]
-        else:
-            selfile = None
-
-        toa_archive_name = "image_toas.ar"
-        toa_archive_file = os.path.join(images_path, toa_archive_name)
-        single_image_name = "toas_single.png"
-        single_image_file = os.path.join(images_path,single_image_name)
-        global_image_name = "{0}.{1}_global.png".format(local_pid, psrname)
-        global_image_file = os.path.join(images_path,global_image_name)
-
-        # slight hack for central frequency
-        path_dir = os.path.normpath(str(output_dir))
-        split_path = path_dir.split("/")
-        path_args = len(split_path)
-        path_freq = str(split_path[path_args - 1])
-
-        logger.info("Path freq = {0}".format(path_freq))
-
-        # only build TOAs for L-band data so far - fix this later!
-        if (path_freq == "1284" or path_freq == "1283"):
-            if ("global_toa_path" in cparams):
-                if (os.path.exists(cparams["global_toa_path"]) == False):
-                    os.makedirs(cparams["global_toa_path"])
-                share_path = cparams["global_toa_path"]
+            # check/recall image and store image_data
+            data = glob.glob(os.path.join(ds_path, "*{0}.png".format(dynspec_commands[x]['ext'])))
+            if (len(data) == 0):
+                logger.error("No matches found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
+            elif (len(data) > 1):
+                logger.error("Non-unique match found in {0} for extension {1} - skipping".format(ds_path, dynspec_commands[x]['ext']))
             else:
-                share_path = images_path
-            share_file = os.path.join(share_path,global_image_name)
+                # unique match found
+                logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
 
-            if (build_image_toas(output_dir, toa_file, toa_archive_name, images_path, cparams, psrname, logger)):
-                logger.info("Successfully created {0} - now producing residual images".format(toa_archive_file))
+                if (cparams["db_flag"]):
 
-                # generate single TOA image
-                if (generate_singleres_image(output_dir, toa_archive_file, single_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
-                    logger.info("Successfully created single observation residual image {0}".format(single_image_file))
-                    image_data.append({'file': single_image_file, 'rank': 5, 'type': '{0}.toa-single.hi'.format(local_pid)})
-                else:
-                    logger.error("Single observation residual TOA image generation was unsuccessful!")
+                    # BUG FIX - We now need to check on the file size!
+                    max_image_size = 750 # kB
+                    dimension_factor = 0.95
+                    loop_counter = 0
+                    size_check = False
 
-                # generate global TOA image
-                if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
-                    logger.info("Successfully created global observation residual image {0}".format(global_image_file))
-                    image_data.append({'file': global_image_file, 'rank': 11, 'type': '{0}.toa-global.hi'.format(local_pid)})
-                  
-                    # copy the global TOA image to the shared path
-                    if not (global_image_file == share_file):
-                        copyfile(global_image_file, share_file)
+                    logger.info("Checking on file size of {0} to determine if downsampling is needed for PSRDB upload...".format(data[0]))
+
+                    while not (size_check):
+
+                        current_factor = dimension_factor**loop_counter
+
+                        if (loop_counter == 0):
+                            # initialise the image
+                            og_image = Image.open(data[0])
+                            og_sizes = og_image.size
+                            data_split = os.path.splitext(data[0])
+                            small_image_name = "{0}.small.jpg".format(data_split[0])
+                            next_image = og_image
+                            next_image_name = data[0]
+                        else:
+                            # make a downsized copy
+                            small_image = og_image.convert('RGB')
+                            small_image = small_image.resize((round(og_sizes[0]*current_factor), round(og_sizes[1]*current_factor)), Image.ANTIALIAS)
+                            small_image.save(small_image_name, optimize=True, quality=95)
+                            next_image = small_image
+                            next_image_name = small_image_name
+
+                        # image to be considered is ready - test file size (in KB)
+                        image_size = os.stat(next_image_name).st_size / 1024
+                        if (image_size <= max_image_size):
+                            size_check = True
+                            logger.info("Final image {2} downsampled {0} times ({1}% size of original)".format(loop_counter, current_factor*100, next_image_name))
+
+                        loop_counter += 1
 
                 else:
-                    logger.error("Global observation residual TOA image generation was unsuccessful!")
+                    next_image_name = data[0]
 
-            else:
-                logger.error("Generation of TOA archive was unsuccessful.")
-
-        else:
-            logger.info("TOA plot generation only currently enabled for L-Band observations.")
-
-    else:
-        logger.error("Could not identify suitable file for image generation.")
-        logger.error("Skipping generation of relevant images.")
-
-
-    # now link to dynamic spectra images
-    ds_path = os.path.join(output_dir,"scintillation")
-    logger.info("Adding dynamic spectra images found in {0}...".format(ds_path))
-
-    # look for two fixed dynspec images
-    dynspec_commands = [
-        {'ext': 'zap.dynspec', 'rank': 9, 'type': '{0}.zap-dynspec.hi'.format(local_pid)},
-        {'ext': 'calib.dynspec', 'rank': 10, 'type': '{0}.calib-dynspec.hi'.format(local_pid)}
-    ]
-
-    for x in range (0, len(dynspec_commands)):
-
-        # check/recall image and store image_data
-        data = glob.glob(os.path.join(ds_path, "*{0}.png".format(dynspec_commands[x]['ext'])))
-        if (len(data) == 0):
-            logger.error("No matches found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
-        elif (len(data) > 1):
-            logger.error("Non-unique match found in {0} for extension {1} - skipping".format(ds_path, dynspec_commands[x]['ext']))
-        else:
-            # unique match found
-            logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
-
-            if (cparams["db_flag"]):
-
-                # BUG FIX - We now need to check on the file size!
-                max_image_size = 750 # kB
-                dimension_factor = 0.95
-                loop_counter = 0
-                size_check = False
-
-                logger.info("Checking on file size of {0} to determine if downsampling is needed for PSRDB upload...".format(data[0]))
-
-                while not (size_check):
-
-                    current_factor = dimension_factor**loop_counter
-
-                    if (loop_counter == 0):
-                        # initialise the image
-                        og_image = Image.open(data[0])
-                        og_sizes = og_image.size
-                        data_split = os.path.splitext(data[0])
-                        small_image_name = "{0}.small.jpg".format(data_split[0])
-                        next_image = og_image
-                        next_image_name = data[0]
-                    else:
-                        # make a downsized copy
-                        small_image = og_image.convert('RGB')
-                        small_image = small_image.resize((round(og_sizes[0]*current_factor), round(og_sizes[1]*current_factor)), Image.ANTIALIAS)
-                        small_image.save(small_image_name, optimize=True, quality=95)
-                        next_image = small_image
-                        next_image_name = small_image_name
-
-                    # image to be considered is ready - test file size (in KB)
-                    image_size = os.stat(next_image_name).st_size / 1024
-                    if (image_size <= max_image_size):
-                        size_check = True
-                        logger.info("Final image {2} downsampled {0} times ({1}% size of original)".format(loop_counter, current_factor*100, next_image_name))
-
-                    loop_counter += 1
-
-            else:
-                next_image_name = data[0]
-
-            image_data.append({'file': next_image_name, 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['type']})
+                image_data.append({'file': next_image_name, 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['type']})
 
     # write all images to PSRDB
     if (cparams["db_flag"]):

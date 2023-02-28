@@ -445,7 +445,7 @@ def create_structure(output_dir,cparams,psrname,logger):
     else:
         logger.info("Pulsar directory exists")
         if overwrite_flag == "True":
-            if not (cparams["images"]):
+            if not (cparams["image_flag"]):
                 rmtree(pulsar_dir)
                 logger.info("Pulsar head directory overwritten")
                 os.makedirs(pulsar_dir)
@@ -499,7 +499,7 @@ def create_structure(output_dir,cparams,psrname,logger):
 
     
     # this part shouldn't need to run if we're just rebuilding the images
-    if (not cparams["fluxcal"]) and (not cparams["images"]):
+    if (not cparams["fluxcal"]) and (not cparams["image_flag"]):
     
         #Pull/Update repositories
         #TODO: for now just creating directories. Have to manage_repos eventually!

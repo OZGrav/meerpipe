@@ -23,6 +23,7 @@ import sys
 import subprocess
 import shlex
 import argparse
+from argparse import RawTextHelpFormatter
 import os.path
 import numpy as np
 import logging
@@ -52,7 +53,7 @@ from db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_fol
 PTUSE = 1
 
 #Argument parsing
-parser = argparse.ArgumentParser(description="Run MeerPipe")
+parser = argparse.ArgumentParser(description="Run MeerPipe", formatter_class=RawTextHelpFormatter)
 parser.add_argument("-cfile", dest="configfile", help="Path to the configuration file")
 parser.add_argument("-dirname", dest="dirname", help="Process a specified observation")
 parser.add_argument("-utc", dest="utc", help="Process a particular UTC. Should be in conjunction with a pulsar name")
@@ -61,7 +62,7 @@ parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm",action=
 parser.add_argument("-pid",dest="pid",help="Process pulsars as PID (Ignores original PID)")
 parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value (GB). Automatic allocation is ignored")
 parser.add_argument("-forcetime", dest="forcetime", type=str, help="Force runtime to this value (HH:MM:SS). Automatic allocation is ignored")
-parser.add_argument("-images", dest="images", help="Rebuild the pipeline images only - do not reprocess the data itself. This will override the config 'overwrite' flag.", action="store_true")
+parser.add_argument("-images", dest="images", help="Rebuild the specified pipeline images only - do not reprocess the data itself. This will override the config 'overwrite' flag.\nOptions:\n'ALL' - reprocess all images.\n'TOAs' - reprocess only the TOA images.", default=None)
 parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
 parser.add_argument("-softpath", help="Change software path", default="/fred/oz005/meerpipe/")
 
@@ -161,9 +162,17 @@ else:
 
 # configure image options
 if (args.images):
-    config_params["images"] = True
+    config_params["image_flag"] = True
+    logger.info("Detected an images-only reprocessing.")
+
+    if (args.images == "ALL" or args.images == "TOAs"):
+        config_params["image_type"] = args.images
+        logger.info("Image reprocessing setting  = {}".format(config_params["image_type"]))
+    else:
+        raise Exception("Invalid image reprocessing setting ({}). Please check input and try again".format(args.images))
+
 else:
-    config_params["images"] = False
+    config_params["image_flag"] = False
 
 if toggle:
 
@@ -279,7 +288,7 @@ if toggle:
 
             # get or create processing entry
             # NEW - 27/02/2023 - don't overwrite results if image-only run
-            if (config_params["images"]):
+            if (config_params["image_flag"]):
                 res_ovr = False
             else:
                 res_ovr = True
@@ -320,7 +329,7 @@ if toggle:
             job_state = job_state_code(0)
             job_output = json.loads('{}')
 
-            if (config_params["images"]):
+            if (config_params["image_flag"]):
                 # if reprocessing only the images, do not overwrite the results field from the previous run
                 logger.info("Images-only run - not resetting JSON results field of processing {}".format(proc_id))
                 results = None
@@ -380,7 +389,7 @@ if toggle:
                 job_file.write("#SBATCH --job-name={0}_{1} \n".format(psrnames[obs_num],obs_num))
 
                 outlog_str = "{0}meerpipe_out_{1}_{2}".format(str(output_dir),psrnames[obs_num],obs_num)
-                if (config_params["images"]):
+                if (config_params["image_flag"]):
                     outlog_str = "{0}_images".format(outlog_str)
 
                 job_file.write("#SBATCH --output={0} \n".format(outlog_str))
@@ -500,7 +509,7 @@ if toggle:
             try:
 
                 # separate the code to be ignored if we want images only
-                if not (config_params["images"]):
+                if not (config_params["image_flag"]):
 
                     #Add the archive files per observation directory into a single file
                     added_archives = add_archives(archive_list[obs_num],output_dir,config_params,psrnames[obs_num],logger)

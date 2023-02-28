@@ -143,7 +143,7 @@ crash = False
 try:
 
     # separate the code to be ignored if we want images only
-    if not (config_params["images"]):
+    if not (config_params["image_flag"]):
 
         #Add the archive files per observation directory into a single file
         added_archives = add_archives(archive_list,output_dir,config_params,psrname,logger)
