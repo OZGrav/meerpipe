@@ -374,12 +374,14 @@ def array_launcher(arr, ag, client, url, token):
                                 print ("Match not found to command line obs ID of {0} - skipping...".format(args.obsid))
                                 continue
 
+                        launch_header_str = "PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y])
+
                         # check for the unprocessed flag
                         if (ag.unprocessed):
 
                             # check if a processing already exists
                             if not (proc_id == None):
-                                print ("Skipping: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
+                                print ("Skipping: {}".format(launch_header_str))
                                 print ("Processing already exists!")
                                 continue
 
@@ -390,7 +392,8 @@ def array_launcher(arr, ag, client, url, token):
                             if 'job_id' in job_out.keys():
                                 job_id = job_out['job_id']
 
-                                comm = "slurm job {}".format(job_id)
+                                #comm = "slurm job {}".format(job_id)
+                                comm = "squeue -j {} --format='%T'".format(job_id)
                                 args = shlex.split(comm)
                                 proc = subprocess.Popen(args,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                                 slurm_data = proc.communicate()
@@ -399,12 +402,16 @@ def array_launcher(arr, ag, client, url, token):
 
                                 if (len(slurm_out) > 1 and not "Invalid job id specified" in slurm_err[0]):
 
-                                    print ("Skipping: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
-                                    print ("Processing of this entry is already in progress!")
-                                    continue
+                                    # check for state codes we wish to avoid
+                                    active_states = {'PENDING', 'RUNNING', 'CONFIGURING', 'COMPLETING'}
+                                    if (slurm_out[0] == 'STATE' and slurm_out[1] in active_states):
+
+                                        print ("Skipping: {}".format(launch_header_str))
+                                        print ("Processing of this entry is already in progress! (STATE = {})".format(slurm_out[1]))
+                                        continue
 
                         # finally, launch
-                        print ("Launching: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
+                        print ("Launching: {}".format(launch_header_str))
                         pipeline_launch_instruction = "{0} -cfile {1} -dirname {2} -utc {3} -verbose -pid {4} -db -db_pipe {5} -db_obsid {6}".format(config_data['path'], config_data['config'], psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y], obs_id)
                         # check for slurm
                         if (ag.slurm):
