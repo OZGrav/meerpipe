@@ -1958,21 +1958,6 @@ def cleanup(output_dir, cparams, psrname, logger):
 
     output_dir = str(output_dir)
     
-    numpy_files = sorted(glob.glob(os.path.join(output_dir,"*.npy")))
-    config_params_binary = glob.glob(os.path.join(output_dir,"config_params.p"))
-
-    if len(numpy_files) > 0:
-        #Removing numpy and binary files
-        for item in numpy_files:
-            os.remove(item)
-        logger.info("Removed numpy files")
-        
-    if len(config_params_binary) > 0:
-        for item in config_params_binary:
-            os.remove(item)
-        logger.info("Removed binary files")
-
-  
     #Moving template to the timing directory
     timing_dir = os.path.join(output_dir,"timing")
     if os.path.exists(os.path.join(output_dir,"{0}.std".format(psrname))):
@@ -2256,6 +2241,20 @@ def secondary_cleanup(output_dir, cparams, psrname, logger):
     logger.info("Now beginning secondary cleanup (if requested)")
 
     output_dir = str(output_dir)
+
+    # cleanup the data transfer products (numpy and binary files) - moved from cleanup() in order to accomodate image-only re-processing
+    numpy_files = sorted(glob.glob(os.path.join(output_dir,"*.npy")))
+    config_params_binary = glob.glob(os.path.join(output_dir,"config_params.p"))
+
+    if len(numpy_files) > 0:
+        for item in numpy_files:
+            os.remove(item)
+        logger.info("Removed numpy files")
+
+    if len(config_params_binary) > 0:
+        for item in config_params_binary:
+            os.remove(item)
+        logger.info("Removed binary files")
 
     # check if this has been requested
     if "red_prod" in cparams:

@@ -45,7 +45,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
 
     tempo2_call = "tempo2 -nofit -set START 40000 -set FINISH 99999 "\
                   "-output general2 -s \"{{bat}} {{post}} {{err}} "\
-                  "{{freq}} BLAH\n\" -nobs 10000000 -npsr 1 -f {} {}"
+                  "{{freq}} BLAH\n\" -nobs 1000000 -npsr 1 -f {} {}"
     awk_cmd = "awk '{print $1,$2,$3*1e-6,$4}'"
     temp_file = os.path.basename(tim_file).replace('.tim', '_res.txt')
     comp_file = os.path.basename(tim_file).replace('.tim', '_res_comp.txt')
