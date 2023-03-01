@@ -9,6 +9,7 @@ __maintainer__ = "Andrew Cameron"
 __email__ = "andrewcameron@swin.edu.au"
 __status__ = "Development"
 """
+
 # Imports
 import re, os, sys
 import numpy as np
@@ -42,6 +43,12 @@ def weighted_mean(toas):
     return (numerator/ demoninator)
 
 def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False):
+
+    # WARNING - The precise format of the output residual file is critical to the
+    # correct operation of the Data Portal (pulsars.org.au). Changes to this format
+    # will result in pulsr/project specific TOA plots failing to generate, and may
+    # result in unexpected crashes. Please liaise on any changes to the format/storage
+    # of the residual files with the Data Portal maintenance team.
 
     tempo2_call = "tempo2 -nofit -set START 40000 -set FINISH 99999 "\
                   "-output general2 -s \"{{bat}} {{post}} {{err}} "\
