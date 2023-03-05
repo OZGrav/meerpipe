@@ -3,7 +3,7 @@
 """
 Code containing utilities adapted from MeerWatch codebase - /fred/oz005/users/meerpipe_dev/MeerWatch
 
-__author__ = ["Matthew Bailes", "Renee Spiewak", "Andrew Cameron"]
+__author__ = ["Andrew Cameron", "Matthew Bailes", "Renee Spiewak", "Daniel Reardon"]
 __credits__ = ["Aditya Parthasarathy"]
 __maintainer__ = "Andrew Cameron"
 __email__ = "andrewcameron@swin.edu.au"
@@ -17,6 +17,7 @@ from shlex import split as shplit
 import subprocess as sproc
 import matplotlib.pyplot as plt
 from matplotlib import colors, cm
+from astropy.time import Time
 
 # calculate the rms of the toa format used in this library
 # danger: assumes correct residual wrt to zero
@@ -52,11 +53,13 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
 
     tempo2_call = "tempo2 -nofit -set START 40000 -set FINISH 99999 "\
                   "-output general2 -s \"{{bat}} {{post}} {{err}} "\
-                  "{{freq}} BLAH\n\" -nobs 1000000 -npsr 1 -f {} {}"
-    awk_cmd = "awk '{print $1,$2,$3*1e-6,$4}'"
-    temp_file = os.path.basename(tim_file).replace('.tim', '_res.txt')
+                  "{{freq}} {{post_phase}} BLAH\n\" -nobs 1000000 -npsr 1 -f {} {}"
+    awk_cmd = "awk '{print $1,$2,$3*1e-6,$4,$5}'"
+    temp_file = os.path.basename(tim_file).replace('.tim', '.delme')
+    res_file = os.path.basename(tim_file).replace('.tim', '_res.txt')
     comp_file = os.path.basename(tim_file).replace('.tim', '_res_comp.txt')
     temp_file = os.path.join(out_dir, temp_file)
+    res_file = os.path.join(out_dir, res_file)
     comp_file = os.path.join(out_dir, comp_file)
 
     # if a select file is given, include it
@@ -79,21 +82,68 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
     if verb:
         print("Finished running tempo2")
 
-    # load in the toa residuals
-    toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3), dtype=[('mjd', 'f8'), ('res', 'f4'), ('err', 'f4'), ('freq', 'f4')])
+    # define data formats of products to be handled
+    mjd_f = ('mjd','f16')
+    doy_f = ('doy', 'f16')
+    res_f = ('res', 'f4')
+    res_phase_f = ('res_phase', 'f4')
+    err_f = ('err', 'f4')
+    err_phase_f = ('err_phase', 'f4')
+    freq_f = ('freq', 'f8')
 
-    if toas.size == 1:
+    # load in the toa residuals and cleanup
+    toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3, 4), dtype=[mjd_f, res_f, err_f, freq_f, res_phase_f])
+    #os.remove(temp_file)
+
+    if verb:
+        print ("Loaded ToAs from file")
+
+    # convert data
+    doys = np.zeros(len(toas), dtype=[doy_f])
+    doys[doy_f[0]] = calc_doy(toas[mjd_f[0]])
+
+    phase_errors = np.zeros(len(toas), dtype=[err_phase_f])
+    phase_errors[err_phase_f[0]] = calc_err_phase(toas[res_f[0]], toas[err_f[0]], toas[res_phase_f[0]])
+
+    # concatenate data in the correct order
+    toas_exp = np.zeros(toas.shape, dtype=[mjd_f, doy_f, res_f, res_phase_f, err_f, err_phase_f, freq_f])
+    arr_list = [toas, doys, phase_errors]
+    for x in arr_list:
+        for y in x.dtype.names:
+            toas_exp[y] = x[y]
+
+    # write out
+
+    if len(toas_exp) == 0:
         if verb:
-            print("Only one ToA from {}; skipping".format(tim_file))
-        toas = np.array([])
-
-    if len(toas) == 0:
-        print("No ToAs from tempo2 for {}".format(tim_file))
+            print("No ToAs from tempo2 for {}".format(tim_file))
     else:
+        if verb:
+            print ("Writing out {} residuals to disk...".format(len(toas_exp)))
+        # write out uncompressed residuals
+        np.savetxt(res_file, toas_exp, fmt="%s\t%s\t%s\t%s\t%s\t%s\t%s")
         # write out the compressed residuals
-        np.savetxt(comp_file, toas, fmt="%12.6f\t%.4e\t%.2e\t%9.4f")
+        np.savetxt(comp_file, toas_exp, fmt="%12.6f\t%3.6f\t%.4e\t%.4e\t%.2e\t%.2e\t%9.4f")
 
-    return(toas)
+    if toas_exp.size == 1:
+        if verb:
+            print("Only one ToA from {}; setting return array to be empty".format(tim_file))
+        toas_exp = np.array([])
+
+    return(toas_exp)
+
+# calculate day-of-year given an MJD (credit: Daniel Reardon)
+def calc_doy(mjd):
+
+    t = Time(mjd, format='mjd')
+    yrs = t.jyear # observation year in J2000.0
+    # return 365.2425 * (yrs % 1)
+    return 365.25 * (yrs % 1) # J2000.0 in astropy.time built of year = 365.25
+
+# calculate phase error
+def calc_err_phase(res, err, res_phase):
+
+    return (res_phase / res) * err
 
 
 # determine outliers and remove from plot
