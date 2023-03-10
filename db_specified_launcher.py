@@ -47,6 +47,7 @@ parser.add_argument("-list_in", dest="list_in", help="List of observations to pr
 parser.add_argument("-runas", dest="runas", help="Specify an override pipeline to use in processing the observations. \nOptions:\n'PIPE' - launch each observation through multiple pipelines as defined by the 'launches' PSRDB table (default).\n'OBS' - use the observation PID to define pipeline selection.\n<int> - specify a specific PSRDB pipeline ID.\n<pid> - specify a MeerTIME project code (e.g. 'PTA', 'RelBin'), which will launch a default pipeline.", default="PIPE")
 parser.add_argument("-slurm", dest="slurm", help="Processes all jobs using the OzStar Slurm queue.",action="store_true")
 parser.add_argument("-unprocessed", dest="unprocessed", help="Launch only those observations which have not yet been processed by the specified pipelines.", action="store_true")
+parser.add_argument("-images", dest="images", help="Rebuild the specified pipeline images only - do not reprocess the data itself. This will override the config 'overwrite' flag.\nOptions:\n'ALL' - reprocess all images.\n'TOAs' - reprocess only the TOA images.", default=None)
 parser.add_argument("-job_limit", dest="joblimit", type=int, help="Max number of jobs to accept to the queue at any given time - script will wait and monitor for queue to reduce below this number before sending more.", default=1000)
 parser.add_argument("-forceram", dest="forceram", type=float, help="Specify RAM to use for job execution (GB). Recommended only for single-job launches.")
 parser.add_argument("-forcetime", dest="forcetime", type=str, help="Specify time to use for job execution (HH:MM:SS). Recommended only for single-job launches.")
@@ -373,12 +374,14 @@ def array_launcher(arr, ag, client, url, token):
                                 print ("Match not found to command line obs ID of {0} - skipping...".format(args.obsid))
                                 continue
 
+                        launch_header_str = "PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y])
+
                         # check for the unprocessed flag
                         if (ag.unprocessed):
 
                             # check if a processing already exists
                             if not (proc_id == None):
-                                print ("Skipping: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
+                                print ("Skipping: {}".format(launch_header_str))
                                 print ("Processing already exists!")
                                 continue
 
@@ -389,7 +392,8 @@ def array_launcher(arr, ag, client, url, token):
                             if 'job_id' in job_out.keys():
                                 job_id = job_out['job_id']
 
-                                comm = "slurm job {}".format(job_id)
+                                #comm = "slurm job {}".format(job_id)
+                                comm = "squeue -j {} --format='%T'".format(job_id)
                                 args = shlex.split(comm)
                                 proc = subprocess.Popen(args,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                                 slurm_data = proc.communicate()
@@ -398,12 +402,16 @@ def array_launcher(arr, ag, client, url, token):
 
                                 if (len(slurm_out) > 1 and not "Invalid job id specified" in slurm_err[0]):
 
-                                    print ("Skipping: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
-                                    print ("Processing of this entry is already in progress!")
-                                    continue
+                                    # check for state codes we wish to avoid
+                                    active_states = {'PENDING', 'RUNNING', 'CONFIGURING', 'COMPLETING'}
+                                    if (slurm_out[0] == 'STATE' and slurm_out[1] in active_states):
+
+                                        print ("Skipping: {}".format(launch_header_str))
+                                        print ("Processing of this entry is already in progress! (STATE = {})".format(slurm_out[1]))
+                                        continue
 
                         # finally, launch
-                        print ("Launching: PSR = {0} | OBS = {1} | PROJECT CODE = {2} | PIPE = {3}".format(psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y]))
+                        print ("Launching: {}".format(launch_header_str))
                         pipeline_launch_instruction = "{0} -cfile {1} -dirname {2} -utc {3} -verbose -pid {4} -db -db_pipe {5} -db_obsid {6}".format(config_data['path'], config_data['config'], psr_name, utc_psrdb2normal(utc), launch_project_code, pipeline_list[y], obs_id)
                         # check for slurm
                         if (ag.slurm):
@@ -415,6 +423,10 @@ def array_launcher(arr, ag, client, url, token):
                             pipeline_launch_instruction = "{0} -forceram {1}".format(pipeline_launch_instruction, ag.forceram)
                         if ag.forcetime:
                             pipeline_launch_instruction = "{0} -forcetime {1}".format(pipeline_launch_instruction, ag.forcetime)
+
+                        # check for image flag
+                        if (ag.images):
+                            pipeline_launch_instruction = "{0} -images {1}".format(pipeline_launch_instruction, ag.images)
 
                         # launch the jobs - check for SLURM limit if required and wait
                         if (ag.slurm):

@@ -3,14 +3,12 @@
 """
 Code containing utilities adapted from MeerWatch codebase - /fred/oz005/users/meerpipe_dev/MeerWatch
 
-__author__ = ["Renee Spiewak", "Andrew Cameron"]
+__author__ = ["Matthew Bailes", "Renee Spiewak", "Andrew Cameron"]
 __credits__ = ["Aditya Parthasarathy"]
 __maintainer__ = "Andrew Cameron"
 __email__ = "andrewcameron@swin.edu.au"
 __status__ = "Development"
 """
-
-
 # Imports
 import re, os, sys
 import numpy as np
@@ -20,11 +18,11 @@ import matplotlib.pyplot as plt
 from matplotlib import colors, cm
 
 # calculate the rms of the toa format used in this library
+# danger: assumes correct residual wrt to zero
 def weighted_rms(toas):
 
     numerator = 0
     denominator = 0
-
     for x in range (0, len(toas)):
 
         weight = 1.0 / (toas['err'][x]**2)
@@ -32,6 +30,16 @@ def weighted_rms(toas):
         denominator += weight
 
     return np.sqrt(numerator / denominator)
+
+def weighted_mean(toas):
+    numerator = 0
+    demoninator = 0
+    for x in range (0, len(toas)):
+        weight = 1.0/ (toas['err'][x]**2)
+        numerator += weight * toas['res'][x]
+        demoninator += weight
+
+    return (numerator/ demoninator)
 
 # new - 15/11/2022 - addinging an "align" flag which will allow separately generated residuals of the same pulsar to be lined up
 def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False, align=False):
@@ -42,7 +50,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     # prepare tempo2 call and files
     tempo2_call = "tempo2 -nofit -set START 40000 -set FINISH 99999 "\
                   "-output general2 -s \"{{bat}} {{post}} {{err}} "\
-                  "{{freq}} {{post_phase}} BLAH\n\" -nobs 10000000 -npsr 1 -f {} {}"
+                  "{{freq}} {{post_phase}} BLAH\n\" -nobs 1000000 -npsr 1 -f {} {}"
     awk_cmd = "awk '{print $1,$2,$3*1e-6,$4,$5}'"
     temp_file = os.path.basename(tim_file).replace('.tim', '_res.txt')
     comp_file = os.path.basename(tim_file).replace('.tim', '_res_comp.txt')
@@ -184,7 +192,18 @@ def rotate_toas(toas, phase_offset, verb=False):
     if verb:
         print("Rotation complete.")
 
-def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None, rebase=False):
+# determine outliers and remove from plot
+def clean_toas(input_toas,outlier_factor=3):
+    absvals = np.abs(input_toas['res'])
+    mad = np.median(absvals) # this may not be the strict MAD calculation - residuals may be previously offset with regard to mean rather than median
+    sigma = 1.4826 * mad
+    indices = np.argwhere(absvals<=outlier_factor*sigma)
+    new_toas = np.zeros(len(indices), dtype=input_toas.dtype)
+    for name in input_toas.dtype.names:
+        new_toas[name] = input_toas[name][indices].squeeze()
+    return(new_toas)
+
+def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None, rebase=False, outlier_factor=None):
 
     # new - optionally rebaseline the residuals before display to account for the new re-alignment procedures
     if rebase:
@@ -193,6 +212,12 @@ def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out
         # create toa copy to rotate
         toas = np.copy(toas)
         rotate_toas(toas, toa_mean, verb=True)
+
+    if outlier_factor is not None:
+        toas = clean_toas(toas,outlier_factor=outlier_factor)
+        weighted_mean_toa = weighted_mean(toas)
+        for k in range (0, len(toas)):
+            toas['res'][k]-=weighted_mean_toa
 
     if out_dir:
         out_file = os.path.join(out_dir, out_file)

@@ -582,6 +582,33 @@ def get_project_embargo(pid, client, url, token):
     else:
         return
 
+# ROLE   : Return an embargo date/time given a Processing ID
+# INPUTS : Integer, GraphQL client, String, String
+# RETURNS: Datetime object (success) | None (failure)
+def get_proc_embargo(proc_id, client, url, token):
+
+    # PSRDB setup
+    processings = Processings(client, url, token)
+
+    # Query for processing ID
+    response = processings.list(
+        proc_id,
+        None,
+        None,
+        None,
+        None
+    )
+    check_response(response)
+    proc_content = json.loads(response.content)
+    proc_data = proc_content['data']['processing']
+
+    # Check for valid processing ID
+    if not (proc_data == None):
+        embargoEnd = proc_data['embargoEnd']
+        return pd.to_datetime(embargoEnd)
+    else:
+        return
+
 # ROLE   : Return the job state of a given Processing ID
 # INPUTS : Integer, GraphQL client, String, String
 # RETURNS: JSON object (success) | None (failure)
@@ -828,9 +855,9 @@ def create_launch(pipe_id, parent_id, pulsar_id, client, url, token):
 
 # ROLE   : Creates a Processing entry with the specified parameters.
 #        : If a matching entry exists, that is returned instead.
-# INPUTS : Integer, Integer, Integer, String, GraphQL client, String, String, Logger object
+# INPUTS : Integer, Integer, Integer, String, Boolean, GraphQL client, String, String, Logger object
 # RETURNS: Integer (success) | None (failure)
-def create_processing(obs_id, pipe_id, parent_id, location, client, url, token, logger):
+def create_processing(obs_id, pipe_id, parent_id, location, results_overwrite, client, url, token, logger):
 
     # PSRDB setup
     pipelines = Pipelines(client, url, token)
@@ -870,6 +897,11 @@ def create_processing(obs_id, pipe_id, parent_id, location, client, url, token, 
         logger.info("Found existing entry in 'processings' matching launch parameters, ID = {0}".format(proc_id))
         logger.info("Updating to default starting parameters")
         retval = int(proc_id)
+
+        # check for results overwrite
+        if not (results_overwrite):
+            results = None
+
         update_id = update_processing(
             proc_id,
             obs_id,
@@ -951,7 +983,7 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
     while not (success):
 
         if (counter == SIMUL_WRITE_CHECKS):
-            raise Exception("Stalement detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
+            raise Exception("Stalemate detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
 
         counter = counter + 1
 
@@ -1172,7 +1204,7 @@ def create_template(psrname, template, cparams, client, logger):
     while not (success):
 
         if (counter == SIMUL_WRITE_CHECKS):
-            raise Exception("Stalement detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
+            raise Exception("Stalemate detected in processing ID {0}: unable to modify PSRDB due to conflict with simulataneous job. Please relaunch this job." % (cparams["db_proc_id"]))
 
         counter = counter + 1
 

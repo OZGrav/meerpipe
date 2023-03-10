@@ -23,6 +23,7 @@ import sys
 import subprocess
 import shlex
 import argparse
+from argparse import RawTextHelpFormatter
 import os.path
 import numpy as np
 import logging
@@ -52,7 +53,7 @@ from db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_fol
 PTUSE = 1
 
 #Argument parsing
-parser = argparse.ArgumentParser(description="Run MeerPipe")
+parser = argparse.ArgumentParser(description="Run MeerPipe", formatter_class=RawTextHelpFormatter)
 parser.add_argument("-cfile", dest="configfile", help="Path to the configuration file")
 parser.add_argument("-dirname", dest="dirname", help="Process a specified observation")
 parser.add_argument("-utc", dest="utc", help="Process a particular UTC. Should be in conjunction with a pulsar name")
@@ -61,6 +62,7 @@ parser.add_argument("-slurm", dest="slurm", help="Processes using Slurm",action=
 parser.add_argument("-pid",dest="pid",help="Process pulsars as PID (Ignores original PID)")
 parser.add_argument("-forceram", dest="forceram", help="Force RAM to this value (GB). Automatic allocation is ignored")
 parser.add_argument("-forcetime", dest="forcetime", type=str, help="Force runtime to this value (HH:MM:SS). Automatic allocation is ignored")
+parser.add_argument("-images", dest="images", help="Rebuild the specified pipeline images only - do not reprocess the data itself. This will override the config 'overwrite' flag.\nOptions:\n'ALL' - reprocess all images.\n'TOAs' - reprocess only the TOA images.", default=None)
 parser.add_argument("-verbose", dest="verbose", help="Enable verbose terminal logging",action="store_true")
 parser.add_argument("-softpath", help="Change software path", default="/fred/oz005/meerpipe/")
 
@@ -157,6 +159,20 @@ if (args.db_flag):
     config_params["db_flag"] = True
 else:
     config_params["db_flag"] = False
+
+# configure image options
+if (args.images):
+    config_params["image_flag"] = True
+    logger.info("Detected an images-only reprocessing.")
+
+    if (args.images == "ALL" or args.images == "TOAs"):
+        config_params["image_type"] = args.images
+        logger.info("Image reprocessing setting  = {}".format(config_params["image_type"]))
+    else:
+        raise Exception("Invalid image reprocessing setting ({}). Please check input and try again".format(args.images))
+
+else:
+    config_params["image_flag"] = False
 
 if toggle:
 
@@ -271,11 +287,18 @@ if toggle:
                 logger.info("Found parent_id {1} from  matching entry in 'foldings' - ID = {0}".format(fold_id, parent_id))
 
             # get or create processing entry
+            # NEW - 27/02/2023 - don't overwrite results if image-only run
+            if (config_params["image_flag"]):
+                res_ovr = False
+            else:
+                res_ovr = True
+
             proc_id = create_processing(
                 obs_id,
                 args.db_pipe,
                 parent_id,
                 location,
+                res_ovr,
                 db_client,
                 db_url,
                 db_token,
@@ -305,7 +328,13 @@ if toggle:
             embargo_end = utc_date2psrdb(utc_normal2date(obs_utc) + embargo_period)
             job_state = job_state_code(0)
             job_output = json.loads('{}')
-            results = json.loads('{}')
+
+            if (config_params["image_flag"]):
+                # if reprocessing only the images, do not overwrite the results field from the previous run
+                logger.info("Images-only run - not resetting JSON results field of processing {}".format(proc_id))
+                results = None
+            else:
+                results = json.loads('{}')
 
             # now update the proc entry with the new information
             update_id = update_processing(
@@ -358,7 +387,12 @@ if toggle:
             with open(os.path.join(output_dir,str(job_name)),'w') as job_file:
                 job_file.write("#!/bin/bash \n")
                 job_file.write("#SBATCH --job-name={0}_{1} \n".format(psrnames[obs_num],obs_num))
-                job_file.write("#SBATCH --output={0}meerpipe_out_{1}_{2} \n".format(str(output_dir),psrnames[obs_num],obs_num))
+
+                outlog_str = "{0}meerpipe_out_{1}_{2}".format(str(output_dir),psrnames[obs_num],obs_num)
+                if (config_params["image_flag"]):
+                    outlog_str = "{0}_images".format(outlog_str)
+
+                job_file.write("#SBATCH --output={0} \n".format(outlog_str))
                 job_file.write("#SBATCH --ntasks=1 \n")
                 job_file.write("#SBATCH --mem={0} \n".format(required_ram))
                 job_file.write("#SBATCH --time={0} \n".format(timestring))
@@ -473,50 +507,56 @@ if toggle:
             crash = False
 
             try:
-                #Add the archive files per observation directory into a single file
-                added_archives = add_archives(archive_list[obs_num],output_dir,config_params,psrnames[obs_num],logger)
-                logger.info("PIPE - Added archive: {0}".format(added_archives))
+
+                # separate the code to be ignored if we want images only
+                if not (config_params["image_flag"]):
+
+                    #Add the archive files per observation directory into a single file
+                    added_archives = add_archives(archive_list[obs_num],output_dir,config_params,psrnames[obs_num],logger)
+                    logger.info("PIPE - Added archive: {0}".format(added_archives))
  
-                if not config_params["fluxcal"]:
-                    #Calibration
-                    calibrated_archives = calibrate_data(added_archives,output_dir,config_params,logger)
-                    logger.info("PIPE - Calibrated archives: {0}".format(calibrated_archives))
+                    if not config_params["fluxcal"]:
+                        #Calibration
+                        calibrated_archives = calibrate_data(added_archives,output_dir,config_params,logger)
+                        logger.info("PIPE - Calibrated archives: {0}".format(calibrated_archives))
           
+                    if not config_params["fluxcal"]:
+                        #RFI zapping using coastguard on the calibrated archives
+                        cleaned_archives = mitigate_rfi(calibrated_archives,output_dir,config_params,psrnames[obs_num],logger)
+                        logger.info("PIPE - Cleaned archives: {0}".format(cleaned_archives))
+                    elif config_params["fluxcal"]:
+                        #RFI cleaning the added archives
+                        cleaned_archives = mitigate_rfi(added_archives,output_dir,config_params,psrnames[obs_num],logger)
+                        logger.info("PIPE - Cleaned archives: {0}".format(cleaned_archives))
+
+                    if not config_params["fluxcal"]:
+                        #Checking flags and creating appropriate data products
+                        processed_archives = decimate_data(cleaned_archives,output_dir,config_params,logger)
+                        #logger.info("Processed archives {0}".format(processed_archives))
+                        logger.info("PIPE - Data decimation complete.")
+
+                        #Generating dynamic spectra from calibrated archives
+                        dynamic_spectra(output_dir,config_params,psrnames[obs_num],logger)
+                        logger.info("PIPE - Dynamic spectra complete.")
+
+                        #Flux calibrating the decimated data products
+                        fluxcalibrate(output_dir,config_params,psrnames[obs_num],logger)
+                        logger.info("PIPE - Flux calibration complete.")
+
+                        #Performing a clean up
+                        cleanup(output_dir, config_params, psrnames[obs_num], logger)
+                        logger.info("PIPE - First-stage cleanup complete.")
+
+                        #Forming ToAs from the processed archives
+                        generate_toas(output_dir,config_params,psrnames[obs_num],logger)
+                        logger.info("PIPE - TOA generation complete.")
+
+                        #Generating summary file
+                        generate_summary(output_dir,config_params,psrnames[obs_num],logger)
+                        logger.info("PIPE - Summary generation complete.")
+
+                # code to be run in all cases
                 if not config_params["fluxcal"]:
-                    #RFI zapping using coastguard on the calibrated archives
-                    cleaned_archives = mitigate_rfi(calibrated_archives,output_dir,config_params,psrnames[obs_num],logger)
-                    logger.info("PIPE - Cleaned archives: {0}".format(cleaned_archives))
-                elif config_params["fluxcal"]:
-                    #RFI cleaning the added archives
-                    cleaned_archives = mitigate_rfi(added_archives,output_dir,config_params,psrnames[obs_num],logger)
-                    logger.info("PIPE - Cleaned archives: {0}".format(cleaned_archives))
-
-                if not config_params["fluxcal"]:
-                    #Checking flags and creating appropriate data products
-                    processed_archives = decimate_data(cleaned_archives,output_dir,config_params,logger)
-                    #logger.info("Processed archives {0}".format(processed_archives))
-                    logger.info("PIPE - Data decimation complete.")
-
-                    #Generating dynamic spectra from calibrated archives
-                    dynamic_spectra(output_dir,config_params,psrnames[obs_num],logger)
-                    logger.info("PIPE - Dynamic spectra complete.")
-
-                    #Flux calibrating the decimated data products
-                    fluxcalibrate(output_dir,config_params,psrnames[obs_num],logger)
-                    logger.info("PIPE - Flux calibration complete.")
-
-                    #Performing a clean up
-                    cleanup(output_dir, config_params, psrnames[obs_num], logger)
-                    logger.info("PIPE - First-stage cleanup complete.")
-
-                    #Forming ToAs from the processed archives
-                    generate_toas(output_dir,config_params,psrnames[obs_num],logger)
-                    logger.info("PIPE - TOA generation complete.")
-
-                    #Generating summary file
-                    generate_summary(output_dir,config_params,psrnames[obs_num],logger)
-                    logger.info("PIPE - Summary generation complete.")
-
                     # Produce images
                     generate_images(output_dir,config_params,psrnames[obs_num],logger)
                     logger.info("PIPE - Image generation complete.")
