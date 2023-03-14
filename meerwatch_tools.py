@@ -50,7 +50,8 @@ def weighted_mean(toas):
 
     return (numerator/ demoninator)
 
-def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False):
+# new - 15/11/2022 - addinging an "align" flag which will allow separately generated residuals of the same pulsar to be lined up
+def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False, align=False):
 
     # WARNING - The precise format of the output residual file is critical to the
     # correct operation of the Data Portal (pulsars.org.au). Changes to this format
@@ -58,10 +59,15 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
     # result in unexpected crashes. Please liaise on any changes to the format/storage
     # of the residual files with the Data Portal maintenance team.
 
+    if verb:
+        print ("Generating residuals from provided files {} and {}...".format(par_file, tim_file))
+
+    # prepare tempo2 call and files
     tempo2_call = "tempo2 -nofit -set START 40000 -set FINISH 99999 "\
                   "-output general2 -s \"{{bat}} {{post}} {{err}} "\
                   "{{freq}} {{post_phase}} BLAH\n\" -nobs 1000000 -npsr 1 -f {} {}"
     awk_cmd = "awk '{print $1,$2,$3*1e-6,$4,$5}'"
+
     temp_file = os.path.basename(tim_file).replace('.tim', '.delme')
     res_file = os.path.basename(tim_file).replace('.tim', '_res.txt')
     comp_file = os.path.basename(tim_file).replace('.tim', '_res_comp.txt')
@@ -72,6 +78,35 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
     # if a select file is given, include it
     if sel_file is not None:
         tempo2_call += " -select {}".format(sel_file)
+
+    # if phase aligning the residuals, add the fake TOA to a modified tim file
+    if (align):
+
+        if verb:
+            print("TOA alignment requested.")
+
+        fake_str = "ALIGNFAKE"
+        fake_toa = "{} 1284.0 57754.0 10 meerkat\n".format(fake_str)
+        newtim_file = "{0}.{1}".format(tim_file, fake_str)
+
+        # open the files and modify the contents, inserting fake TOA as last entry
+        tim_fh = open(tim_file, 'r')
+        newtim_fh = open(newtim_file, 'w')
+        orig_toas = tim_fh.readlines()
+        tim_fh.close()
+
+        # copy contents
+        for line in orig_toas:
+            newtim_fh.write(line)
+        # add fake TOA
+        newtim_fh.write(fake_toa)
+        newtim_fh.close()
+
+        # reset variables for later tempo2 call
+        tim_file = newtim_file
+
+        if verb:
+            print("Created temporary tim file {}".format(tim_file))
 
     # call tempo2 to produce residuals that can be read in
     with open(temp_file, 'w') as f:
@@ -86,8 +121,17 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
         p3 = sproc.Popen(shplit(awk_cmd), stdin=sproc.PIPE, stdout=f)
         p3.communicate(input=p2_data)
 
+    f.close()
+
     if verb:
         print("Finished running tempo2")
+
+    # cleanup temporary tim file if necessary
+    if (align):
+        if (fake_str in tim_file):
+            os.remove(tim_file)
+            if verb:
+                print("Deleted temporary tim file {}".format(tim_file))
 
     # define data formats of products to be handled
     mjd_f = ('mjd','f16')
@@ -101,8 +145,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
 
     # load in the toa residuals and cleanup
     toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3, 4), dtype=[mjd_f, res_f, err_f, freq_f, res_phase_f])
-    #os.remove(temp_file)
-
+    os.remove(temp_file)
     if verb:
         print ("Loaded ToAs from file")
 
@@ -115,7 +158,6 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
 
     # prepare binary phase if required
     bflag = False
-    
     try:
         pars = read_par(par_file)
     except:
@@ -139,11 +181,46 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
         for y in x.dtype.names:
             toas_exp[y] = x[y]
 
-    # write out
+    # if alignment requested, then identify the offset of the fake residual, rotate by that amount,
+    # then delete the fake residual and re-write the file
+    if (align):
+
+        # check the size of the toas and handle appropriately
+        if toas.size == 1:
+        
+            # fake residual is the only residual - abort
+            toas = np.array([])
+            if verb:
+                print ("Fake alignment residual is the only residual found - aborting rotation and writing blank residuals!")
+
+        else:
+
+            if verb:
+                print("Rotating residuals to account for TOA alignment")
+
+            # get the offset of the fake TOA - this will be the last in the list
+            fake_index = toas.size - 1
+            fake_phase_offset = toas[fake_index][res_phase_f[0]]
+
+            # rotate the real residuals
+            rotate_toas(toas, fake_phase_offset, verb=True)
+
+            # delete the fake residual
+            toas = np.delete(toas, fake_index, 0)
+
+            if verb:
+                print("Rotation complete.")
+
+
+    # write out residual files
 
     if len(toas_exp) == 0:
         if verb:
             print("No ToAs from tempo2 for {}".format(tim_file))
+        # echo blank residual files
+        np.savetxt(res_file, toas_exp)
+        np.savetxt(res_file, toas_exp)
+
     else:
         if verb:
             print ("Writing out {} residuals to disk...".format(len(toas_exp)))
@@ -177,6 +254,32 @@ def calc_err_phase(res, err, res_phase):
 
     return (res_phase / res) * err
 
+# new - rotate contents of an array per the specified phase offset
+# modifies the copy of the toas provided - no need to return
+def rotate_toas(toas, phase_offset, verb=False):
+
+    if verb:
+        print("Rotating by phase {}.".format(phase_offset))
+
+    # scroll through entries and modify
+    for x in range (0, toas.size):
+
+        # subtract out the phase offset of the fake toa and then modulo it back to within range
+        new_res_phase = toas[x]['res_phase'] - phase_offset
+        if (new_res_phase > 0.5):
+            new_res_phase = new_res_phase - 1.0
+        elif (new_res_phase <= -0.5):
+            new_res_phase = new_res_phase + 1.0
+
+        # now redo the time offset
+        new_res = (new_res_phase / toas[x]['res_phase']) * toas[x]['res']
+
+        # reset the toa entry
+        toas[x]['res_phase'] = new_res_phase
+        toas[x]['res'] = new_res
+
+    if verb:
+        print("Rotation complete.")
 
 # determine outliers and remove from plot
 def clean_toas(input_toas,outlier_factor=3):
@@ -189,8 +292,15 @@ def clean_toas(input_toas,outlier_factor=3):
         new_toas[name] = input_toas[name][indices].squeeze()
     return(new_toas)
 
-def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None,
-                      outlier_factor=None):
+def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None, rebase=False, outlier_factor=None):
+
+    # new - optionally rebaseline the residuals before display to account for the new re-alignment procedures
+    if rebase:
+        toa_mean = np.mean(toas['res_phase'])
+
+        # create toa copy to rotate
+        toas = np.copy(toas)
+        rotate_toas(toas, toa_mean, verb=True)
 
     if outlier_factor is not None:
         toas = clean_toas(toas,outlier_factor=outlier_factor)
