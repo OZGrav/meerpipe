@@ -394,6 +394,13 @@ def get_outputinfo(cparams,logger):
 
                         # maximum cap of 86399 seconds removed
 
+                        # new - image only processing requires less time
+                        # this will need to be adjusted
+                        # but as a first guess...
+                        if cparams["image_flag"]:
+                            if (cparams["image_type"] == "TOAs"):
+                                reqtime = reqtime / 4.0
+
                         required_time_list.append(int(reqtime))
 
          
