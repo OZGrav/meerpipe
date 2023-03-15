@@ -84,7 +84,7 @@ def get_binphase(mjds, pars):
     OM = get_omega(pars, U)
 
     # normalise U
-    U =np.fmod(U, 2*np.pi)
+    U = np.fmod(U, 2*np.pi)
 
     return np.fmod(U + OM + 2*np.pi, 2*np.pi)/(2*np.pi)
 
@@ -204,6 +204,8 @@ def get_mean_anomaly(mjds, pars):
 
     # determine which type of orbital period encoding we're dealing with
     if 'PB' in pars.keys():
+
+        PB = pars['PB']
 
         # normal approach
         if 'PBDOT' in pars.keys():

@@ -20,7 +20,7 @@ from matplotlib import colors, cm
 from astropy.time import Time
 
 # Custom imports
-from binary_tools import is_binary, get_binphase
+from binary_tools import is_binary, get_binphase, read_par
 
 # Constants
 DAYPERYEAR = 365.25
@@ -186,30 +186,33 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     if (align):
 
         # check the size of the toas and handle appropriately
-        if toas.size == 1:
+        if toas_exp.size == 1:
         
             # fake residual is the only residual - abort
-            toas = np.array([])
+            toas_exp = np.array([])
             if verb:
                 print ("Fake alignment residual is the only residual found - aborting rotation and writing blank residuals!")
 
         else:
 
             if verb:
-                print("Rotating residuals to account for TOA alignment")
+                print("Rotating residuals to account for fake TOA alignment")
 
             # get the offset of the fake TOA - this will be the last in the list
-            fake_index = toas.size - 1
-            fake_phase_offset = toas[fake_index][res_phase_f[0]]
+            fake_index = toas_exp.size - 1
+            fake_phase_offset = toas_exp[fake_index][res_phase_f[0]]
 
             # rotate the real residuals
-            rotate_toas(toas, fake_phase_offset, verb=True)
+            rotate_toas(toas_exp, fake_phase_offset, verb=True)
 
             # delete the fake residual
-            toas = np.delete(toas, fake_index, 0)
+            if verb:
+                print ("Fake TOA = {}".format(toas_exp[fake_index]))
+
+            toas_exp = np.delete(toas_exp, fake_index, 0)
 
             if verb:
-                print("Rotation complete.")
+                print ("Fake TOA deleted.")
 
 
     # write out residual files
@@ -296,6 +299,8 @@ def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out
 
     # new - optionally rebaseline the residuals before display to account for the new re-alignment procedures
     if rebase:
+        if verb:
+            print ("Rotating TOAs as part of rebaselining for plot creation.")
         toa_mean = np.mean(toas['res_phase'])
 
         # create toa copy to rotate
