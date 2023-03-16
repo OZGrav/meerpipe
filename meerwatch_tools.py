@@ -86,7 +86,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
             print("TOA alignment requested.")
 
         fake_str = "ALIGNFAKE"
-        fake_toa = "{} 1284.0 57754.0 10 meerkat\n".format(fake_str)
+        fake_toa = "{} 1284.0 57754.0 10 meerkat -snr 1.23\n".format(fake_str)
         newtim_file = "{0}.{1}".format(tim_file, fake_str)
 
         # open the files and modify the contents, inserting fake TOA as last entry
@@ -126,6 +126,23 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     if verb:
         print("Finished running tempo2")
 
+    # extract SNR values before possible deletion of the tim file
+    with open(tim_file, 'r') as g:
+
+        if verb:
+            print ("Extracting SNR values from tim file.")
+
+        # run series of command line functions to extract SNR values
+        p4 = sproc.Popen(shplit("grep 'snr' {}".format(tim_file)), stdout=sproc.PIPE)
+        p4_data = p4.communicate()[0]
+        p5 = sproc.Popen(shplit("awk -F'-snr' '{print $2}'"), stdin=sproc.PIPE, stdout=sproc.PIPE)
+        p5_data = p5.communicate(input=p4_data)[0]
+        p6 = sproc.Popen(shplit("awk -F' ' '{print $1}'"), stdin=sproc.PIPE, stdout=sproc.PIPE)
+        p6_data = p6.communicate(input=p5_data)[0]
+        snr_data = np.array(p6_data.split()).astype(np.float)
+
+    g.close()
+
     # cleanup temporary tim file if necessary
     if (align):
         if (fake_str in tim_file):
@@ -142,10 +159,11 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     err_phase_f = ('err_phase', 'f4')
     freq_f = ('freq', 'f8')
     binphase_f = ('binphase', 'f8')
+    snr_f = ('snr', 'f4')
 
     # load in the toa residuals and cleanup
     toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3, 4), dtype=[mjd_f, res_f, err_f, freq_f, res_phase_f])
-    os.remove(temp_file)
+    #os.remove(temp_file)
     if verb:
         print ("Loaded ToAs from file")
 
@@ -155,6 +173,14 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
 
     phase_errors = np.zeros(len(toas), dtype=[err_phase_f])
     phase_errors[err_phase_f[0]] = calc_err_phase(toas[res_f[0]], toas[err_f[0]], toas[res_phase_f[0]])
+
+    snrs = np.zeros(len(toas), dtype=[snr_f])
+    print ("About to copy SNR data")
+    print ("{} {}".format(len(snr_data), len(toas)))
+    print (snr_data)
+    print (toas)
+    snrs[snr_f[0]] = snr_data
+    print ("SNR data copied")
 
     # prepare binary phase if required
     bflag = False
@@ -170,8 +196,8 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
             binphases[binphase_f[0]] = get_binphase(toas[mjd_f[0]],pars)
 
     # concatenate data in the correct order
-    dtype_list = [mjd_f, doy_f, res_f, res_phase_f, err_f, err_phase_f, freq_f]
-    arr_list = [toas, doys, phase_errors]
+    dtype_list = [mjd_f, doy_f, res_f, res_phase_f, err_f, err_phase_f, freq_f, snr_f]
+    arr_list = [toas, doys, phase_errors, snrs]
     if (bflag):
         dtype_list.append(binphase_f)
         arr_list.append(binphases)
@@ -227,8 +253,8 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     else:
         if verb:
             print ("Writing out {} residuals to disk...".format(len(toas_exp)))
-        raw_str="%s\t%s\t%s\t%s\t%s\t%s\t%s"
-        comp_str="%12.6f\t%9.6f\t%.4e\t%.4e\t%.2e\t%.2e\t%9.4f"
+        raw_str="%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s"
+        comp_str="%12.6f\t%9.6f\t%.4e\t%.4e\t%.2e\t%.2e\t%9.4f\t%.2f"
         if (bflag):
             raw_str = raw_str + "\t%s"
             comp_str = comp_str + "\t%.8e"
