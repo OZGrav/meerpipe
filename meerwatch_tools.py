@@ -65,7 +65,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     # prepare tempo2 call and files
     tempo2_call = "tempo2 -nofit -set START 40000 -set FINISH 99999 "\
                   "-output general2 -s \"{{bat}} {{post}} {{err}} "\
-                  "{{freq}} {{post_phase}} BLAH\n\" -nobs 1000000 -npsr 1 -f {} {}"
+                  "{{freq}} {{post_phase}} {{flags}} BLAH\n\" -nobs 1000000 -npsr 1 -f {} {}"
     awk_cmd = "awk '{print $1,$2,$3*1e-6,$4,$5}'"
 
     temp_file = os.path.basename(tim_file).replace('.tim', '.delme')
@@ -126,23 +126,6 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     if verb:
         print("Finished running tempo2")
 
-    # extract SNR values before possible deletion of the tim file
-    with open(tim_file, 'r') as g:
-
-        if verb:
-            print ("Extracting SNR values from tim file.")
-
-        # run series of command line functions to extract SNR values
-        p4 = sproc.Popen(shplit("grep 'snr' {}".format(tim_file)), stdout=sproc.PIPE)
-        p4_data = p4.communicate()[0]
-        p5 = sproc.Popen(shplit("awk -F'-snr' '{print $2}'"), stdin=sproc.PIPE, stdout=sproc.PIPE)
-        p5_data = p5.communicate(input=p4_data)[0]
-        p6 = sproc.Popen(shplit("awk -F' ' '{print $1}'"), stdin=sproc.PIPE, stdout=sproc.PIPE)
-        p6_data = p6.communicate(input=p5_data)[0]
-        snr_data = np.array(p6_data.split()).astype(np.float)
-
-    g.close()
-
     # cleanup temporary tim file if necessary
     if (align):
         if (fake_str in tim_file):
@@ -163,7 +146,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
 
     # load in the toa residuals and cleanup
     toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3, 4), dtype=[mjd_f, res_f, err_f, freq_f, res_phase_f])
-    #os.remove(temp_file)
+    os.remove(temp_file)
     if verb:
         print ("Loaded ToAs from file")
 
@@ -174,13 +157,18 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     phase_errors = np.zeros(len(toas), dtype=[err_phase_f])
     phase_errors[err_phase_f[0]] = calc_err_phase(toas[res_f[0]], toas[err_f[0]], toas[res_phase_f[0]])
 
+    # run series of command line functions to extract SNR values
+    print (p2_data)
+    p5 = sproc.Popen(shplit("awk -F'-snr' '{print $2}'"), stdin=sproc.PIPE, stdout=sproc.PIPE)
+    p5_data = p5.communicate(input=p2_data)[0]
+    print (p5_data)
+    p6 = sproc.Popen(shplit("awk -F' ' '{print $1}'"), stdin=sproc.PIPE, stdout=sproc.PIPE)
+    p6_data = p6.communicate(input=p5_data)[0]
+    print (p6_data)
+    snr_data = np.array(p6_data.split()).astype(np.float)
+
     snrs = np.zeros(len(toas), dtype=[snr_f])
-    print ("About to copy SNR data")
-    print ("{} {}".format(len(snr_data), len(toas)))
-    print (snr_data)
-    print (toas)
     snrs[snr_f[0]] = snr_data
-    print ("SNR data copied")
 
     # prepare binary phase if required
     bflag = False
