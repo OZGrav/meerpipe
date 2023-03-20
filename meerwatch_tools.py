@@ -86,7 +86,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
             print("TOA alignment requested.")
 
         fake_str = "ALIGNFAKE"
-        fake_toa = "{} 1284.0 57754.0 10 meerkat -snr 1.23\n".format(fake_str)
+        fake_toa = "{} 1284.0 57754.0 10 meerkat -snr 1000\n".format(fake_str)
         newtim_file = "{0}.{1}".format(tim_file, fake_str)
 
         # open the files and modify the contents, inserting fake TOA as last entry
