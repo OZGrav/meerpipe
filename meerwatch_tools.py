@@ -155,11 +155,15 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
         print ("Loaded ToAs from file")
 
     # convert data
-    doys = np.zeros(len(toas), dtype=[doy_f])
+    doys = np.zeros(toas.size, dtype=[doy_f])
     doys[doy_f[0]] = calc_doy(toas[mjd_f[0]])
+    if verb:
+        print ("DOY conversion complete.")
 
-    phase_errors = np.zeros(len(toas), dtype=[err_phase_f])
+    phase_errors = np.zeros(toas.size, dtype=[err_phase_f])
     phase_errors[err_phase_f[0]] = calc_err_phase(toas[res_f[0]], toas[err_f[0]], toas[res_phase_f[0]])
+    if verb:
+        print ("Phase conversion complete.")
 
     # run series of command line functions to extract SNR values
     p5 = sproc.Popen(shplit("awk -F'-snr' '{print $2}'"), stdin=sproc.PIPE, stdout=sproc.PIPE)
@@ -168,8 +172,10 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     p6_data = p6.communicate(input=p5_data)[0]
     snr_data = np.array(p6_data.split()).astype(np.float)
 
-    snrs = np.zeros(len(toas), dtype=[snr_f])
+    snrs = np.zeros(toas.size, dtype=[snr_f])
     snrs[snr_f[0]] = snr_data
+    if verb:
+        print ("S/N extraction complete.")
 
     # prepare binary phase if required
     bflag = False
@@ -179,10 +185,17 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
         print ("Unable to parse parfile ({})".format(par_file))
     else:
         if (is_binary(pars)):
-            print ("Binary pulsar detected - calculating binary phases...")
+            if verb:
+                print ("Binary pulsar detected - calculating binary phases...")
             bflag = True
-            binphases = np.zeros(len(toas), dtype=[binphase_f])
+            binphases = np.zeros(toas.size, dtype=[binphase_f])
             binphases[binphase_f[0]] = get_binphase(toas[mjd_f[0]],pars)
+
+            if verb:
+                print ("Binary phase calculation complete.")
+        else:
+            if verb:
+                print ("No binary parameters detected - skipping binary phase calculation.")
 
     # concatenate data in the correct order
     dtype_list = [mjd_f, doy_f, res_f, res_phase_f, err_f, err_phase_f, freq_f, snr_f]
@@ -232,7 +245,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
 
     # write out residual files
 
-    if len(toas_exp) == 0:
+    if toas_exp.size == 0:
         if verb:
             print("No ToAs from tempo2 for {}".format(tim_file))
         # echo blank residual files
@@ -241,7 +254,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
 
     else:
         if verb:
-            print ("Writing out {} residuals to disk...".format(len(toas_exp)))
+            print ("Writing out {} residuals to disk...".format(toas_exp.size))
         raw_str="%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s"
         comp_str="%12.6f\t%9.6f\t%.4e\t%.4e\t%.2e\t%.2e\t%9.4f\t%.2f"
         if (bflag):
