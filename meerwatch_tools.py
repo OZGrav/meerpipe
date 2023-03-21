@@ -89,17 +89,21 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
         fake_toa = "{} 1284.0 57754.0 10 meerkat -snr 1000\n".format(fake_str)
         newtim_file = "{0}.{1}".format(tim_file, fake_str)
 
-        # open the files and modify the contents, inserting fake TOA as last entry
+        # open the files and modify the contents, inserting fake TOA as the first entry (MJD chosen to be before all MeerKAT data)
+        # use -snr flag to identify start of main TOAs
         tim_fh = open(tim_file, 'r')
         newtim_fh = open(newtim_file, 'w')
         orig_toas = tim_fh.readlines()
         tim_fh.close()
 
         # copy contents
+        body = False
         for line in orig_toas:
+            if not body and "-snr" in line:
+                # add fake TOA
+                newtim_fh.write(fake_toa)
+                body = True
             newtim_fh.write(line)
-        # add fake TOA
-        newtim_fh.write(fake_toa)
         newtim_fh.close()
 
         # reset variables for later tempo2 call
@@ -158,13 +162,10 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     phase_errors[err_phase_f[0]] = calc_err_phase(toas[res_f[0]], toas[err_f[0]], toas[res_phase_f[0]])
 
     # run series of command line functions to extract SNR values
-    print (p2_data)
     p5 = sproc.Popen(shplit("awk -F'-snr' '{print $2}'"), stdin=sproc.PIPE, stdout=sproc.PIPE)
     p5_data = p5.communicate(input=p2_data)[0]
-    print (p5_data)
     p6 = sproc.Popen(shplit("awk -F' ' '{print $1}'"), stdin=sproc.PIPE, stdout=sproc.PIPE)
     p6_data = p6.communicate(input=p5_data)[0]
-    print (p6_data)
     snr_data = np.array(p6_data.split()).astype(np.float)
 
     snrs = np.zeros(len(toas), dtype=[snr_f])
@@ -212,8 +213,8 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
             if verb:
                 print("Rotating residuals to account for fake TOA alignment")
 
-            # get the offset of the fake TOA - this will be the last in the list
-            fake_index = toas_exp.size - 1
+            # get the offset of the fake TOA - this will be the first in the list
+            fake_index = 0
             fake_phase_offset = toas_exp[fake_index][res_phase_f[0]]
 
             # rotate the real residuals
