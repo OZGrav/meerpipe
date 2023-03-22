@@ -2694,6 +2694,14 @@ def generate_images(output_dir, cparams, psrname, logger):
             else:
                 logger.info("TOA plot generation only currently enabled for L-Band observations.")
 
+            # now do DM measurement
+            logger.info("Initiating single-obs DM measurement (attached to TOA production)...")
+            dm_archive_name = "dm_toas.ar"
+            dm_archive_file = os.path.join(images_path, dm_archive_name)
+            nchan = 16
+
+            # KEEP EDITING THE CODE HERE!
+
         else:
             logger.error("Could not identify suitable file for image generation.")
             logger.error("Skipping generation of relevant images.")
@@ -2787,6 +2795,53 @@ def generate_images(output_dir, cparams, psrname, logger):
     logger.info("Image generation & logging complete.")
 
     return
+
+# builds the toas used for the measurement of DM specific to this observation
+def build_dm_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, cparams, psrname, nchan, logger):
+
+    # set up paths and filenames
+    toa_archive_ext = "temptoa.ar"
+    dlyfix_script = "/fred/oz005/users/mkeith/dlyfix/dlyfix"
+    toa_archive_file = os.path.join(toa_archive_path,toa_archive_name)
+
+    toa_nchan = int(nchan)
+
+    # verify correct relationship between requested nchan and file channel count
+    comm = "vap -c nchan {0}".format(clean_file)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+    ar_nchan = int(info[1].split()[1])
+
+    # reduce channel count until integer relationship is met
+    while (toa_nchan > 1):
+        if not (ar_nchan % int(toa_nchan) == 0):
+            toa_nchan -= 1
+
+    logger.info("Constructing full time-scrunched DM archive with nchan={0} - storing in {1}".format(toa_nchan, toa_archive_path))
+    comm = "pam -Tp --setnchn={0} -e {3} -u {1} {2}".format(toa_nchan, toa_archive_path, clean_file, toa_archive_ext)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    toa_archive_temp = proc.stdout.read().decode("utf-8").rstrip().split()[0]
+
+    # rename the file to desired name
+    logger.info("Renaming the archive to {0}".format(toa_archive_file))
+    comm = "mv -f {0} {1}".format(toa_archive_temp, toa_archive_file)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+
+    # correct the delays
+    logger.info("Applying delay corrections via {0}".format(dlyfix_script))
+    comm = "{0} -u {1} {2}".format(dlyfix_script, toa_archive_path, toa_archive_file)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+
+    # check if file creation was successful and return
+    return os.path.exists(toa_archive_file)
 
 # builds the toas used for the production of TOA image specific to this observation
 def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, cparams, psrname, logger):
