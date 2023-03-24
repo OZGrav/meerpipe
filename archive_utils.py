@@ -44,7 +44,7 @@ import json
 import requests
 
 #Meerwatch imports
-from meerwatch_tools import get_res_fromtim, plot_toas_fromarr
+from meerwatch_tools import get_res_fromtim, plot_toas_fromarr, get_dm_fromtim
 
 # PSRDB imports - assumes psrdb/latest module
 from util import ephemeris
@@ -2698,9 +2698,64 @@ def generate_images(output_dir, cparams, psrname, logger):
             logger.info("Initiating single-obs DM measurement (attached to TOA production)...")
             dm_archive_name = "dm_toas.ar"
             dm_archive_file = os.path.join(images_path, dm_archive_name)
-            nchan = 16
+            dm_nchan = 16
+            dm_result = None
 
-            # KEEP EDITING THE CODE HERE!
+            while (dm_result == None and dm_nchan >= 4 and (dm_nchan % 1 == 0)):
+
+                if (build_dm_toas(output_dir, toa_file, dm_archive_name, images_path, dm_nchan, logger)):
+
+                    # dm archive successfully created
+                    # send archive to dm measurement function
+                    dm_result = measure_dm(dm_archive_file, images_path, parfile, template, selfile, logger)
+
+                    # output will either be a JSON object or None
+                else:
+                    logger.error("Generation of {} channel DM archive was unsuccssful - dividing nchan by 2 and trying again.".format(dm_nchan))
+
+                dm_nchan = dm_nchan / 2
+
+            # loop complete - report
+            if (dm_result == None):
+                logger.info("DM fitting failed.")
+            else:
+                logger.info("DM fitting succesful.")
+
+            # cleanup
+            if (os.path.exists(dm_archive_file)):
+                os.remove(dm_archive_file)
+
+            # write results to PSRDB
+            if cparams["db_flag"]:
+
+                logger.info("PSRDB functionality activated - recording measured DM.")
+
+                # Create client
+                db_client = GraphQLClient(cparams["db_url"], False)
+
+                # recall results field and update
+                psrdb_results = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
+                logger.info("Recalled results of processing ID {0}".format(cparams["db_proc_id"]))
+                logger.info(psrdb_results)
+                psrdb_results['dm'] = dm_result
+                update_id = update_processing(
+                    cparams["db_proc_id"],
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    psrdb_results,
+                    db_client,
+                    cparams["db_url"],
+                    cparams["db_token"]
+                )
+                if (update_id != cparams["db_proc_id"]) or (update_id == None):
+                    logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_proc_id"]))
+                else:
+                    logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(cparams["db_proc_id"]))
 
         else:
             logger.error("Could not identify suitable file for image generation.")
@@ -2797,12 +2852,18 @@ def generate_images(output_dir, cparams, psrname, logger):
     return
 
 # builds the toas used for the measurement of DM specific to this observation
-def build_dm_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, cparams, psrname, nchan, logger):
+def build_dm_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, nchan, logger):
+
+    logger.info("Build DM Toas function entered...")
 
     # set up paths and filenames
     toa_archive_ext = "temptoa.ar"
     dlyfix_script = "/fred/oz005/users/mkeith/dlyfix/dlyfix"
     toa_archive_file = os.path.join(toa_archive_path,toa_archive_name)
+
+    # remove the DM archive if it already exists
+    if (os.path.exists(toa_archive_file)):
+        os.remove(toa_archive_file)
 
     toa_nchan = int(nchan)
 
@@ -2815,9 +2876,8 @@ def build_dm_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, cp
     ar_nchan = int(info[1].split()[1])
 
     # reduce channel count until integer relationship is met
-    while (toa_nchan > 1):
-        if not (ar_nchan % int(toa_nchan) == 0):
-            toa_nchan -= 1
+    while (toa_nchan > 1) and not (ar_nchan % int(toa_nchan) == 0):
+        toa_nchan -= 1
 
     logger.info("Constructing full time-scrunched DM archive with nchan={0} - storing in {1}".format(toa_nchan, toa_archive_path))
     comm = "pam -Tp --setnchn={0} -e {3} -u {1} {2}".format(toa_nchan, toa_archive_path, clean_file, toa_archive_ext)
@@ -2959,6 +3019,52 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
 
     # check if file creation was successful and return
     return os.path.exists(toa_archive_file)
+
+# create dm toas and return DM measurement
+def measure_dm(toa_archive, image_path, parfile, template, selfile, logger):
+
+    logger.info("Beginning DM measurement function...")
+
+    # set up paths, filenames and required parameters
+    timfile = os.path.join(image_path, "dm_toas.tim")
+    retval = None
+
+    # delete file if it already exists
+    if (os.path.exists(timfile)):
+        os.remove(timfile)
+
+    if not (template == None) and (os.path.exists(template)):
+
+        comm = "vap -c nchan {0}".format(toa_archive)
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+        toa_nchan = int(info[1].split()[1])
+
+        # check PORTRAIT toggle
+        portrait_str = get_portrait_toggle(template, toa_nchan, logger)
+
+        # create TOAs
+        comm = 'pat -jp {2} -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive, portrait_str)
+        args = shlex.split(comm)
+        f = open(timfile, "w")
+        subprocess.call(args, stdout=f)
+        f.close()
+        logger.info("DM TOA data generated and stored in {0}".format(timfile))
+
+        if not (parfile == None) and (os.path.exists(parfile)):
+
+            logger.info("Calling meerwatch_tools utility for measuring DM...")
+            retval = get_dm_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
+
+    if (retval == None):
+        logger.info("Unable to successfully measure DM with provided configuration.")
+
+    # cleanup
+    os.remove(timfile)
+
+    return retval
 
 # produce residual image for a single observation
 def generate_singleres_image(output_dir, toa_archive, image_name, image_path, parfile, template, selfile, cparams, psrname, logger):
