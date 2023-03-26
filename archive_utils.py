@@ -3062,7 +3062,8 @@ def measure_dm(toa_archive, image_path, parfile, template, selfile, logger):
         logger.info("Unable to successfully measure DM with provided configuration.")
 
     # cleanup
-    os.remove(timfile)
+    if (os.path.exists(timfile)):
+        os.remove(timfile)
 
     return retval
 

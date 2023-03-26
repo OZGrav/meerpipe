@@ -270,17 +270,17 @@ def get_dm_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False):
             # extract DM
             if "DM" in line and not "DMEPOCH" in line and not "DM_SERIES" in line:
                 vals = line.split()
-                dm = vals[1]
+                dm = float(vals[1])
                 if (len(vals) > 3):
-                    dm_err = vals[3]
+                    dm_err = float(vals[3])
                 else:
                     dm_err = None
 
             # extract fit scores
             if "TRES" in line:
-                tres = line.split()[1]
+                tres = float(line.split()[1])
             if "CHI2R" in line:
-                chi2 = line.split()[1]
+                chi2 = float(line.split()[1])
 
             # extract epoch data
             if "START" in line:
@@ -335,6 +335,7 @@ def get_dm_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False):
 
     # cleanup
     os.remove(dm_par_file)
-    os.remove(dm_fit_par_file)
+    if (os.path.exists(dm_fit_par_file)):
+        os.remove(dm_fit_par_file)
 
     return retval
