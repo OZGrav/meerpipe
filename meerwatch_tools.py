@@ -57,13 +57,17 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False)
     if sel_file is not None:
         tempo2_call += " -select {}".format(sel_file)
 
+    # prep crash prevention
+    cprep = "ulimit -c 0"
+
     # call tempo2 to produce residuals that can be read in
     with open(temp_file, 'w') as f:
         if verb:
             print("Running tempo2 command: {}".replace("\n", "\\n").format(tempo2_call.format(par_file, tim_file)))
 
         # re-writing to accommodate large PIPE sizes
-        p1 = sproc.Popen(shplit(tempo2_call.format(par_file, tim_file)), stdout=sproc.PIPE)
+        p1 = sproc.Popen("{}; {}".format(cprep, tempo2_call.format(par_file, tim_file)), stdout=sproc.PIPE, shell=True)
+        # NOTE - shell=True is a bad idea; fix this code as soon as the tempo2 crash problem is resolved
         p1_data = p1.communicate()[0]
         p2 = sproc.Popen(shplit("grep BLAH"), stdin=sproc.PIPE,stdout=sproc.PIPE)
         p2_data = p2.communicate(input=p1_data)[0]
@@ -248,10 +252,14 @@ def get_dm_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False):
     # add the tim file
     tempo2_call += " {}".format(tim_file)
 
+    # prep crash prevention
+    cprep = "ulimit -c 0"
+
     # run tempo2
     if verb:
         print ("Running DM call of tempo2.")
-    pt = sproc.Popen(shplit(tempo2_call), stdout=sproc.PIPE)
+    pt = sproc.Popen("{}; {}".format(cprep, tempo2_call), stdout=sproc.PIPE, shell=True)
+    # NOTE - shell=True is a bad idea; fix this code as soon as the tempo2 crash problem is resolved
     pt.wait()
 
     retval = None
