@@ -2737,7 +2737,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 psrdb_results = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
                 logger.info("Recalled results of processing ID {0}".format(cparams["db_proc_id"]))
                 logger.info(psrdb_results)
-                psrdb_results['dm'] = dm_result
+                psrdb_results['dm_info'] = dm_result
                 update_id = update_processing(
                     cparams["db_proc_id"],
                     None,
