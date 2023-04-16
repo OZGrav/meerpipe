@@ -311,7 +311,7 @@ def get_dm_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False):
 
         # check for valid DM
         if 'dm' in locals() and 'dm_err' in locals():
-            if not (dm_err == "inf" or dm_err == None):
+            if not (str(dm_err) == "inf" or dm_err == None):
 
                 # write output file
                 dm_fh = open(out_file, 'w')
@@ -326,7 +326,7 @@ def get_dm_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False):
                     print ("Output DM file {} written.".format(out_file))
 
                 # set return JSON string
-                retval = json.loads(json.dumps({"dm": dm, "dm_err": dm_err, "epoch": epoch, "chi2r": chi2, "tres": tres}))
+                retval = json.loads(json.dumps({"dm_val": dm, "dm_err": dm_err, "epoch": epoch, "chi2r": chi2, "tres": tres}))
                 if verb:
                     print ("Return JSON string formatted.")
 
