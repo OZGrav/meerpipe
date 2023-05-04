@@ -3423,3 +3423,63 @@ def folding_resync(cparams,logger):
         logger.info("Updated PSRDB entry in 'foldings' table, ID = {0}".format(cparams["db_fold_id"]))
 
     return
+
+# function to upload specified pulsar archive data products to PSRDB
+# WIP
+def upload_data_archives(output_dir, cparams, psrname, logger):
+
+    # Note - the functionality of this code is based on the renaming scheme performed by cleanup()
+    # Should these expected outputs change, the conditions of this code should be re-assessed
+
+    logger.info("Uploading decimated data products - Pipeline PID = {0}".format(cparams["pid"]))
+    # update - pid now to be included in the naming structure (type)
+    local_pid = cparams["pid"].lower()
+    files_to_store = []
+
+    # identify the decimated path
+    output_dir = str(output_dir)
+    decimated_path = os.path.join(output_dir,"decimated")
+
+    # select the required decimated products and structure for upload
+    decimated_archives = sorted(glob.glob(os.path.join(decimated_path, "*")))
+
+    for arch in decimated_archives:
+        
+        # isolate a single FTS archive in case of multiples
+        # choice is currently arbitrary
+        FTS_archives = []
+
+        if "FTS" in arch:
+            FTS_archives.append(arch)
+        
+    if (len(FTS_archives) > 0):
+        file_type = "{0}.{1}.{2}".format(local_pid, psrname, "FTS")
+        files_to_store.append({'filename': FTS_archives[0], 'type': file_type})   
+        logger.info("Identified {} for FTS upload.".format(FTS_archives[0]))
+    else:
+        logger.info("No FTS file identified for upload.")
+
+    # write all files to PSRDB
+    if (cparams["db_flag"]):
+
+        logger.info("PSRDB functionality activated - uploading specified data products to PSRDB")
+
+        # set up PSRDB functionality
+        db_client = GraphQLClient(cparams["db_url"], False)
+
+        # loop through the listed files and store
+        for entry in files_to_store:
+
+            if (os.path.exists(entry['filename'])):
+                logger.info("File {0} identified (type {1}) - recording to PSRDB.".format(entry['filename'], entry['type']))
+                create_pipelinefile(entry['filename'], entry['type'], cparams, db_client, logger)
+            else:
+                logger.error("File {0} not located (type {1}) - no output recorded to PSRDB.".format(entry['filename'], entry['type']))
+
+        logger.info("PSRDB file upload complete.")
+
+    else:
+
+        logger.info("PSRDB functionality not actived - not uploading specified data products.")
+
+    return
