@@ -12,23 +12,18 @@ __status__ = "Development"
 """
 
 # Import packages
-import os,sys
-import argparse
+import os
 import datetime
 import subprocess
 import shlex
 import json
-import time
 import pandas as pd
-import logging
-from util import header, ephemeris
 from util import time as util_time
 import getpass
 from astropy.time import Time as astrotime
 
 from tables import *
 from joins import *
-from graphql_client import GraphQLClient
 
 # Important paths
 PSRDB = "psrdb.py"
@@ -836,7 +831,7 @@ def create_launch(pipe_id, parent_id, pulsar_id, client, url, token):
 
     # check for existing launch entry
     retval = get_launch_id(pipe_id, parent_id, pulsar_id, client, url, token)
-    if not (retval == None):
+    if retval is not None:
         print ("Existing launch entry found matching PIPE = {0}, PARENT = {1}, PULSAR = {2}".format(pipe_id, parent_id, pulsar_id))
         print ("Skipping...")
     else:
@@ -1061,7 +1056,7 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
 
 # ROLE   : Creates a TOA entry linking a template, folding, ephemeris and processing.
 #        : If a matching entry exists, that is returned instead.
-# INPUTS : Integer, Integer, JSON object, Float, Float, String[1], Float, Boolean, 
+# INPUTS : Integer, Integer, JSON object, Float, Float, String[1], Float, Boolean,
 #          Dictionary, GraphQL client, Logger object
 # RETURNS: Integer (success) | Exception (failure)
 def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, client, logger):

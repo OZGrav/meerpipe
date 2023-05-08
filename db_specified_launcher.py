@@ -2,7 +2,7 @@
 """
 
 Python wrapper script to launch MeerPipe using PSRDB functionality
-Intention is to mimic the function of query_obs.py & reprocessing.py but in a single script 
+Intention is to mimic the function of query_obs.py & reprocessing.py but in a single script
 
 __author__ = "Andrew Cameron"
 __copyright__ = "Copyright (C) 2022 Andrew Cameron"
@@ -15,7 +15,6 @@ __status__ = "Development"
 """
 
 # Import packages
-import os,sys
 import argparse
 from argparse import RawTextHelpFormatter
 import datetime
@@ -25,36 +24,21 @@ import json
 import time
 import datetime
 
-# PSRDB imports
-from tables import *
-from joins import *
 from graphql_client import GraphQLClient
+
+# PSRDB imports
+from tables.launches import Launches
+from tables.pipelines import Pipelines
+from tables.processings import Processings
+from tables.pulsars import Pulsars
+from tables.pulsartargets import Pulsartargets
+from joins.folded_observations import FoldedObservations
 from db_utils import (utc_normal2psrdb, utc_psrdb2normal, utc_normal2date, utc_psrdb2date, pid_getofficial,
                       check_response, pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config,
                       check_pipeline, get_foldedobservation_obsid, get_job_output)
 
 # Important paths
 PSRDB = "psrdb.py"
-
-# Argument parsing
-parser = argparse.ArgumentParser(description="Launches specific observations to be processed by MeerPipe. Provide either a set of searchable parameters or a list of observations. If both inputs are provided, the provided search parameters will be used to filter the entries provided in the list.", formatter_class=RawTextHelpFormatter)
-parser.add_argument("-utc1", dest="utc1", help="Start UTC for PSRDB search - returns only observations after this UTC timestamp.", default=None)
-parser.add_argument("-utc2", dest="utc2", help="End UTC for PSRDB search - returns only observations before this UTC timestamp.", default=None)
-parser.add_argument("-psr", dest="pulsar", help="Pulsar name for PSRDB search - returns only observations with this pulsar name. If not provided, returns all pulsars.", default=None)
-parser.add_argument("-obs_pid", dest="pid", help="Project ID for PSRDB search - return only observations matching this Project ID. If not provided, returns all observations.", default=None)
-parser.add_argument("-list_out", dest="list_out", help="Output file name to write the list of observations submitted by this particular search. Does not work in secondary mode as it would simply duplicate the input list.")
-parser.add_argument("-list_in", dest="list_in", help="List of observations to process, given in standard format. These will be crossmatched against PSRDB before job submission. List format must be:\n* Column 1 - Pulsar name\n* Column 2 - UTC\n* Column 3 - Observation PID\nTrailing columns may be left out if needed, but at a minimum the pulsar name must be provided.")
-parser.add_argument("-runas", dest="runas", help="Specify an override pipeline to use in processing the observations. \nOptions:\n'PIPE' - launch each observation through multiple pipelines as defined by the 'launches' PSRDB table (default).\n'OBS' - use the observation PID to define pipeline selection.\n<int> - specify a specific PSRDB pipeline ID.\n<pid> - specify a MeerTIME project code (e.g. 'PTA', 'RelBin'), which will launch a default pipeline.", default="PIPE")
-parser.add_argument("-slurm", dest="slurm", help="Processes all jobs using the OzStar Slurm queue.",action="store_true")
-parser.add_argument("-unprocessed", dest="unprocessed", help="Launch only those observations which have not yet been processed by the specified pipelines.", action="store_true")
-parser.add_argument("-images", dest="images", help="Rebuild the specified pipeline images only - do not reprocess the data itself. This will override the config 'overwrite' flag.\nOptions:\n'ALL' - reprocess all images.\n'TOAs' - reprocess only the TOA images.", default=None)
-parser.add_argument("-job_limit", dest="joblimit", type=int, help="Max number of jobs to accept to the queue at any given time - script will wait and monitor for queue to reduce below this number before sending more.", default=1000)
-parser.add_argument("-forceram", dest="forceram", type=float, help="Specify RAM to use for job execution (GB). Recommended only for single-job launches.")
-parser.add_argument("-forcetime", dest="forcetime", type=str, help="Specify time to use for job execution (HH:MM:SS). Recommended only for single-job launches.")
-parser.add_argument("-errorlog", dest="errorlog", type=str, help="File to store information on any failed launches for later debugging.", default=None)
-parser.add_argument("-testrun", dest="testrun", help="Toggles test mode - jobs will not actually be launched.", action="store_true")
-parser.add_argument("-obs_id", dest="obsid", type=int, help="Specify a single PSRDB observation ID to be processed. Observation must also be either specified via UTC range or list input. Typically only for use by real-time launch script.")
-args = parser.parse_args()
 
 
 # -- FUNCTIONS --
@@ -481,188 +465,209 @@ def array_launcher(arr, ag, client, url, token):
 
     return
 
-# -- MAIN PROGRAM --
 
-# PSRDB setup
-env_query = 'echo $PSRDB_TOKEN'
-db_token = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
-env_query = 'echo $PSRDB_URL'
-db_url = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
-db_client = GraphQLClient(db_url, False)
+if __name__ == "__main__":
+    # -- MAIN PROGRAM --
+    # Argument parsing
+    parser = argparse.ArgumentParser(description="Launches specific observations to be processed by MeerPipe. Provide either a set of searchable parameters or a list of observations. If both inputs are provided, the provided search parameters will be used to filter the entries provided in the list.", formatter_class=RawTextHelpFormatter)
+    parser.add_argument("-utc1", dest="utc1", help="Start UTC for PSRDB search - returns only observations after this UTC timestamp.", default=None)
+    parser.add_argument("-utc2", dest="utc2", help="End UTC for PSRDB search - returns only observations before this UTC timestamp.", default=None)
+    parser.add_argument("-psr", dest="pulsar", help="Pulsar name for PSRDB search - returns only observations with this pulsar name. If not provided, returns all pulsars.", default=None)
+    parser.add_argument("-obs_pid", dest="pid", help="Project ID for PSRDB search - return only observations matching this Project ID. If not provided, returns all observations.", default=None)
+    parser.add_argument("-list_out", dest="list_out", help="Output file name to write the list of observations submitted by this particular search. Does not work in secondary mode as it would simply duplicate the input list.")
+    parser.add_argument("-list_in", dest="list_in", help="List of observations to process, given in standard format. These will be crossmatched against PSRDB before job submission. List format must be:\n* Column 1 - Pulsar name\n* Column 2 - UTC\n* Column 3 - Observation PID\nTrailing columns may be left out if needed, but at a minimum the pulsar name must be provided.")
+    parser.add_argument("-runas", dest="runas", help="Specify an override pipeline to use in processing the observations. \nOptions:\n'PIPE' - launch each observation through multiple pipelines as defined by the 'launches' PSRDB table (default).\n'OBS' - use the observation PID to define pipeline selection.\n<int> - specify a specific PSRDB pipeline ID.\n<pid> - specify a MeerTIME project code (e.g. 'PTA', 'RelBin'), which will launch a default pipeline.", default="PIPE")
+    parser.add_argument("-slurm", dest="slurm", help="Processes all jobs using the OzStar Slurm queue.",action="store_true")
+    parser.add_argument("-unprocessed", dest="unprocessed", help="Launch only those observations which have not yet been processed by the specified pipelines.", action="store_true")
+    parser.add_argument("-images", dest="images", help="Rebuild the specified pipeline images only - do not reprocess the data itself. This will override the config 'overwrite' flag.\nOptions:\n'ALL' - reprocess all images.\n'TOAs' - reprocess only the TOA images.", default=None)
+    parser.add_argument("-job_limit", dest="joblimit", type=int, help="Max number of jobs to accept to the queue at any given time - script will wait and monitor for queue to reduce below this number before sending more.", default=1000)
+    parser.add_argument("-forceram", dest="forceram", type=float, help="Specify RAM to use for job execution (GB). Recommended only for single-job launches.")
+    parser.add_argument("-forcetime", dest="forcetime", type=str, help="Specify time to use for job execution (HH:MM:SS). Recommended only for single-job launches.")
+    parser.add_argument("-errorlog", dest="errorlog", type=str, help="File to store information on any failed launches for later debugging.", default=None)
+    parser.add_argument("-testrun", dest="testrun", help="Toggles test mode - jobs will not actually be launched.", action="store_true")
+    parser.add_argument("-obs_id", dest="obsid", type=int, help="Specify a single PSRDB observation ID to be processed. Observation must also be either specified via UTC range or list input. Typically only for use by real-time launch script.")
+    args = parser.parse_args()
 
-# Determine what parameters we have to work with and build search
-print ("Launching observations matching the intersection of the following specifications:")
-if (args.list_in):
-    print ("* List: {}".format(args.list_in))
+    # PSRDB setup
+    env_query = 'echo $PSRDB_TOKEN'
+    db_token = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+    env_query = 'echo $PSRDB_URL'
+    db_url = str(subprocess.check_output(env_query, shell=True).decode("utf-8")).rstrip()
+    db_client = GraphQLClient(db_url, False)
 
-if (args.utc1):
-    print ("* Start UTC: {}".format(args.utc1))
-    utc1_psrdb = utc_normal2psrdb(args.utc1)
-else:
-    utc1_psrdb = None
+    # Determine what parameters we have to work with and build search
+    print ("Launching observations matching the intersection of the following specifications:")
+    if (args.list_in):
+        print ("* List: {}".format(args.list_in))
 
-if (args.utc2):
-    print ("* End UTC: {}".format(args.utc2))
-    utc2_psrdb = utc_normal2psrdb(args.utc2)
-else:
-    utc2_psrdb = None
-
-if (args.pulsar):
-    print ("* PSR: {}".format(args.pulsar))
-
-if (args.pid):
-    print ("* PID: {}".format(args.pid))
-    official_PID =  pid_getofficial(args.pid)
-else:
-    official_PID = None
-
-if (args.unprocessed):
-    print ("* Only launching unprocessed observations.")
-
-# Verify input
-if (args.utc1 and args.utc2):
-    if (utc_normal2date(args.utc1) > utc_normal2date(args.utc2)):
-        raise Exception("UTC1 ({0}) is not before UTC2 ({1}).".format(args.utc1, args.utc2))
+    if (args.utc1):
+        print ("* Start UTC: {}".format(args.utc1))
+        utc1_psrdb = utc_normal2psrdb(args.utc1)
     else:
-        print ("Selected UTC range ({0} - {1}) is valid.".format(args.utc1, args.utc2))
+        utc1_psrdb = None
 
-# Query and run observations
+    if (args.utc2):
+        print ("* End UTC: {}".format(args.utc2))
+        utc2_psrdb = utc_normal2psrdb(args.utc2)
+    else:
+        utc2_psrdb = None
 
-print ("\nBeginning launch sequence...\n")
+    if (args.pulsar):
+        print ("* PSR: {}".format(args.pulsar))
 
-if (args.testrun):
-    print ("\nTEST MODE ACTIVATED - JOBS WILL NOT BE LAUNCHED\n")
+    if (args.pid):
+        print ("* PID: {}".format(args.pid))
+        official_PID =  pid_getofficial(args.pid)
+    else:
+        official_PID = None
 
-if (args.list_in):
+    if (args.unprocessed):
+        print ("* Only launching unprocessed observations.")
 
-    # we need to cycle through the lines of the file, find each observation and then send it to be launched
-    infile = open(args.list_in, "r")
-    # if output list specified, prep for writing
-    if (args.list_out):
-        outfile = open(args.list_out, "w")
-        outfile.close()
-
-    print("%s opened successfully - processing entries line by line..." % (args.list_in))
-
-    for x in infile:
-        linearray = shlex.split(x)
-
-        # check for valid input
-        if (len(linearray) == 0 or len(linearray) > 3):
-            raise Exception("Input file has an incorrect number of fields (line {0})".format(x))
-
-        # check input for query parameters and test against
-        query_pulsar = None
-        query_date = None
-        query_PID = None
-
-        if (len(linearray) > 0):
-            # first column is pulsar name
-            query_pulsar = str(linearray[0])
-
-            if (args.pulsar):
-                if not (args.pulsar == query_pulsar):
-                    print ("File entry '{0}' does not match command line entry '{1}' - skipping...".format(query_pulsar, args.pulsar))
-                    continue
-
-        if (len(linearray) > 1):
-            # second column is UTC of the observation
-            try:
-                query_date = utc_normal2psrdb(linearray[1])
-            except:
-                print ("File UTC '{0}' has an incorrect format - skipping...".format(linearray[1]))
-                continue
-
-            if (args.utc1):
-                if (utc_normal2date(args.utc1) > utc_psrdb2date(query_date)):
-                    print ("File UTC '{0}' is before specified command line start date '{1}' - skipping...".format(utc_psrdb2normal(query_date), args.utc1))
-                    continue
-
-            if (args.utc2):
-                if (utc_normal2date(args.utc2) < utc_psrdb2date(query_date)):
-                    print ("File UTC '{0}' is after specified command line end date '{1}' - skipping...".format(utc_psrdb2normal(query_date), args.utc2))
-                    continue
-
-        if (len(linearray) > 2):
-            # third column is PID
-            try:
-                query_PID = pid_getofficial(linearray[2])
-            except:
-                print ("File observation PID '{0}' is not recognised - skipping...".format(linearray[2]))
-                continue
-
-            if (official_PID):
-                if not (official_PID == query_PID):
-                    print ("File observation PID '{0}' does not match command line observation PID '{1}' - skipping...".format(query_PID, official_PID))
-                    continue
-
-        print ("Querying PSRDB for:")
-
-        if not (query_pulsar == None):
-            print ("PSR = {0}".format(query_pulsar))
-        elif (args.pulsar):
-            query_pulsar = args.pulsar
-
-        if not (query_date == None):
-            print ("DATE = {0}".format(query_date))
-            start_date = query_date
-            end_date = query_date
+    # Verify input
+    if (args.utc1 and args.utc2):
+        if (utc_normal2date(args.utc1) > utc_normal2date(args.utc2)):
+            raise Exception("UTC1 ({0}) is not before UTC2 ({1}).".format(args.utc1, args.utc2))
         else:
-            if (args.utc1):
-                start_date = utc1_psrdb
+            print ("Selected UTC range ({0} - {1}) is valid.".format(args.utc1, args.utc2))
+
+    # Query and run observations
+
+    print ("\nBeginning launch sequence...\n")
+
+    if (args.testrun):
+        print ("\nTEST MODE ACTIVATED - JOBS WILL NOT BE LAUNCHED\n")
+
+    if (args.list_in):
+
+        # we need to cycle through the lines of the file, find each observation and then send it to be launched
+        infile = open(args.list_in, "r")
+        # if output list specified, prep for writing
+        if (args.list_out):
+            outfile = open(args.list_out, "w")
+            outfile.close()
+
+        print("%s opened successfully - processing entries line by line..." % (args.list_in))
+
+        for x in infile:
+            linearray = shlex.split(x)
+
+            # check for valid input
+            if (len(linearray) == 0 or len(linearray) > 3):
+                raise Exception("Input file has an incorrect number of fields (line {0})".format(x))
+
+            # check input for query parameters and test against
+            query_pulsar = None
+            query_date = None
+            query_PID = None
+
+            if (len(linearray) > 0):
+                # first column is pulsar name
+                query_pulsar = str(linearray[0])
+
+                if (args.pulsar):
+                    if not (args.pulsar == query_pulsar):
+                        print ("File entry '{0}' does not match command line entry '{1}' - skipping...".format(query_pulsar, args.pulsar))
+                        continue
+
+            if (len(linearray) > 1):
+                # second column is UTC of the observation
+                try:
+                    query_date = utc_normal2psrdb(linearray[1])
+                except:
+                    print ("File UTC '{0}' has an incorrect format - skipping...".format(linearray[1]))
+                    continue
+
+                if (args.utc1):
+                    if (utc_normal2date(args.utc1) > utc_psrdb2date(query_date)):
+                        print ("File UTC '{0}' is before specified command line start date '{1}' - skipping...".format(utc_psrdb2normal(query_date), args.utc1))
+                        continue
+
+                if (args.utc2):
+                    if (utc_normal2date(args.utc2) < utc_psrdb2date(query_date)):
+                        print ("File UTC '{0}' is after specified command line end date '{1}' - skipping...".format(utc_psrdb2normal(query_date), args.utc2))
+                        continue
+
+            if (len(linearray) > 2):
+                # third column is PID
+                try:
+                    query_PID = pid_getofficial(linearray[2])
+                except:
+                    print ("File observation PID '{0}' is not recognised - skipping...".format(linearray[2]))
+                    continue
+
+                if (official_PID):
+                    if not (official_PID == query_PID):
+                        print ("File observation PID '{0}' does not match command line observation PID '{1}' - skipping...".format(query_PID, official_PID))
+                        continue
+
+            print ("Querying PSRDB for:")
+
+            if not (query_pulsar == None):
+                print ("PSR = {0}".format(query_pulsar))
+            elif (args.pulsar):
+                query_pulsar = args.pulsar
+
+            if not (query_date == None):
+                print ("DATE = {0}".format(query_date))
+                start_date = query_date
+                end_date = query_date
             else:
-                start_date = None
+                if (args.utc1):
+                    start_date = utc1_psrdb
+                else:
+                    start_date = None
 
-            if (args.utc2):
-                end_date = utc2_psrdb
-            else:
-                end_date = None
+                if (args.utc2):
+                    end_date = utc2_psrdb
+                else:
+                    end_date = None
 
-        if not (query_PID == None):
-            print ("Observation PID = {0}".format(query_PID))
-        elif (args.pid):
-            query_PID = official_PID
+            if not (query_PID == None):
+                print ("Observation PID = {0}".format(query_PID))
+            elif (args.pid):
+                query_PID = official_PID
 
-        dbdata = get_foldedobservation_list(start_date, end_date, query_pulsar, query_PID, db_client, db_url, db_token)
-        print("PSRDB query complete.")
+            dbdata = get_foldedobservation_list(start_date, end_date, query_pulsar, query_PID, db_client, db_url, db_token)
+            print("PSRDB query complete.")
 
+            if (dbdata):
+                print("PSRDB query complete - {0} matching records found".format(len(dbdata)))
+                print("Launching requested processing job.")
+                array_launcher(dbdata, args, db_client, db_url, db_token)
+
+                if (args.list_out):
+                    outfile = open(args.list_out, "a")
+                    write_list(outfile, dbdata, db_client, db_url, db_token)
+                    outfile.close()
+
+        if (args.list_out):
+            print("List of observations to process written to {0}.".format(args.list_out))
+
+    elif (args.utc1 and args.utc2):
+
+        # I'm maintaining this restriction of needing at minimum either the LIST IN or the UTCs
+        # Otherwise there's a risk that running the script with no inputs will just launch *everything* at once
+
+        dbdata = get_foldedobservation_list(utc1_psrdb, utc2_psrdb, args.pulsar, official_PID, db_client, db_url, db_token)
+
+        # check for valid output
         if (dbdata):
             print("PSRDB query complete - {0} matching records found".format(len(dbdata)))
-            print("Launching requested processing job.")
-            array_launcher(dbdata, args, db_client, db_url, db_token)
+        else:
+            raise Exception("No records found matching specified parameters - aborting.")
 
-            if (args.list_out):
-                outfile = open(args.list_out, "a")
-                write_list(outfile, dbdata, db_client, db_url, db_token)
-                outfile.close()
+        # now run the jobs
+        print("Launching requested processing jobs.")
+        array_launcher(dbdata, args, db_client, db_url, db_token)
 
-    if (args.list_out):
-        print("List of observations to process written to {0}.".format(args.list_out))
+        # write the resulting array of data to a file (if specified)
+        if (args.list_out):
+            outfile = open(args.list_out, "w")
+            write_list(outfile, dbdata, db_client, db_url, db_token)
+            outfile.close()
+            print("List of observations to process written to {0}.".format(args.list_out))
 
-elif (args.utc1 and args.utc2):
-
-    # I'm maintaining this restriction of needing at minimum either the LIST IN or the UTCs
-    # Otherwise there's a risk that running the script with no inputs will just launch *everything* at once
-
-    dbdata = get_foldedobservation_list(utc1_psrdb, utc2_psrdb, args.pulsar, official_PID, db_client, db_url, db_token)
-
-    # check for valid output
-    if (dbdata):
-        print("PSRDB query complete - {0} matching records found".format(len(dbdata)))
     else:
-        raise Exception("No records found matching specified parameters - aborting.")
-
-    # now run the jobs
-    print("Launching requested processing jobs.")
-    array_launcher(dbdata, args, db_client, db_url, db_token)
-
-    # write the resulting array of data to a file (if specified)
-    if (args.list_out):
-        outfile = open(args.list_out, "w")
-        write_list(outfile, dbdata, db_client, db_url, db_token)
-        outfile.close()
-        print("List of observations to process written to {0}.".format(args.list_out))
-
-else:
-    # we do not have enough arguments to complete the script - abort
-    raise Exception("Insufficient arguments provided. Must provide at least UTC1 and UTC2, or LIST_IN.")
+        # we do not have enough arguments to complete the script - abort
+        raise Exception("Insufficient arguments provided. Must provide at least UTC1 and UTC2, or LIST_IN.")
