@@ -18,7 +18,7 @@ import argparse
 import glob
 
 # Meerpipe imports
-sys.path.append('/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/')
+#sys.path.append('/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/')
 from initialize import (parse_config, setup_logging)
 from archive_utils import (secondary_cleanup)
 
