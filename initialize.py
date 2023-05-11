@@ -91,6 +91,8 @@ def parse_config(path_cfile):
                 config_params["type"] = sline[1].rstrip().lstrip(' ')
             if attr == "user":
                 config_params["user"] = sline[1].rstrip().lstrip(' ')
+            if attr == "email":
+                config_params["email"] = sline[1].rstrip().lstrip(' ')
             if attr == "calibrators_path":
                 config_params["calibrators_path"] = sline[1].rstrip().lstrip(' ')
             if attr == "rm_cat":
@@ -109,6 +111,12 @@ def parse_config(path_cfile):
                 config_params["meertime_ephemerides"] = sline[1].rstrip().lstrip()
             if attr == "meertime_templates":
                 config_params["meertime_templates"] = sline[1].rstrip().lstrip()
+            if attr == "toa_display_list":
+                config_params["toa_display_list"] = sline[1].rstrip().lstrip()
+            if attr == "global_toa_path":
+                config_params["global_toa_path"] = sline[1].rstrip().lstrip()
+            if attr == "redundant_products":
+                config_params["red_prod"] = sline[1].rstrip().lstrip(' ').split(',')
 
     cfile.close()
     
@@ -194,6 +202,7 @@ def get_outputinfo(cparams,logger):
     proposal_ids = []
     required_ram_list = []
     obs_time_list = []
+    required_time_list = []
 
     if cparams["batch"] == "batch":
         pulsar_dirs = sorted(glob.glob(os.path.join(input_path,cparams["dirname"])))
@@ -297,24 +306,105 @@ def get_outputinfo(cparams,logger):
                         all_archives.append(archives)
 
                         #Computing RAM requirements for this observation
+                        """
                         if float(info_params["target_duration"]) <= 900.0: #Less than 15 mins
-                            reqram = "64g"
+                            #reqram = "64g"
+                            reqram = "32g"
                         elif float(info_params["target_duration"]) > 900.0 and float(info_params["target_duration"]) <= 3600.0: #15 mins to 1 hour
-                            reqram = "128g"
+                            #reqram = "128g"
+                            reqram = "64g"
                         elif float(info_params["target_duration"]) > 3600.0 and float(info_params["target_duration"]) <= 10800.0: #1 to 3 hours
-                            reqram = "256g"
+                            #reqram = "256g"
+                            reqram = "128g"
                         elif float(info_params["target_duration"]) > 10800.0 and float(info_params["target_duration"]) < 18000.0: #3 hours to 5 hours
-                            reqram = "512g"
+                            #reqram = "512g"
+                            reqram = "256g"
                         elif float(info_params["target_duration"]) > 18000.0: #More than 5 hours
-                            reqram = "768g"
-             
+                            #reqram = "768g"
+                            reqram = "512g"
+                        """
+                        # now calculating RAM requirements based on file size, per an empirically derived relation
+
+                        # new - 23/08/2022 - get channel count to branch settings for high channel count files
+                        if (len(archives) > 0):
+                            comm = "vap -c nchan {0}".format(archives[0])
+                            args = shlex.split(comm)
+                            proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+                            proc.wait()
+                            info = proc.stdout.read().decode("utf-8").split("\n")
+                            nchan = int(info[1].split()[1])
+                        else:
+                            nchan = 1024
+
+                        # may yet require future tweaking
+                        ram_slope = 10.6
+                        ram_intercept = 0.4 # GB
+                        ram_min = 0.6 # GB
+                        ram_max = 750 # GB - MAXIMUM RAM AVAILABLE ON OZSTAR
+
+                        if (nchan > 1024):
+                            # adjusted up for high channel count files
+                            ram_factor = 1.40
+                        else:
+                            # normal allocation
+                            ram_factor = 1.20
+                        #ram_factor_max = 15 # GB
+
+                        file_size = 0
+                        for subint in archives:
+                            file_size += os.stat(subint).st_size # KB
+
+                        # calculate RAM request in GB
+                        reqram = ram_factor * ((file_size/(1024**3)) * ram_slope + ram_intercept)
+
+                        #inter_ram = ((file_size/(1024**3)) * ram_slope + ram_intercept)
+                        #if (inter_ram * ram_factor - inter_ram > ram_factor_max):
+                        #    reqram = inter_ram + ram_factor_max
+                        #else:
+                        #    reqram = inter_ram * ram_factor
+
+                        if reqram < ram_min:
+                            reqram = ram_min
+                        elif reqram > ram_max:
+                            reqram = ram_max
+                        
+                        # report result in MB
+                        reqram_str = "{0}m".format(int(np.ceil(reqram*1024)))
+
                         obs_time_list.append(info_params["target_duration"])
-                        required_ram_list.append(reqram)
+                        #required_ram_list.append(reqram)
+                        required_ram_list.append(reqram_str)
 
+                        # Computing time requirements for this observation to be processed
+                        # This is WIP - may need additional tweaking
 
+                        # based now on empirical study of the processing time required by jobs
+                        time_factor = 2.3
+                        if (nchan > 1024):
+                            # (extra factor for high channel count jobs)
+                            time_factor = time_factor * 1.55
+                        effective_time = int(np.ceil((file_size/(1024**2)) * time_factor)) # seconds
+
+                        if ( effective_time <= 14400 ): # 4 hours
+                            # minimum time
+                            reqtime = 14400
+                        else:
+                            # dynamic time
+                            reqtime = effective_time
+
+                        # maximum cap of 86399 seconds removed
+
+                        # new - image only processing requires less time
+                        # this will need to be adjusted
+                        # but as a first guess...
+                        if cparams["image_flag"]:
+                            if (cparams["image_type"] == "TOAs"):
+                                reqtime = reqtime / 4.0
+
+                        required_time_list.append(int(reqtime))
 
          
-    return results_path,all_archives,psrnames,proposal_ids,required_ram_list,obs_time_list
+    return results_path,all_archives,psrnames,proposal_ids,required_ram_list,obs_time_list,required_time_list
 
 
 def create_structure(output_dir,cparams,psrname,logger):
@@ -326,7 +416,8 @@ def create_structure(output_dir,cparams,psrname,logger):
     """
     output_path = cparams["output_path"]
     flags = cparams["flags"]
-    if 'overwrite' in cparams.keys():
+    #if 'overwrite' in cparams.keys(): - 2TO3
+    if 'overwrite' in list(cparams.keys()):
         overwrite_flag = str(cparams["overwrite"])
     else:
         overwrite_flag = "False"
@@ -340,6 +431,7 @@ def create_structure(output_dir,cparams,psrname,logger):
     timing_dir = os.path.join(output_dir,"timing")
     decimated_dir = os.path.join(output_dir,"decimated")
     scintillation_dir = os.path.join(output_dir,"scintillation")
+    images_dir = os.path.join(output_dir,"images")
 
     if cparams["type"] == "caspsr":
         #Creating the Project ID directory
@@ -360,9 +452,12 @@ def create_structure(output_dir,cparams,psrname,logger):
     else:
         logger.info("Pulsar directory exists")
         if overwrite_flag == "True":
-            rmtree(pulsar_dir)
-            logger.info("Pulsar head directory overwritten")
-            os.makedirs(pulsar_dir)
+            if not (cparams["image_flag"]):
+                rmtree(pulsar_dir)
+                logger.info("Pulsar head directory overwritten")
+                os.makedirs(pulsar_dir)
+            else:
+                logger.info("Pulsar head directory NOT overwritten due to 'images' flag")
 
     if not os.path.exists(cleaned_dir):
         logger.info("Cleaned directory created")
@@ -395,14 +490,23 @@ def create_structure(output_dir,cparams,psrname,logger):
         else:
             logger.info("Scintillation directory exists")
 
+        # PSRDB
+        # if (cparams["db_flag"]):
+        if not os.path.exists(images_dir):
+            logger.info("Images directory created")
+            os.makedirs(images_dir)
+        else:
+            logger.info("Images directory exists")
+
         #if not os.path.exists(project_dir):
         #    logger.info("Project directory created")
         #    os.makedirs(project_dir)
         #else:
         #    logger.info("Project directory exists")
 
-
-    if not cparams["fluxcal"]:
+    
+    # this part shouldn't need to run if we're just rebuilding the images
+    if (not cparams["fluxcal"]) and (not cparams["image_flag"]):
     
         #Pull/Update repositories
         #TODO: for now just creating directories. Have to manage_repos eventually!
@@ -446,13 +550,32 @@ def create_structure(output_dir,cparams,psrname,logger):
             logger.info("Ephemeris for {0} not found. Generating new one.".format(psrname))
             psrcat = "psrcat -all -e {0}".format(psrname)
             proc = shlex.split(psrcat)
-            f = open("{0}/{1}.par".format(ephem_dir,psrname),"w")
-            subprocess.call(proc,stdout=f)
-            logger.info("An ephemeris was generated from the psrcat database")
-            copyfile(os.path.join(ephem_dir,psrname+".par"),os.path.join(pulsar_dir,psrname+".par"))
+            try:
+                f = open("{0}/{1}.par".format(ephem_dir,psrname),"w")
+                subprocess.call(proc,stdout=f)
+                f.close()
+            except:
+                logger.error("Could not open / create ephemeris file.")
+
+            # check for success and implement one further contingency
+            if os.path.exists(os.path.join(ephem_dir,psrname+".par")):
+                logger.info("An ephemeris was generated from the psrcat database")
+                copyfile(os.path.join(ephem_dir,psrname+".par"),os.path.join(pulsar_dir,psrname+".par"))
+            else:
+                # skip storing the ephemeris in a master directory and store locally
+                logger.info("Unable to create ephemeris in {0}".format(ephem_dir))
+                logger.info("Storing ephemeris locally in {0} only.".format(pulsar_dir))
+                f = open("{0}/{1}.par".format(pulsar_dir,psrname),"w")
+                subprocess.call(proc,stdout=f)
+                f.close()
 
         #Copying pulsar template
-        notemplate_list = np.loadtxt(os.path.join(template_dir,"notemplate.list"),dtype=str)
+        # NEW - Safeguard in case notemplate.list does not exist
+        if (os.path.exists(os.path.join(template_dir,"notemplate.list"))):
+            notemplate_list = np.loadtxt(os.path.join(template_dir,"notemplate.list"),dtype=str)
+        else:
+            notemplate_list = []
+
         if os.path.exists(os.path.join(template_dir,psrname+".std")):
             logger.info("Template for {0} found".format(psrname))
             if os.path.exists(os.path.join(template_dir,psrname+"_p2.std")):

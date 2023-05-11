@@ -16,18 +16,28 @@ import psrchive as ps
 from scipy import stats
 
 import getopt
+
+# WARNING - This next instruction is horrible code and I don't condone ever doing it again
+# Unfortunately, my hand is forced by a lack of other apparent options
+# Andrew Cameron - 10/02/2022
+
+sys.path.insert(1, sys.path[len(sys.path)-1])
+import astropy
+
+# end horrible code
+
 from astropy.io import fits
 from astropy.coordinates import (SkyCoord, Longitude, Latitude)
 
 #=============================================================================
 
 #Get basic info required for the radiometer equation
-def get_obsheadinfo(obsheader_path):
+def get_listinfo(list_path):
     """
-    Parse the obs.header file and return important parameters
+    Parse the list files like obs.header and pulsar lookup tables and return important parameters
     """
     params={}
-    with open(obsheader_path) as file:
+    with open(list_path) as file:
         lines=file.readlines()
         for line in lines:
             (key, val) = line.split()
@@ -44,8 +54,26 @@ def get_info(archive):
     info = 'psrstat -c length,nbin,bw,nchan {0} -jpD -Q'.format(archive)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
-    info = proc.stdout.readline().split()
+    info = str(proc.stdout.readline().decode("utf-8")).split()
     return info 
+
+def get_rcvr(params):
+    """
+    Determine which receiver is in use
+    External conditions may be required for this function, depending on use
+    """
+    bw = params["BW"]
+    freq = float(params["FREQ"])
+
+    if (bw == "544.0") and (freq < 816) and (freq > 815):
+        rcvr = "UHF"
+    elif (freq < 1284) and (freq > 1283):
+        rcvr = "LBAND"
+    else:
+        raise RuntimeError("Header parameters do not map to any known receiver.")
+
+    return rcvr
+
 
 def get_freqlist(archive):
     """
@@ -55,7 +83,7 @@ def get_freqlist(archive):
     info = 'psrstat -c int:freq,nchan {0} -jTD -Q'.format(archive)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
-    info = proc.stdout.readline().split()
+    info = str(proc.stdout.readline().decode("utf-8")).split()
     return info
 
 
@@ -83,13 +111,12 @@ def get_radec(psrname):
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
     info = proc.stdout.readline().rstrip().split()
-
     try:
         rajd = float(info[0])
         decjd = float(info[1])
-        print ("RAJD:{0}, DECJD:{1}".format(rajd, decjd))
+        print ("RAJD:{0}, DECJD:{1}".format(str(info[0].decode("utf-8")), str(info[1].decode("utf-8"))))
     except ValueError:
-        raise(RuntimeError("Cannot convert values {} and {} to floats".format(rajd, decjd)))
+        raise(RuntimeError("Cannot convert values {} and {} to floats".format(str(info[0].decode("utf-8")), str(info[1].decode("utf-8")))))
                        
     return rajd, decjd
 
@@ -101,13 +128,12 @@ def get_radec_new(parfile):
     # try grabbing RAJ and DECJ directly first
     ra_args = shlex.split(all_args.format("RAJ"))
     proc1 = subprocess.Popen(ra_args, stdout=subprocess.PIPE)
-    ra_str = str(proc1.communicate()[0]).split()
-    if len(ra_str) > 0:
-        ra_str = ra_str[1]
+    inb_str = str(proc1.communicate()[0].decode("utf-8")).strip()
+    if inb_str != "":
+        ra_str = inb_str.split()[1]
         dec_args = shlex.split(all_args.format("DECJ"))
         proc2 = subprocess.Popen(dec_args, stdout=subprocess.PIPE)
-        dec_str = str(proc2.communicate()[0]).split()[1]
-        print ra_str,dec_str
+        dec_str = str(proc2.communicate()[0].decode("utf-8")).strip().split()[1]
         pos = SkyCoord(Longitude(ra_str, unit='hourangle'),
                        Latitude(dec_str, unit='deg'))
         rajd = pos.ra.to('deg').value
@@ -116,7 +142,7 @@ def get_radec_new(parfile):
     else: # coords in par file are not RA and Dec
         elong_args = shlex.split(all_args.format("ELONG"))
         proc1 = subprocess.Popen(elong_args, stdout=subprocess.PIPE)
-        info = proc1.communicate()[0]
+        info = proc1.communicate()[0].decode("utf-8")
         if len(info.split('\n')) > 1:
             for line in info.split('\n'):
                 if line.split()[0] == "ELONG":
@@ -130,7 +156,7 @@ def get_radec_new(parfile):
 
         elat_args = shlex.split(all_args.format("ELAT"))
         proc2 = subprocess.Popen(elat_args, stdout=subprocess.PIPE)
-        info = proc2.communicate()[0]
+        info = proc2.communicate()[0].decode("utf-8")
         if len(info.split('\n')) > 1:
             for line in info.split('\n'):
                 if line.split()[0] == "ELAT":
@@ -149,99 +175,138 @@ def get_radec_new(parfile):
     return(rajd, decjd)
 
 
-def get_tsky_updated(rajd, decjd):
-    "Get Tsky from Simon's code. Input arguments are RAJD and DECJD"
-    "Convert Tsky to Jy and subtact 3372mK as per SARAO specs"
+def get_tsky_updated(rajd, decjd, psr, rcvr):
 
-    #TSKY Default (mK)
-    tsky_default = 3400.0
+    # some constants
+    G = 19 #K
     
-    #open the fits file and get the data
-    # note that (I think) the data cover the entire 0-360 in gl and -90-90 in gb
-    # but that the pixels not covered by the survey are set to nan.
-    # WARNING: The survey only goes to +25 declination
-    # WARNING: The Galactic centre pixels are blanked out, I'm looking into it.
-    CHIPASS_PATH = "/fred/oz005/meerpipe/configuration_files/additional_info"
-    hdul = fits.open(os.path.join(CHIPASS_PATH,'CHIPASS_Equ.fits'))
-    data = hdul[0].data
+    # Calculate Tsky as a function of the chosen receiver
+    if (rcvr == "LBAND"):
 
+        # Get Tsky from Simon's code. Input arguments are RAJD and DECJD
+        # Convert Tsky to Jy and subtact 3372mK as per SARAO specs
 
-    # naxis1 is the number of pixels on axis1
-    # crval1 is the longitude of the crpix1 pixel
-    # cdelt1 is increment per pixel
-    # ditto for axis2
-    # note that crval1,crval2 = 0 in this file
-    naxis1 = hdul[0].header['NAXIS1']
-    crpix1 = hdul[0].header['CRPIX1']
-    cdelt1 = hdul[0].header['CDELT1']
-    crval1 = hdul[0].header['CRVAL1']
-    naxis2 = hdul[0].header['NAXIS2']
-    crpix2 = hdul[0].header['CRPIX2']
-    cdelt2 = hdul[0].header['CDELT2']
-    crval2 = hdul[0].header['CRVAL2']
+        #TSKY Default (mK)
+        tsky_default = 3400.0
 
-    # this is the pixel for the gl,gb
-    pix1 = (rajd-crval1)/cdelt1 + crpix1
-    pix2 = (decjd-crval2)/cdelt2 + crpix2        
+        #open the fits file and get the data
+        # note that (I think) the data cover the entire 0-360 in gl and -90-90 in gb
+        # but that the pixels not covered by the survey are set to nan.
+        # WARNING: The survey only goes to +25 declination
+        # WARNING: The Galactic centre pixels are blanked out, I'm looking into it.
+        #CHIPASS_PATH = "/fred/oz005/meerpipe/configuration_files/additional_info" - TEMP SWITCH FOR LOCAL TESTING - ADC
+        CHIPASS_PATH = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/configuration_files/additional_info"
+        hdul = fits.open(os.path.join(CHIPASS_PATH,'CHIPASS_Equ.fits'))
+        data = hdul[0].data
 
-    # convert to integer
-    ipix1 = np.int(pix1+0.5)
-    ipix2 = np.int(pix2+0.5)
+        # naxis1 is the number of pixels on axis1
+        # crval1 is the longitude of the crpix1 pixel
+        # cdelt1 is increment per pixel
+        # ditto for axis2
+        # note that crval1,crval2 = 0 in this file
+        naxis1 = hdul[0].header['NAXIS1']
+        crpix1 = hdul[0].header['CRPIX1']
+        cdelt1 = hdul[0].header['CDELT1']
+        crval1 = hdul[0].header['CRVAL1']
+        naxis2 = hdul[0].header['NAXIS2']
+        crpix2 = hdul[0].header['CRPIX2']
+        cdelt2 = hdul[0].header['CDELT2']
+        crval2 = hdul[0].header['CRVAL2']
 
-    print('Pixel1: {0},Pixel2: {1}'.format(ipix1,ipix2))
+        # this is the pixel for the gl,gb
+        pix1 = (rajd-crval1)/cdelt1 + crpix1
+        pix2 = (decjd-crval2)/cdelt2 + crpix2
 
-    # none of these should ever really happen
-    use_default_tsky = False
-    if ipix1 < 0:
-        print('ERROR:, x-pixel < 0! Using default tsky: {0}'.format(tsky_default))
-        use_default_tsky = True
-    if ipix1 > naxis1:
-        print('ERROR:, x-pixel > npix! Using default tsky: {0}'.format(tsky_default))
-        use_default_tsky = True
-    if ipix2 < 0:
-        print('ERROR:, y-pixel < 0! Using default tsky: {0}'.format(tsky_default))
-        use_default_tsky = True
-    if ipix2 > naxis2:
-        print('ERROR:, y-pixel > npix! Using default tsky: {0}'.format(tsky_default))
-        use_default_tsky = True
+        # convert to integer
+        ipix1 = np.int(pix1+0.5)
+        ipix2 = np.int(pix2+0.5)
 
-    # get tsky for the appropriate pixel
-    if use_default_tsky == True:
-        tsky = tsky_default
-    else:
-        tsky = data[ipix2,ipix1]
+        print('Pixel1: {0},Pixel2: {1}'.format(ipix1,ipix2))
 
-    # check that gl,gb is covered by the survey
-    if np.isnan(tsky):
-        print('ERROR:, Pixel blanked! Using default tsky: {0}'.format(tsky_default))
-        tsky = tsky_default
+        # none of these should ever really happen
+        use_default_tsky = False
+        if ipix1 < 0:
+            print('ERROR:, x-pixel < 0! Using default tsky: {0}'.format(tsky_default))
+            use_default_tsky = True
+        if ipix1 > naxis1:
+            print('ERROR:, x-pixel > npix! Using default tsky: {0}'.format(tsky_default))
+            use_default_tsky = True
+        if ipix2 < 0:
+            print('ERROR:, y-pixel < 0! Using default tsky: {0}'.format(tsky_default))
+            use_default_tsky = True
+        if ipix2 > naxis2:
+            print('ERROR:, y-pixel > npix! Using default tsky: {0}'.format(tsky_default))
+            use_default_tsky = True
+
+        # get tsky for the appropriate pixel
+        if use_default_tsky == True:
+            tsky = tsky_default
+        else:
+            tsky = data[ipix2,ipix1]
+
+        # check that gl,gb is covered by the survey
+        if np.isnan(tsky):
+            print('ERROR:, Pixel blanked! Using default tsky: {0}'.format(tsky_default))
+            tsky = tsky_default
         
-    print ('### Sky Temperature(mK) used for flux calibration: {0} ###'.format(tsky))
+        print ('### Sky Temperature(mK) used for flux calibration: {0} ###'.format(tsky))
 
-        
-    #Converting to Jy and subtracting 3372mK as per SARAO specifications
-    print ("Converting tsky (mK) to Jy and subtracting 3372mK (SARAO specs)")
-    tsky_jy = (tsky-3372.0)*0.019
-    print ("### Tsky (old) in Jy: {0} ### (deprecated)".format(tsky_jy))
+        #Converting to Jy and subtracting 3372mK as per SARAO specifications
+        print ("Converting tsky (mK) to Jy and subtracting 3372mK (SARAO specs)")
+        tsky_jy = (tsky-3372.0)* (G / 1000)
+        print ("### Tsky (old) in Jy: {0} ### (deprecated)".format(tsky_jy))
 
-    #New conversion - Jan 2022
-    new_scaling_factor = 1.7202+0.0002
-    tsky_jy = (new_scaling_factor*(tsky-3372))*0.019
-    print ("Tsky (new) in Jy: {0}".format(tsky_jy))
+        #New conversion - Jan 2022
+        new_scaling_factor = 1.7202 # +0.0002 - commented out as a likely error - 01/02/2023
+        tsky_jy = (new_scaling_factor*(tsky-3372)) * (G / 1000)
+        print ("Tsky (new) in Jy: {0}".format(tsky_jy))
     
+    elif (rcvr == "UHF"):
+
+        # Implement Simon's new code for UHF Tsky calculation
+
+        # suggested cold sky default (K)
+        tsky_default = 5.5
+
+        # include path to lookup table and extract data
+        UHFlist_path = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/configuration_files/additional_info/UHF_Tsky.dat"
+        UHFlist_data = get_listinfo(UHFlist_path)
+
+        # recall Tsky value for the relevant pulsar
+        if psr in UHFlist_data:
+            tsky_K = float(UHFlist_data[psr])
+            print ("Recalled Tsky value for {0} of {1} K".format(psr, tsky_K))
+        else:
+            tsky_K = tsky_default
+            print ("Unable to find {0} in lookup table - using default Tsky value of {1} K".format(psr, tsky_K))
+
+        # convert to Jy
+        tsky_jy = tsky_K * G
+        print ("Tsky (UHF) in Jy: {0}".format(tsky_jy))
+
     return tsky_jy
 
 
 #=============================================================================
 
 #Compute observed RMS, multiplier and flux calibrate the data
-def get_Ssys(tsky_jy,Nant):
-    "Return Ssys at 1390 MHz"
-    SEFD_1390 = 390.0 #SEFD at 1390 MHz = 390 Jy (one dish)
-    Ssys_1390 = (SEFD_1390+tsky_jy)/Nant
-    print ("Ssys at 1390 MHz: {0}".format(Ssys_1390))
+def get_Ssys(tsky_jy,Nant,rcvr):
+    "Return Ssys at 1390 MHz / 800 MHz"
+
+    G = 19.0 #K
+
+    if (rcvr == "LBAND"):
+        SEFD = 390.0 #SEFD at 1390 MHz = 390 Jy (one dish)
+        freq = 1390
+    elif (rcvr == "UHF"):
+        Tsys = 18.5 # K (one dish)
+        SEFD = Tsys * G
+        freq = 800
+
+    Ssys = (SEFD+tsky_jy)/Nant
     print ("Number of antennae: {0}".format(Nant))
-    return Ssys_1390
+    print ("Ssys at {1} MHz: {0}".format(Ssys, freq))
+    return Ssys
 
 
 def get_expectedRMS(info,ssys):
@@ -273,20 +338,34 @@ def get_offrms(archive):
     lines = proc.stdout.readlines()
     offpulse_rms_list = []
     for line in lines:
-        sline = line.split(" ")
+        sline = str(line.decode("utf-8")).split(" ")
         offpulse_rms_list.append(float(sline[-1].rstrip()))
 
     return offpulse_rms_list
 
 
-def get_median_offrms(offrms_freq_dictionary):
+def get_median_offrms(offrms_freq_dictionary, rcvr):
     "Select channels centered at 1390 MHz and compute the median of their off-pulse rms values"
     
-    print ("Computing median of off-pulse rms values of channels centered at 1390 MHz..")
+    # make distinctions based on receiver
+    if (rcvr == "LBAND"):
+        ref_freq = 1390
+        hi_freq = 1400
+        lo_freq = 1383
+    elif (rcvr == "UHF"):
+        ref_freq = 800
+        hi_freq = 805
+        lo_freq = 795
+        #hi_freq = 810
+        #lo_freq = 790
+
+    print ("Computing median of off-pulse rms values of channels centered at {0} MHz.. ({1})".format(ref_freq, rcvr))
     selected_offrms = []
     selected_freqs = []
-    for item in offrms_freq_dictionary.keys():
-        if float(item) >=1383.0 and float(item) < 1400.0:
+    #for item in offrms_freq_dictionary.keys(): - 2TO3
+    for item in list(offrms_freq_dictionary.keys()):
+        #if float(item) >=1383.0 and float(item) < 1400.0:
+        if float(item) >=lo_freq and float(item) < hi_freq:
             selected_offrms.append(offrms_freq_dictionary[item])
             selected_freqs.append(item)
 
@@ -330,10 +409,16 @@ TP_file = str(args.tpfile)
 add_file = str(args.rawfile)
 decimated_products = np.load(args.decimated)
 
+# extract the header parameters
+params = get_listinfo(obsheader_path)
+
+# determine the receiver in use
+rcvr = get_rcvr(params)
 
 print ("Processing {0}:{1}".format(psr_name, obs_name))
 print ("============================================")
-
+print ("Reference par file = {0}".format(str(args.parfile)))
+print ("Receiver = {0}".format(str(rcvr)))
 
 # Get the RA and Dec from the par file if possible
 print (args.parfile)
@@ -343,26 +428,27 @@ if str(args.parfile) != "None":
 if str(args.parfile) == "None" or rajd is None:
     rajd, decjd = get_radec(psr_name)
 
-tsky_jy = get_tsky_updated(rajd, decjd)
+# get receiver dependent tsky
+tsky_jy = get_tsky_updated(rajd, decjd, psr_name, rcvr)
 
-#Get Ssys at 1390 MHz
-params = get_obsheadinfo(obsheader_path)
+#Get receiver dependent ssys (LBAND -> 1390 MHz, UHF -> 800 MHz)
 nant = len(params["ANTENNAE"].split(",")) 
-ssys_1390 = get_Ssys(tsky_jy, nant)
+ssys = get_Ssys(tsky_jy, nant, rcvr)
 
-#Get expected RMS in a single channel at 1390 MHz
+#Get expected RMS in a single channel at 1390 MHz / 800 MHz
 info_TP = get_info(TP_file)
-expected_rms = get_expectedRMS(info_TP, ssys_1390)
+expected_rms = get_expectedRMS(info_TP, ssys)
 
 print ("============")
 #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
 freqinfo = get_freqlist(add_file)
 freq_list = freqinfo[-2].split(",")
 offrms_list = get_offrms(add_file)                
-offrms_freq = dict(zip(freq_list, offrms_list))
+#offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
+offrms_freq = dict(list(zip(freq_list, offrms_list)))
 
 #Getting median rms of off-pulse rms values for ~20 channels centered at 1390 MHz
-observed_rms = get_median_offrms(offrms_freq)
+observed_rms = get_median_offrms(offrms_freq, rcvr)
 
 print ("============")
 #Multiplier

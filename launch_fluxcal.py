@@ -83,7 +83,8 @@ for observation in observation_dirs:
                 decimated_list = os.path.join(output_dir,"decimatedlist.npy")
                  
                 job_name = "{0}_{1}.bash".format(psr_name,obs_name)
-                mysoft_path = "/fred/oz005/meerpipe"
+                #mysoft_path = "/fred/oz005/meerpipe" - TEMP SWITCH FOR LOCAL TESTING - ADC
+                mysoft_path = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe"
                 with open(os.path.join(output_dir,str(job_name)),'w') as job_file:
                     job_file.write("#!/bin/bash \n")
                     job_file.write("#SBATCH --job-name={0}_{1} \n".format(psr_name,obs_name))
