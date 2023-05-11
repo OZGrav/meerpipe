@@ -14,14 +14,12 @@ __status__ = "Development"
 """
 
 """
-Contains routines that help initialize the pipeline. 
+Contains routines that help initialize the pipeline.
 """
 
 import os
-import sys
 import shlex
 import subprocess
-import argparse
 import os.path
 import numpy as np
 import logging
@@ -71,7 +69,7 @@ def parse_config(path_cfile):
     """
     INPUT: Path to the configuration file
     """
-    
+
     config_params = {}
     with open (str(path_cfile)) as cfile:
         for line in cfile.readlines():
@@ -117,9 +115,13 @@ def parse_config(path_cfile):
                 config_params["global_toa_path"] = sline[1].rstrip().lstrip()
             if attr == "redundant_products":
                 config_params["red_prod"] = sline[1].rstrip().lstrip(' ').split(',')
+            if attr == "venv":
+                config_params["venv"] = sline[1].rstrip().lstrip()
+            if attr == "soft_dir":
+                config_params["soft_dir"] = sline[1].rstrip().lstrip()
 
     cfile.close()
-    
+
     return config_params
 
 
@@ -130,10 +132,10 @@ def setup_logging(path,verbose,file_log):
 
     """
     log_toggle=False
-     
+
     # create formatter
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
+
     if file_log == True:
         logfile = "meerpipe.log"
         logger = logging.getLogger(logfile)
@@ -166,7 +168,7 @@ def setup_logging(path,verbose,file_log):
         logger.addHandler(ch)
         logger.info("Verbose mode enabled")
         log_toggle=True
-        
+
     """
     #Create console handler with a lower log level (INFO)
     logfile = "meerpipe.log"
@@ -189,7 +191,7 @@ def setup_logging(path,verbose,file_log):
 def get_outputinfo(cparams,logger):
     """
     Routine to gather information about the directory structure from the input data
-    The input path is assumed to have directories that are pulsarname/UTCs/beamnumber/freq/*ar 
+    The input path is assumed to have directories that are pulsarname/UTCs/beamnumber/freq/*ar
     Returns a list of output paths that needs to exist for the data products to be stored
     """
     input_path = cparams["input_path"]
@@ -235,7 +237,7 @@ def get_outputinfo(cparams,logger):
                 print ("Skipping CAL observations : {0}".format(psr_name))
 
     elif cparams["type"] == "ppta_zap":
-        #For PPTA zapping 
+        #For PPTA zapping
         for pulsar in pulsar_dirs:
             psr_path,psr_name = os.path.split(pulsar)
             psrnames.append(psr_name)
@@ -271,7 +273,7 @@ def get_outputinfo(cparams,logger):
 
             psr_path,psr_name = os.path.split(pulsar)
             psr_name_split = psr_name.split("_")
-            
+
             if psr_name_split[-1] == "R" or psr_name_split[-1] == "N" or psr_name_split[-1] == "O" or psr_name_split[-1] == "S":
                 cparams["fluxcal"] = True
                 logger.info("This is a fluxcal observation")
@@ -367,7 +369,7 @@ def get_outputinfo(cparams,logger):
                             reqram = ram_min
                         elif reqram > ram_max:
                             reqram = ram_max
-                        
+
                         # report result in MB
                         reqram_str = "{0}m".format(int(np.ceil(reqram*1024)))
 
@@ -403,7 +405,7 @@ def get_outputinfo(cparams,logger):
 
                         required_time_list.append(int(reqtime))
 
-         
+
     return results_path,all_archives,psrnames,proposal_ids,required_ram_list,obs_time_list,required_time_list
 
 
@@ -412,7 +414,7 @@ def create_structure(output_dir,cparams,psrname,logger):
     Routine to create an output directory structure as decided by get_directoryinfo.
     Creates a "cleaned", "calibrated" and a "timing" directory in each output path.
 
-    Now includes a "scintillation" directory. 
+    Now includes a "scintillation" directory.
     """
     output_path = cparams["output_path"]
     flags = cparams["flags"]
@@ -425,7 +427,7 @@ def create_structure(output_dir,cparams,psrname,logger):
     logger.info("Creating the directory structure for {0}".format(psrname))
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    
+
     cleaned_dir = os.path.join(output_dir,"cleaned")
     calibrated_dir = os.path.join(output_dir,"calibrated")
     timing_dir = os.path.join(output_dir,"timing")
@@ -444,7 +446,7 @@ def create_structure(output_dir,cparams,psrname,logger):
     elif cparams["type"] == "ppta_zap":
         pulsar_dir = output_dir
         project_dir = output_dir
-        
+
     #Head pulsar directory
     if not os.path.exists(pulsar_dir):
         logger.info("Pulsar directory created")
@@ -504,10 +506,10 @@ def create_structure(output_dir,cparams,psrname,logger):
         #else:
         #    logger.info("Project directory exists")
 
-    
+
     # this part shouldn't need to run if we're just rebuilding the images
     if (not cparams["fluxcal"]) and (not cparams["image_flag"]):
-    
+
         #Pull/Update repositories
         #TODO: for now just creating directories. Have to manage_repos eventually!
         logger.info("Checking if the ephemerides and templates directory exists")
@@ -584,7 +586,7 @@ def create_structure(output_dir,cparams,psrname,logger):
                 copyfile(os.path.join(template_dir,psrname+"_p3.std"),os.path.join(pulsar_dir,psrname+"_p3.std"))
             else:
                 copyfile(os.path.join(template_dir,psrname+".std"),os.path.join(pulsar_dir,psrname+".std"))
-        
+
         elif psrname in notemplate_list:
             logger.info("{0} in notemplate list. Using a Gaussian template instead.".format(psrname))
             copyfile(os.path.join(template_dir,"Gaussian.std"),os.path.join(pulsar_dir,"Gaussian.std"))
