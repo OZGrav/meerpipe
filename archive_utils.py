@@ -51,7 +51,7 @@ from util import ephemeris
 from tables import *
 from graphql_client import GraphQLClient
 from db_utils import (create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage,
-                      get_results, update_processing, update_folding, get_procid_by_location, get_toa_id, check_toa_nominal, 
+                      get_results, update_processing, update_folding, get_procid_by_location, get_toa_id, check_toa_nominal,
                       get_proc_embargo)
 
 #---------------------------------- General functions --------------------------------------
@@ -177,7 +177,7 @@ def get_meertimetemplate(psrname,output_path,cparams,logger):
         template_dir = os.path.join(output_path,"meertime_templates")
         psr_template = os.path.join(template_dir,str(psrname)+".std")
 
-    
+
     if os.path.exists(psr_template):
         #Template sanity checks
         logger.info("Template: {0}".format(psr_template))
@@ -239,7 +239,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
     if os.path.exists(os.path.join(str(tmp_path),"obs.header")):
         copyfile(os.path.join(str(tmp_path),"obs.header"),os.path.join(str(output_dir),"obs.header"))
         logger.info("obs.header file copied")
-    
+
     if not os.path.exists(os.path.join(str(output_dir),str(added_fname))):
 
         logger.info("Adding raw archive files")
@@ -258,12 +258,12 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
             p_add.wait()
 
         elif cparams["fluxcal"]:
-            #Adding flux cal observations. 
+            #Adding flux cal observations.
             add_raw = 'psradd -M {0} -o {1}/{2}'.format(raw_archives,str(output_dir),str(added_fname))
             proc_add = shlex.split(add_raw)
             p_add = subprocess.Popen(proc_add)
             p_add.wait()
- 
+
         if pid == "TPA" or pid == "PTA" or pid == "RelBin" or pid == "GC":
             #Check for new MK DMs and RMs and apply if present. If not, the DM is applied from the ephemeris and the RM from psrcat.
             #Applying DM
@@ -277,14 +277,14 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 proc_dm = shlex.split(set_dm)
                 p_dm = subprocess.Popen(proc_dm)
                 p_dm.wait()
-            
-            else:    
+
+            else:
                 logger.info("Updating DM in header using the value in the ephemeris")
                 set_dm = 'pam {0}/{1} --update_dm -m -E {2}'.format(str(output_dir),str(added_fname), ephem)
                 proc_dm = shlex.split(set_dm)
                 p_dm = subprocess.Popen(proc_dm)
                 p_dm.wait()
-        
+
         else:
             if not cparams["fluxcal"]:
                 logger.info("Updating DM in header using the value in the ephemeris")
@@ -293,7 +293,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 p_dm = subprocess.Popen(proc_dm)
                 p_dm.wait()
 
-        
+
         if pid == "TPA" or pid == "PTA" or pid == "J0437_LT" or pid == "RelBin" or pid == "GC":
             #Applying RMs
             rm_path = cparams["rmcat"]
@@ -306,7 +306,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 proc_rm = shlex.split(set_rm)
                 p_rm = subprocess.Popen(proc_rm)
                 p_rm.wait()
-            
+
             else:
                 logger.info("Obtaining and applying RM to the archive file")
                 cat_rm = 'psrcat -c RM {0} -X -all'.format(psrname)
@@ -355,9 +355,9 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
         utc = datetime.datetime.strptime(utc, '%Y-%m-%d-%H:%M:%S')
         if (archive_utc-utc).total_seconds() > 0:
             time_diff.append(calib_utc)
-  
+
     if not header_params==None:
-        #Obtaining the reference antenna and comparing it with the antenna list for the data. 
+        #Obtaining the reference antenna and comparing it with the antenna list for the data.
         reference_strings = ['reference', 'antenna', 'name:']
         desired_strings = ['desired', 'antenna', 'name:']
         for item in reversed(time_diff):
@@ -389,7 +389,7 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
 
 
 def calibrate_data(added_archives,output_dir,cparams,logger):
-    
+
    #Routine to calibrate the data - either using jones matrices or just use pac -XP
 
     if os.path.exists(os.path.join(str(output_dir),"obs.header")):
@@ -402,7 +402,7 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
     flags = cparams["flags"]
     output_path = cparams["output_path"]
     calibrators_path = cparams["calibrators_path"]
-    
+
     for add_archive in added_archives:
         add_ar = ps.Archive_load(add_archive)
         archive_path,archive_name = os.path.split(add_ar.get_filename())
@@ -497,7 +497,7 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
 
                 #Identify the jones matrix file to use for polarization calibration.
                 calib_utcs = sorted(glob.glob(os.path.join(calibrators_path,"*jones")))
-            
+
                 calibrator_archive = get_calibrator(archive_utc,calib_utcs,header_params,logger)
 
                 logger.info("Found jones matrix file:{0}".format(calibrator_archive))
@@ -553,7 +553,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
             archive_path,archive_name = os.path.split(archive.get_filename())
             archive_name = archive_name.split('.')[0]
             #backend = archive_name[0]
-            archive_name = archive_name+"_zap"      
+            archive_name = archive_name+"_zap"
 
             if not os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
                 logger.info(os.environ["COAST_GUARD"])
@@ -568,13 +568,13 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                         logger.info("CG environment set to: {0}, {1}".format(os.environ["COAST_GUARD"],os.environ["COASTGUARD_CFG"]))
                     else:
                         logger.info("CG environment already set to: {0}, {1}".format(os.environ["COAST_GUARD"],os.environ["COASTGUARD_CFG"]))
-               
+
                 elif cparams["rfi_alg"] == "CHIVE":
-                
+
                     #TODO: Implement PSRCHIVE based zapping (perhaps using the python interface)
                     logger.info("Using PSRCHIVE for RFI mitigation")
 
-                
+
                 elif cparams["rfi_alg"] == "MG":
                     #Uses MeerGuard
                     #Checking if env variable is set properly
@@ -593,7 +593,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
 
                 #Get templates for coastguarding
-                if cparams["type"] == "ppta_zap": 
+                if cparams["type"] == "ppta_zap":
                     orig_template = get_pptatemplate(backend,psrname,float(cloned_archive.get_centre_frequency()),int(cloned_archive.get_nbin()),logger)
                 elif cparams["type"] == "meertime":
                     orig_template = get_meertimetemplate(psrname,output_path,cparams,logger)
@@ -611,7 +611,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                     #RcvrStandard cleaner
                     logger.info("Applying rcvrstd cleaner")
                     rcvrstd_cleaner = cleaners.load_cleaner('rcvrstd')
-                    
+
                     rcvrstd_parameters = 'badfreqs=None,badsubints=None,trimbw=0,trimfrac=0,trimnum=0,response=None'
                     rcvrstd_cleaner.parse_config_string(rcvrstd_parameters)
                     rcvrstd_cleaner.run(cloned_archive)
@@ -619,7 +619,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                     #Surgical cleaner
                     logger.info("Applying the surgical cleaner")
                     surgical_cleaner = cleaners.load_cleaner('surgical')
-                    
+
                     #logger.info("Using template: {0}".format(template))
 
                     chan_thresh = 5
@@ -634,10 +634,10 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                             surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={0},subintthresh={1}'.format(chan_thresh,subint_thresh)
                         else:
                             surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={1},subintthresh={2},template={0}'.format(temporary_template,chan_thresh,subint_thresh)
-                    
+
                     else:
                         surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={0},subintthresh={1}'.format(chan_thresh,subint_thresh)
-                    
+
                     surgical_cleaner.parse_config_string(surgical_parameters)
                     logger.info("Surgical cleaner parameters correctly parsed.")
                     surgical_cleaner.run(cloned_archive)
@@ -648,9 +648,9 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                     bandwagon_parameters = 'badchantol=0.99,badsubtol=1.0'
                     bandwagon_cleaner.parse_config_string(bandwagon_parameters)
                     bandwagon_cleaner.run(cloned_archive)
-                    
+
                     cleaned_archives.append(os.path.join(cleaned_path,archive_name+".ar"))
-                    
+
                     #unloading
                     logger.info("Unloading the cleaned archive {0}.ar".format(archive_name))
                     if cparams["fluxcal"]:
@@ -668,12 +668,12 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
                 logger.info("Cleaned archive {0}.ar exists. Skipping RFI excision".format(archive_name))
                 cleaned_archives.append(os.path.join(cleaned_path,archive_name+".ar"))
-                
+
     else: #DO NOT ZAP
         logger.info("RFI excision disabled")
         cleaned_archives=[]
         for archive in archive_list:
-            archive_path,archive_name = os.path.split(archive) 
+            archive_path,archive_name = os.path.split(archive)
             logger.info("Adding {0}.ar to the archive list".format(archive_name))
             cleaned_archives.append(archive)
 
@@ -808,7 +808,7 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
         max_rfi_frac = 0.0
 
         for clean_archive in cleaned_archives:
-     
+
             clean_ar = ps.Archive_load(clean_archive)
             archive_path,archive_name = os.path.split(clean_ar.get_filename())
             extension = archive_name.split('.')[-1]
@@ -818,7 +818,7 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
             temporary_template = template_adjuster(orig_template, clean_ar, output_dir, logger)
 
             logger.info("Archive name:{0} and extension: {1}".format(archive_name, extension))
-            
+
             if extension == "ch.ar":
                 dynspec_name = archive_name+".ch.dynspec"
             if extension == "ar":
@@ -869,7 +869,7 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
 
                 except:
                     logger.info("Scintools failed. Dyanmic spectra couldn't be created")
-                
+
             else:
                 logger.info("Dynamic spectra already exists")
 
@@ -919,7 +919,7 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
 
 
 def get_extension(commands,chopped):
-    #Routine to generate extension based on pam command 
+    #Routine to generate extension based on pam command
 
     commands = commands.split(" ")
     extension = ""
@@ -955,16 +955,16 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
     processed_archives = []
     decimated_path = os.path.join(str(output_dir),"decimated")
-    
+
     logger.info("Decimating data")
     if "saveall" in flags:
         logger.info("Saving all the decimated products")
 
     for clean_archive in cleaned_archives:
-            
+
         loaded_archive = ps.Archive_load(clean_archive)
         clean_archive = loaded_archive.clone()
-        
+
         #get archive name
         archive_path,archive_name = os.path.split(str(clean_archive.get_filename()))
         archive_name = archive_name.split('.')[0]
@@ -1040,7 +1040,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                             subprocess.call(proc_pam)
                             processed_archives.append(os.path.join(decimated_path,"{0}.{1}ch.ar".format(archive_name,nchan)))
 
-               
+
                 else:
                     logger.info("Sub-banded and t-scrunched (P or S pol) data products exist")
                     processed_archives.append(os.path.join(decimated_path,decimated_name))
@@ -1048,18 +1048,18 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
         if pid == "TPA":
 
-            
-            #Using tpa_decimation.list (in additional_info) for decimating cleaned archives. 
+
+            #Using tpa_decimation.list (in additional_info) for decimating cleaned archives.
 
             #Decimating on a fresh copy of the archive
             logger.info("Loading a fresh version of the archive file")
-            
+
             cleaned_path = os.path.join(str(output_dir),"cleaned")
             cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
             if os.path.exists(cleaned_file):
                 cleaned_ar = ps.Archive_load(cleaned_file)
                 freqs = cleaned_ar.get_frequencies().tolist()
- 
+
             #get archive name
             archive_path,archive_name = os.path.split(str(cleaned_ar.get_filename()))
             archive_name = archive_name.split('.')[0]
@@ -1102,7 +1102,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
-                        
+
                         for item in decimation_info:
                             if not item == "all":
                                 extension = get_extension(item,True)
@@ -1182,17 +1182,17 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
 
         elif pid == "RelBin" or pid == "GC":
-            #Using relbin_decimation.list (in additional_info) for decimating cleaned archives. 
+            #Using relbin_decimation.list (in additional_info) for decimating cleaned archives.
 
             #Decimating on a fresh copy of the archive
             logger.info("Loading a fresh version of the archive file")
 
             cleaned_path = os.path.join(str(output_dir),"cleaned")
             cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
-            
+
             if os.path.exists(cleaned_file):
                 cleaned_ar = ps.Archive_load(cleaned_file)
-           
+
                 #get archive name
                 archive_path,archive_name = os.path.split(str(cleaned_ar.get_filename()))
                 archive_name = archive_name.split('.')[0]
@@ -1230,7 +1230,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             #If the recorded number of channels is greater than 928 (could be either L-band or UHF)
 
             elif len(freqs) > 928:
-                
+
                 if os.path.exists(os.path.join(str(output_dir),"obs.header")):
                     header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
                 else:
@@ -1274,7 +1274,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                             if decimation_info[num][0] == psrname:
                                 for item in decimation_info[num]:
                                     if not item == psrname:
-                                        
+
                                         #Scaling the scrunch factors to 1024 channels (only for UHF data)
                                         #if item == "-f 58 -t 8":
                                         #    item = "-f 64 -t 8"
@@ -1302,18 +1302,18 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
 
         elif pid == "PTA":
-    
-            #Using pta_decimation.list (in additional_info) for decimating cleaned archives. 
+
+            #Using pta_decimation.list (in additional_info) for decimating cleaned archives.
 
             #Decimating on a fresh copy of the archive
             logger.info("Loading a fresh version of the archive file")
-            
+
             cleaned_path = os.path.join(str(output_dir),"cleaned")
             cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
             if os.path.exists(cleaned_file):
                 cleaned_ar = ps.Archive_load(cleaned_file)
                 freqs = cleaned_ar.get_frequencies().tolist()
- 
+
             #get archive name
             archive_path,archive_name = os.path.split(str(cleaned_ar.get_filename()))
             archive_name = archive_name.split('.')[0]
@@ -1356,7 +1356,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
-                        
+
                         for item in decimation_info:
                             if not item == "all":
                                 extension = get_extension(item,True)
@@ -1404,7 +1404,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
 
         elif pid == "ngcsearch":
-            #Using pta_decimation.list (in additional_info) for decimating cleaned archives. 
+            #Using pta_decimation.list (in additional_info) for decimating cleaned archives.
 
             #Decimating on a fresh copy of the archive
             logger.info("Loading a fresh version of the archive file")
@@ -1484,7 +1484,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 else:
                     logger.info("{0}.ar exists. Skipping full frequency scrunching".format(archive_name))
 
-        
+
     return processed_archives
 
 # NEW - 16/08/2022
@@ -1627,7 +1627,7 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
         decimated_archives = sorted(glob.glob(os.path.join(decimated_path, "J*.ar")))
         logger.info("Also adding the cleaned file for flux calibration")
         cleaned_archive = glob.glob(os.path.join(str(output_dir), "cleaned", "J*ar"))
-        
+
         if len(cleaned_archive) > 1:
             for clean_ar in cleaned_archive:
                 decimated_archives.append(clean_ar)
@@ -1765,8 +1765,8 @@ def generate_toas(output_dir,cparams,psrname,logger):
 
     if os.path.exists(parfile):
         os.rename(parfile,copy_parfile)
-        logger.info("Ephemeris copied to the timing directory") 
- 
+        logger.info("Ephemeris copied to the timing directory")
+
     decimated_path = os.path.join(str(output_dir),"decimated")
     processed_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
 
@@ -1957,7 +1957,7 @@ def cleanup(output_dir, cparams, psrname, logger):
     logger.info("Running a clean up")
 
     output_dir = str(output_dir)
-    
+
     #Moving template to the timing directory
     timing_dir = os.path.join(output_dir,"timing")
     if os.path.exists(os.path.join(output_dir,"{0}.std".format(psrname))):
@@ -2050,13 +2050,13 @@ def cleanup(output_dir, cparams, psrname, logger):
                     new_extension = "zap.{0}{1}{2}.fluxcal.ar".format(ext_nch,ext_nsubint,ext_pol)
                 else:
                     new_extension = "zap.{0}{1}.fluxcal.ar".format(ext_nch,ext_pol)
- 
+
             else:
                 if ext_nsubint == "T":
                     new_extension = "zap.{0}{1}{2}.ar".format(ext_nch,ext_nsubint,ext_pol)
                 else:
                     new_extension = "zap.{0}{1}.ar".format(ext_nch,ext_pol)
- 
+
             new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
             renamed_archive = os.path.join(decimated_dir,new_name)
             os.rename(archive,renamed_archive)
@@ -2097,7 +2097,7 @@ def generate_summary(output_dir, cparams, psrname, logger):
 
     with open(summaryfile,"w") as sfile:
         sfile.write("{0} -- {1} -- {2} \n".format(psrname,utcname,rcvr))
-        
+
         #Checking if meerpipe log file exists (only if SLURM launched)
         mpipe_out = glob.glob(os.path.join(output_dir,"meerpipe_out*"))
         bfile = glob.glob(os.path.join(output_dir,"*.bash"))
@@ -2191,7 +2191,7 @@ def generate_summary(output_dir, cparams, psrname, logger):
         #Checking if timing files exist
         timing_path = os.path.join(output_dir,"timing")
         timingfiles = glob.glob(os.path.join(timing_path,"J*tim"))
-        
+
         # setup to prevent invalid variable access
         parfile = []
         stdfile = []
@@ -2585,7 +2585,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 del(tscr_arch)
 
                 #logger.info("Loop {} ending...".format(x))
-            
+
             np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
 
             logger.info("Analysis complete.")
@@ -2680,7 +2680,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                     if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
                         logger.info("Successfully created global observation residual image {0}".format(global_image_file))
                         image_data.append({'file': global_image_file, 'rank': 11, 'type': '{0}.toa-global.hi'.format(local_pid)})
-                  
+
                         # copy the global TOA image to the shared path
                         if not (global_image_file == share_file):
                             copyfile(global_image_file, share_file)
@@ -3125,7 +3125,7 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
         else:
             logger.error("No parfile provided! - Skipping single-obs TOA image generation...")
             result = False
-    
+
         # package the timfile for storage
         if (os.path.exists(timfile)):
             timzip = "{}.gz".format(timfile)
@@ -3273,7 +3273,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                             # step 4 - check for embargo
                             logger.info("Checking embargo dates for processing {0}".format(toa_proc_id))
                             embargo_date = get_proc_embargo(toa_proc_id, db_client, cparams["db_url"], cparams["db_token"])
-                            todays_date = datetime.datetime.utcnow()
+                            todays_date = datetime.datetime.now(datetime.timezone.utc)
 
                             if ((todays_date - embargo_date).total_seconds() > 0):
                                 logger.info("TOA is not embargoed.")
@@ -3297,13 +3297,12 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                         unembargoed_toa_list = "{0} {1}".format(unembargoed_toa_list, toa_archives[x])
                     else:
                         logger.info("{0} excluded from unembargoed TOA list".format(toa_archives[x]))
-                    
+
                 else:
                     # no match
                     logger.info("{0} excluded from global TOA list".format(toa_archives[x]))
 
             except:
-
                 logger.error("Encountered problem trying to query {0} - trying again (Attempt #{1})".format(toa_archives[x], attempt_counter))
                 attempt_counter += 1
 
@@ -3318,7 +3317,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
         {'tim': timfile, 'toas': toa_list, 'image': image_file, 'embargo': False, 'type': 'global'},
         {'tim': public_timfile, 'toas': unembargoed_toa_list, 'image': None, 'embargo': True, 'type': 'global-pub'}
     ]
-    
+
     if not (template == None) and (os.path.exists(template)):
 
         for x in range (0, len(command_list)):
