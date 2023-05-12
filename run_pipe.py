@@ -83,19 +83,18 @@ if not os.path.exists(config_params["output_path"]):
     sys.exit()
 
 #setting up the logger for this instance of the pipeline run
-if not args.slurm:
-    if args.dirname:
-        logger = setup_logging(os.path.join(config_params["output_path"],str(args.dirname)),args.verbose,False)
-    else:
-        logger = setup_logging(config_params["output_path"],args.verbose,False)
-
+if args.dirname:
+    logdir = os.path.join(config_params["output_path"],str(args.dirname))
 else:
-    logger = setup_logging(config_params["output_path"],args.verbose,False)
-
+    logdir = config_params["output_path"]
+logger = setup_logging(
+    filedir=logdir,
+    console=args.verbose,
+)
 
 ############ Analysis ##############
 logger.info("Logger setup")
-logger.info ("User:{0}".format(config_params["user"]))
+logger.info("User:{0}".format(config_params["user"]))
 
 #Adding filename as config_param if specified
 if args.dirname:

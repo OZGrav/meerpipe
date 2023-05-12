@@ -54,7 +54,10 @@ with open(os.path.join(str(output_dir),"config_params.p"), 'rb') as fp:
     config_params = pickle.load(fp)
 fp.close()
 
-logger=setup_logging(config_params["output_path"],True,False)
+logger = setup_logging(
+    filedir=config_params["output_path"],
+    console=True,
+)
 
 #####
 

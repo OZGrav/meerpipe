@@ -53,7 +53,10 @@ else:
 # we're good to go - begin
 
 # setup logger
-logger = setup_logging(psrpath,True,False)
+logger = setup_logging(
+    filedir=psrpath,
+    console=True,
+)
 logger.info("Logger setup")
 logger.info ("User:{0}".format(config_params["user"]))
 

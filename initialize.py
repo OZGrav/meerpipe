@@ -125,67 +125,67 @@ def parse_config(path_cfile):
     return config_params
 
 
-def setup_logging(path,verbose,file_log):
+def setup_logging(
+        console=True,
+        logfile=False,
+        filedir=None,
+        filename='meerpipe.log',
+        level=logging.INFO,
+    ):
     """
     Setup log handler - this logs in the terminal (if not run with --slurm).
     For slurm based runs - the logging is done by the job queue system
 
+    Paramterers
+    -----------
+    console : `boolean`
+        Output logging to the command line
+    logfile : `boolean`
+        Output logging to the log file
+    filedir : `str`
+        Directory to output logger file to
+    filename : `str`
+        Name of the output logger file
+
+    Returns
+    -------
+    logger : logger object
+        The modified logger object
     """
-    log_toggle=False
-
     # create formatter
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(lineno)-4d - %(levelname)-9s :: %(message)s')
+    # Create a logger and set the logging level
+    logger = logging.getLogger()
+    logger.setLevel(level)
 
-    if file_log == True:
-        logfile = "meerpipe.log"
-        logger = logging.getLogger(logfile)
-        logger.setLevel(logging.INFO)
+    # Create a console handler and set the logging level if console is True
+    if console:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(level)
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+        logger.info("Console logger enabled")
 
-        if not os.path.exists(path):
-            os.makedirs(path)
-        #Create file logging only if logging file path is specified
-        fh = logging.FileHandler(os.path.join(path,logfile))
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
+    # Create a file handler and set the logging level if logfile is True
+    if logfile:
+        if not filedir:
+            raise ValueError("Filedir must be specified when enabling logfile output.")
+        if not os.path.exists(filedir):
+            os.makedirs(filedir)
+        file_handler = logging.FileHandler(os.path.join(filedir, filename))
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        logger.info("File logging enabled")
+
         #Check if file already exists, if so, add a demarcator to differentiate among runs
-        if os.path.exists(os.path.join(path, logfile)):
-            with open(os.path.join(path,logfile), 'a') as f:
+        if os.path.exists(os.path.join(filedir, filename)):
+            with open(os.path.join(filedir, filename), 'a') as f:
                 f.write(20*"#")
                 f.write("\n")
-        logger.info("File handler created")
-        log_toggle=True
 
-    if verbose:
-        #Create console handler with a lower log level (INFO)
-        logfile = "meerpipe.log"
-        logger = logging.getLogger(logfile)
-        logger.setLevel(logging.INFO)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        ch.setFormatter(formatter)
-        # add the handlers to the logger
-        logger.addHandler(ch)
-        logger.info("Verbose mode enabled")
-        log_toggle=True
-
-    """
-    #Create console handler with a lower log level (INFO)
-    logfile = "meerpipe.log"
-    logger = logging.getLogger(logfile)
-    logger.setLevel(logging.INFO)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(formatter)
-    # add the handlers to the logger
-    logger.addHandler(ch)
-    logger.info("Verbose mode enabled")
-    """
-
-    if log_toggle:
-        return logger
-    else:
-        return none
+    return logger
 
 
 def get_outputinfo(cparams,logger):
