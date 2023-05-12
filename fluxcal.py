@@ -11,15 +11,6 @@ from shutil import copyfile, rmtree
 
 import getopt
 
-# WARNING - This next instruction is horrible code and I don't condone ever doing it again
-# Unfortunately, my hand is forced by a lack of other apparent options
-# Andrew Cameron - 10/02/2022
-
-# sys.path.insert(1, sys.path[len(sys.path)-1])
-# import astropy
-
-# end horrible code
-
 from astropy.io import fits
 from astropy.coordinates import (SkyCoord, Longitude, Latitude)
 

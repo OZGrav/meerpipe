@@ -15,7 +15,8 @@ import numpy as np
 from shlex import split as shplit
 import subprocess as sproc
 import matplotlib.pyplot as plt
-from matplotlib import colors, cm
+import matplotlib.cm as cm
+from matplotlib.colors import Normalize
 import json
 
 # calculate the rms of the toa format used in this library
@@ -105,8 +106,21 @@ def clean_toas(input_toas,outlier_factor=3):
         new_toas[name] = input_toas[name][indices].squeeze()
     return(new_toas)
 
-def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out_dir=None, sequential=True, title=None, verb=False, bw=856, cfrq=1284, nchn=None,
-                      outlier_factor=None):
+def plot_toas_fromarr(
+        toas,
+        pid="unk",
+        mjd=None,
+        fs=14,
+        out_file="toas.png",
+        out_dir=None,
+        sequential=True,
+        title=None,
+        verb=False,
+        bw=856,
+        cfrq=1284,
+        nchn=None,
+        outlier_factor=None,
+    ):
 
     if outlier_factor is not None:
         toas = clean_toas(toas,outlier_factor=outlier_factor)
@@ -120,8 +134,13 @@ def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out
     # use semi-fixed color normalisation
     f_min = cfrq-bw/2.0
     f_max = cfrq+bw/2.0
+    norm = Normalize(vmin=f_min, vmax=f_max)
+    # Make tupes of RGBA values for some manual error bar fixing
+    y_norm = (toas['freq'] - f_min) / (f_max - f_min)
+    cmap = cm.get_cmap('viridis')
+    rgba_values = cmap(y_norm)
+    rgba_tuples = [tuple(rgba) for rgba in rgba_values]
 
-    norm = colors.Normalize(vmin=f_min, vmax=f_max)
 
     fig = plt.figure(num=1)
     fig.set_size_inches(6, 4.5)
@@ -163,11 +182,12 @@ def plot_toas_fromarr(toas, pid="unk", mjd=None, fs=14, out_file="toas.png", out
 
         xdata = toas['mjd']
 
-    p2 = ax.scatter(xdata, toas['res']*1e6, s=8, c=toas['freq'], marker='s', norm=norm, cmap='viridis')
-    cb = fig.colorbar(p2, ax=ax, fraction=0.1)
 
-    lines = ax.errorbar(xdata, toas['res']*1e6, yerr=1e6*toas['err'], ls='', marker='', ms=1, zorder=0)[2]
-    lines[0].set_color(cb.to_rgba(toas['freq']))
+    scat = ax.scatter(xdata, toas['res']*1e6, s=8, c=toas['freq'], marker='s', norm=norm, cmap='viridis')
+    cb = fig.colorbar(scat, ax=ax, fraction=0.1)
+    ebar = ax.errorbar(xdata, toas['res']*1e6, 1e6*toas['err'], ls='', marker='', ms=1, zorder=0)
+    ebar[2][0].set_color(rgba_tuples)
+
 
     print (xdata)
     spread = xdata.max()-xdata.min()
