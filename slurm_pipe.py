@@ -12,22 +12,16 @@ Modified version of MeerPipe
 
 #Basic imports
 import os
-import sys
-import subprocess
-import shlex
 import argparse
 import os.path
 import numpy as np
-import logging
-import glob
 import pickle
-import json
 
 # PSRDB paths
 PSRDB = "psrdb.py"
 
 #Importing pipeline utilities
-from initialize import (parse_config, setup_logging)
+from initialize import setup_logging
 
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives, calibrate_data,
                            dynamic_spectra, fluxcalibrate, cleanup, generate_summary, check_summary,
@@ -145,7 +139,7 @@ crash = False
 
 try:
 
-    # separate the code to be ignored if we want images only
+        # separate the code to be ignored if we want images only
     if not (config_params["image_flag"]):
 
         #Add the archive files per observation directory into a single file
@@ -209,9 +203,10 @@ try:
 
         logger.info ("##############")
 
-except:
+except Exception as e:
     crash = True
     logger.error("PIPELINE CRASH DETECTED")
+    logger.error(e)
 
 #####
 
