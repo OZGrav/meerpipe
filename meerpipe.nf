@@ -4,7 +4,7 @@ params.help = false
 if ( params.help ) {
     help = """mwa_search_pipeline.nf: A pipeline that will beamform and perform a pulsar search
              |                        in the entire FOV.
-             |Observation selection options
+             |Observation selection options:
              |  --list_in   List of observations to process, given in standard format.
              |              These will be crossmatched against PSRDB before job submission.
              |              List format must be:\n* Column 1 - Pulsar name\n* Column 2 - UTC\n* Column 3
@@ -19,7 +19,12 @@ if ( params.help ) {
              |  --pulsar    Pulsar name for PSRDB search.
              |              Returns only observations with this pulsar name.
              |              If not provided, returns all pulsars.
+             |  --list_out  Write the list of observations submitted in a processing_jobs.csv file.
              |
+             |Processing options:
+             |  --use_edge_subints
+             |              Use first and last 8 second subints of observation archives
+             |              [default: ${params.use_edge_subints}]
              |Other arguments (optional):
              |  --out_dir   Output directory for the candidates files
              |              [default: ${params.out_dir}]
@@ -32,7 +37,7 @@ if ( params.help ) {
 
 
 process obs_list{
-    debug true
+    publishDir "./", mode: 'copy', enabled: params.list_out
     beforeScript 'source  /fred/oz005/users/nswainst/code/meerpipe/env_setup.sh; source /home/nswainst/venv/bin/activate'
 
     input:
@@ -105,11 +110,38 @@ process obs_list{
 }
 
 
+process psradd {
+    debug=true
+    beforeScript 'module use /apps/users/pulsar/skylake/modulefiles; module load psrchive/c216582a0'
+
+    input:
+    tuple val(pulsar), val(utc), val(obs_pid)
+
+    output:
+    tuple val(pulsar), val(utc), val(obs_pid), path("${pulsar}_${utc}.ar")
+
+    """
+    if ${params.use_edge_subints}; then
+        # Grab all archives
+        archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar)
+    else
+        # Grab all archives except for the first and last one
+        archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar | head -n-1 | tail -n+2)
+    fi
+
+    echo \$archives
+    psradd -E ${params.meertime_ephemerides}/${pulsar}.par -o ${pulsar}_${utc}.ar \${archives}
+    """
+
+
+}
+
+
 workflow {
     // Use PSRDB to work out which obs to process
     if ( params.list_in ) {
         // Check contents of list_in
-        // TODO need a test file
+        obs_data = Channel.fromPath( params.list_in ).splitCsv()
     }
     else {
         obs_list(
@@ -118,8 +150,10 @@ workflow {
             params.pulsar,
             params.obs_pid,
         )
-        obs_list.out.view()
+        obs_data = obs_list.out.splitCsv()
     }
+
+    psradd( obs_data ).view()
 }
 
 
