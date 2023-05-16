@@ -374,81 +374,91 @@ def fluxcalibrate(archive,multiplier):
 
 
 #=============================================================================
+def main():
+    parser = argparse.ArgumentParser(description="Flux calibrate MTime data")
+    parser.add_argument("-psrname", dest="psrname", help="psrname", required=True)
+    parser.add_argument("-obsname", dest="obsname", help="Observation name", required=True)
+    parser.add_argument("-obsheader", dest="obsheader", help="obsheader", required=True)
+    parser.add_argument("-TPfile", dest="tpfile", help="T+P scrunched archive", required=True)
+    parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
+    parser.add_argument("-dec_path", dest="dec_path", help="List of decimated directories")
+    parser.add_argument("-dec_files", dest="dec_files", help="All decimated files", nargs='*')
+    parser.add_argument("-parfile", help="Path to par file for pulsar", default="None")
+    args = parser.parse_args()
 
 
-parser = argparse.ArgumentParser(description="Flux calibrate MTime data")
-parser.add_argument("-psrname", dest="psrname", help="psrname", required=True)
-parser.add_argument("-obsname", dest="obsname", help="Observation name", required=True)
-parser.add_argument("-obsheader", dest="obsheader", help="obsheader", required=True)
-parser.add_argument("-TPfile", dest="tpfile", help="T+P scrunched archive", required=True)
-parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
-parser.add_argument("-dec_path", dest="decimated", help="List of decimated directories", required=True)
-parser.add_argument("-parfile", help="Path to par file for pulsar", default="None")
-args = parser.parse_args()
+    psr_name = str(args.psrname)
+    obs_name = str(args.obsname)
+    obsheader_path = str(args.obsheader)
+    TP_file = str(args.tpfile)
+    add_file = str(args.rawfile)
+    if args.dec_path:
+        decimated_products = np.load(args.dec_path)
+    elif args.dec_files:
+        decimated_products = args.dec_files
+    else:
+        print("ERROR: Use either --dec_path or --dec_files.")
+        exit()
+
+    # extract the header parameters
+    params = get_listinfo(obsheader_path)
+
+    # determine the receiver in use
+    rcvr = get_rcvr(params)
+
+    print ("Processing {0}:{1}".format(psr_name, obs_name))
+    print ("============================================")
+    print ("Reference par file = {0}".format(str(args.parfile)))
+    print ("Receiver = {0}".format(str(rcvr)))
+
+    # Get the RA and Dec from the par file if possible
+    print (args.parfile)
+    if str(args.parfile) != "None":
+        rajd, decjd = get_radec_new(str(args.parfile))
+
+    if str(args.parfile) == "None" or rajd is None:
+        rajd, decjd = get_radec(psr_name)
+
+    # get receiver dependent tsky
+    tsky_jy = get_tsky_updated(rajd, decjd, psr_name, rcvr)
+
+    #Get receiver dependent ssys (LBAND -> 1390 MHz, UHF -> 800 MHz)
+    nant = len(params["ANTENNAE"].split(","))
+    ssys = get_Ssys(tsky_jy, nant, rcvr)
+
+    #Get expected RMS in a single channel at 1390 MHz / 800 MHz
+    info_TP = get_info(TP_file)
+    expected_rms = get_expectedRMS(info_TP, ssys)
+
+    print ("============")
+    #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
+    freqinfo = get_freqlist(add_file)
+    freq_list = freqinfo[-2].split(",")
+    offrms_list = get_offrms(add_file)
+    #offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
+    offrms_freq = dict(list(zip(freq_list, offrms_list)))
+
+    #Getting median rms of off-pulse rms values for ~20 channels centered at 1390 MHz
+    observed_rms = get_median_offrms(offrms_freq, rcvr)
+
+    print ("============")
+    #Multiplier
+    multiplier = expected_rms/observed_rms
+
+    print ("Multiplier is: {0}".format(multiplier))
+
+    print ("============")
+    #Flux calibrate all the decimated data products
+    for archive in decimated_products:
+        fluxcalibrate(archive, multiplier)
+
+    print ("============")
+    print ("Flux calibrated {0}:{1}".format(psr_name, obs_name))
+    #sys.exit()
 
 
-psr_name = str(args.psrname)
-obs_name = str(args.obsname)
-obsheader_path = str(args.obsheader)
-TP_file = str(args.tpfile)
-add_file = str(args.rawfile)
-decimated_products = np.load(args.decimated)
+    print ("=================================================")
 
-# extract the header parameters
-params = get_listinfo(obsheader_path)
+if __name__ == '__main__':
+    main()
 
-# determine the receiver in use
-rcvr = get_rcvr(params)
-
-print ("Processing {0}:{1}".format(psr_name, obs_name))
-print ("============================================")
-print ("Reference par file = {0}".format(str(args.parfile)))
-print ("Receiver = {0}".format(str(rcvr)))
-
-# Get the RA and Dec from the par file if possible
-print (args.parfile)
-if str(args.parfile) != "None":
-    rajd, decjd = get_radec_new(str(args.parfile))
-
-if str(args.parfile) == "None" or rajd is None:
-    rajd, decjd = get_radec(psr_name)
-
-# get receiver dependent tsky
-tsky_jy = get_tsky_updated(rajd, decjd, psr_name, rcvr)
-
-#Get receiver dependent ssys (LBAND -> 1390 MHz, UHF -> 800 MHz)
-nant = len(params["ANTENNAE"].split(","))
-ssys = get_Ssys(tsky_jy, nant, rcvr)
-
-#Get expected RMS in a single channel at 1390 MHz / 800 MHz
-info_TP = get_info(TP_file)
-expected_rms = get_expectedRMS(info_TP, ssys)
-
-print ("============")
-#Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
-freqinfo = get_freqlist(add_file)
-freq_list = freqinfo[-2].split(",")
-offrms_list = get_offrms(add_file)
-#offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
-offrms_freq = dict(list(zip(freq_list, offrms_list)))
-
-#Getting median rms of off-pulse rms values for ~20 channels centered at 1390 MHz
-observed_rms = get_median_offrms(offrms_freq, rcvr)
-
-print ("============")
-#Multiplier
-multiplier = expected_rms/observed_rms
-
-print ("Multiplier is: {0}".format(multiplier))
-
-print ("============")
-#Flux calibrate all the decimated data products
-for archive in decimated_products:
-    fluxcalibrate(archive, multiplier)
-
-print ("============")
-print ("Flux calibrated {0}:{1}".format(psr_name, obs_name))
-#sys.exit()
-
-
-print ("=================================================")
