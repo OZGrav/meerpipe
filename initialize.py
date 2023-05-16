@@ -136,8 +136,8 @@ def setup_logging(
     Setup log handler - this logs in the terminal (if not run with --slurm).
     For slurm based runs - the logging is done by the job queue system
 
-    Paramterers
-    -----------
+    Parameters
+    ----------
     console : `boolean`
         Output logging to the command line
     logfile : `boolean`
