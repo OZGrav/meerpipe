@@ -25,6 +25,8 @@ if ( params.help ) {
              |  --use_edge_subints
              |              Use first and last 8 second subints of observation archives
              |              [default: ${params.use_edge_subints}]
+             |  --fluxcal   Calibrate flux densities. Should only be done for calibrator observations
+             |              [default: ${params.fluxcal}]
              |Other arguments (optional):
              |  --out_dir   Output directory for the candidates files
              |              [default: ${params.out_dir}]
@@ -111,7 +113,6 @@ process obs_list{
 
 
 process psradd {
-    debug=true
     beforeScript 'module use /apps/users/pulsar/skylake/modulefiles; module load psrchive/c216582a0'
 
     input:
@@ -129,11 +130,92 @@ process psradd {
         archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar | head -n-1 | tail -n+2)
     fi
 
-    echo \$archives
     psradd -E ${params.meertime_ephemerides}/${pulsar}.par -o ${pulsar}_${utc}.ar \${archives}
     """
+}
 
 
+process calibrate {
+    beforeScript 'module use /apps/users/pulsar/skylake/modulefiles; module load psrchive/c216582a0'
+    publishDir "${params.output_path}/${pulsar}/${utc}/calibrated", mode: 'copy'
+
+    input:
+    tuple val(pulsar), val(utc), val(obs_pid)
+
+    output:
+    tuple val(pulsar), val(utc), val(obs_pid), path("${pulsar}_${utc}.ar")
+
+    """
+    if ${params.use_edge_subints}; then
+        # Grab all archives
+        archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar)
+    else
+        # Grab all archives except for the first and last one
+        archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar | head -n-1 | tail -n+2)
+    fi
+
+    # Calibrate the subint archives
+    for ar in \$archives; do
+        pac -XP -O ./ -e calib  \$ar
+    done
+
+    # Combine the calibrate archives
+    psradd -E ${params.meertime_ephemerides}/${pulsar}.par -o ${pulsar}_${utc}.ar *calib
+    """
+}
+
+
+process meergaurd {
+    beforeScript 'module use /apps/users/pulsar/skylake/modulefiles; module load coast_guard/56b8d81'
+    publishDir "${params.output_path}/${pulsar}/${utc}/cleaned", mode: 'copy'
+
+    input:
+    tuple val(pulsar), val(utc), val(obs_pid), path(archive)
+
+    output:
+    tuple val(pulsar), val(utc), val(obs_pid), path(archive), path("${pulsar}_${utc}_zap.ar")
+
+    """
+    clean_archive.py -a ${archive} -T ${params.meertime_templates}/${pulsar}.std -o ${pulsar}_${utc}_zap.ar
+    """
+}
+
+
+process decimate {
+    beforeScript 'module use /apps/users/pulsar/skylake/modulefiles; module load psrchive/c216582a0'
+    publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy'
+
+    input:
+    tuple val(pulsar), val(utc), val(obs_pid), path(raw_archive), path(cleaned_archive)
+
+    output:
+    tuple val(pulsar), val(utc), val(obs_pid), path(raw_archive), path(cleaned_archive), path("${pulsar}_${utc}_zap.*.ar")
+
+    """
+    for nsub in ${params.time_subs.join(' ')}; do
+        for nchan in ${params.freq_subs.join(' ')}; do
+            pam -t \${nsub} -f \${nchan} -S -p -e \${nsub}t\${nchan}ch1p.ar ${cleaned_archive}
+            pam -t \${nsub} -f \${nchan} -S -e \${nsub}t\${nchan}ch4p.ar ${cleaned_archive}
+        done
+    done
+    """
+}
+
+
+process fluxcal {
+    debug=true
+    beforeScript 'source  /fred/oz005/users/nswainst/code/meerpipe/env_setup.sh; source /home/nswainst/venv/bin/activate'
+    publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy'
+
+    input:
+    tuple val(pulsar), val(utc), val(obs_pid), path(raw_archive), path(cleaned_archive), path(decimated_archives)
+
+    output:
+    tuple val(pulsar), val(utc), val(obs_pid), path("${pulsar}_${utc}_zap.*.ar")
+
+    """
+    fluxcal -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -TPfile ${cleaned_archive} -rawfile ${raw_archive} -dec_files ${decimated_archives.join(' ')} -parfile ${params.meertime_ephemerides}/${pulsar}.par
+    """
 }
 
 
@@ -153,7 +235,28 @@ workflow {
         obs_data = obs_list.out.splitCsv()
     }
 
-    psradd( obs_data ).view()
+    // Combine archives and flux calibrate if option selected
+    if ( params.fluxcal ) {
+        obs_data_archive = calibrate( obs_data )
+    }
+    else {
+        obs_data_archive = psradd( obs_data )
+    }
+
+    // Clean of RFI with MeerGaurd
+    meergaurd( obs_data_archive )
+
+    // Decimate into different time and freq chunnks using pam
+    decimate( meergaurd.out )
+
+    // Flux calibrate
+    fluxcal( decimate.out )
+
+    // Generate TOAs
+    // generate_toas(output_dir,config_params,psrname,logger)
+
+    // Summary and clean up jobs
+    // generate_summary(output_dir,config_params,psrname,logger)
 }
 
 

@@ -397,10 +397,7 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
     else:
         header_params = None
 
-    pid = cparams["pid"]
     calibrated_archives=[]
-    flags = cparams["flags"]
-    output_path = cparams["output_path"]
     calibrators_path = cparams["calibrators_path"]
 
     for add_archive in added_archives:
