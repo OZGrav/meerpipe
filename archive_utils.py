@@ -3435,6 +3435,7 @@ def upload_data_archives(output_dir, cparams, psrname, logger):
     # update - pid now to be included in the naming structure (type)
     local_pid = cparams["pid"].lower()
     files_to_store = []
+    files_to_delete = []
 
     # identify the decimated path
     output_dir = str(output_dir)
@@ -3453,9 +3454,23 @@ def upload_data_archives(output_dir, cparams, psrname, logger):
             FTS_archives.append(arch)
         
     if (len(FTS_archives) > 0):
-        file_type = "{0}.{1}.{2}".format(local_pid, psrname, "FTS")
-        files_to_store.append({'filename': FTS_archives[0], 'type': file_type})   
+
+        # select first file for upload
+        # produce renamed copy of the file in PSRDB friendly format
+        FTS_selectfile = FTS_archives[0]
+        FTS_time = datetime.datetime.strptime(os.path.basename(FTS_selectfile).split("_")[1], '%Y-%m-%d-%H:%M:%S')
+        FTS_uploadfile = os.path.join(decimated_path, "{0}_{1}_{2}.ar".format(psrname, FTS_time.strftime('%y%m%d_%H%M%S'), "FTS"))
+        copyfile(FTS_selectfile, FTS_uploadfile)
+        logger.info("Copied {} to {} for upload.".format(FTS_selectfile, FTS_uploadfile))
+
+        # prepare file type
+        file_type = "{0}.archive.{1}".format(local_pid, "FTS")
+
+        # document file to be uploaded
+        files_to_store.append({'filename': FTS_uploadfile, 'type': file_type})
+        files_to_delete.append(FTS_uploadfile)
         logger.info("Identified {} for FTS upload.".format(FTS_archives[0]))
+
     else:
         logger.info("No FTS file identified for upload.")
 
@@ -3481,5 +3496,10 @@ def upload_data_archives(output_dir, cparams, psrname, logger):
     else:
 
         logger.info("PSRDB functionality not actived - not uploading specified data products.")
+
+    # cleanup
+    for f in files_to_delete:
+        os.remove(f)
+        logger.info("Deleted {}.".format(f))
 
     return
