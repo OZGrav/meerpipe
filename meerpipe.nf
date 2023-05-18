@@ -227,6 +227,36 @@ process meergaurd {
 }
 
 
+process psrplot_images {
+    label 'cpu'
+    label 'psrchive'
+
+    publishDir "${params.output_path}/${pulsar}/${utc}/images", mode: 'copy'
+    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+
+    input:
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
+
+    output:
+    path "*png"
+
+    """
+    for i in "raw ${raw_archive}" "cleaned ${cleaned_archive}"; do
+        set -- \$i
+        type=\$1
+        file=\$2
+        # Do the plots for raw file then cleaned file
+        psrplot -p flux -jFTDp -jC                -g 1024x768 -c above:l= -c above:c="Stokes I Profile (\${type})"     -D \${type}_profile_fts.png/png \$file
+        psrplot -p Scyl -jFTD  -jC                -g 1024x768 -c above:l= -c above:c="Polarisation Profile (\${type})" -D \${type}_profile_ftp.png/png \$file
+        psrplot -p freq -jTDp  -jC                -g 1024x768 -c above:l= -c above:c="Phase vs. Frequency (\${type})"  -D \${type}_phase_freq.png/png  \$file
+        psrplot -p time -jFDp  -jC                -g 1024x768 -c above:l= -c above:c="Phase vs. Time (\${type})"       -D \${type}_phase_time.png/png  \$file
+        psrplot -p b -x -jT -lpol=0,1 -O -c log=1 -g 1024x768 -c above:l= -c above:c="Cleaned bandpass (\${type})"     -D \${type}_bandpass.png/png    \$file
+    done
+    """
+}
+
+
 process decimate {
     label 'cpu'
     label 'psrchive'
@@ -336,6 +366,9 @@ workflow {
 
     // Clean of RFI with MeerGaurd
     meergaurd( obs_data_archive )
+
+    // Make psrplot images
+    psrplot_images( meergaurd.out )
 
     // Decimate into different time and freq chunnks using pam
     decimate( meergaurd.out )
