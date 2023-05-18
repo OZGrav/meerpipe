@@ -18,7 +18,6 @@ For each observation, meerpipe implements the following routines:
 
 5. Times-of-arrival: Using the decimated data products, the times-of-arrival per observation are computed using [PSRCHIVE](http://psrchive.sourceforge.net/). 
 
-
 ## Database management
 
 On top of the standard data processing offered by the main branch, the "forDB" branch of this repository links the data products and the pipeline to a central database (PSRDB) that forms the backend for the online data portal. This database can be interacted with both via a CLI and a Python/SQL-based API.
