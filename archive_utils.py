@@ -3440,15 +3440,15 @@ def upload_data_archives(output_dir, cparams, psrname, logger):
     # select the required decimated products and structure for upload
     decimated_archives = sorted(glob.glob(os.path.join(decimated_path, "*")))
 
+    # isolate a single FTS archive in case of multiples
+    # choice is currently arbitrary
+    FTS_archives = []
+
     for arch in decimated_archives:
         
-        # isolate a single FTS archive in case of multiples
-        # choice is currently arbitrary
-        FTS_archives = []
-
         if "FTS" in arch:
             FTS_archives.append(arch)
-        
+
     if (len(FTS_archives) > 0):
 
         # select first file for upload
