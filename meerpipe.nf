@@ -5,10 +5,9 @@ if ( params.help ) {
     help = """mwa_search_pipeline.nf: A pipeline that will beamform and perform a pulsar search
              |                        in the entire FOV.
              |Observation selection options:
-             |  --list_in   List of observations to process, given in standard format.
-             |              These will be crossmatched against PSRDB before job submission.
-             |              List format must be:\n* Column 1 - Pulsar name\n* Column 2 - UTC\n* Column 3
-             |              Observation PID\nTrailing columns may be left out if needed, but at a minimum the pulsar name must be provided.
+             |  --list_in   List of observations to process, given in a standard format.
+             |              Row should include the following: pulsar,utc_obs,project_id,
+             |                  band,duration,ephemeris_path,template_path
              |  --utcs      Start UTC for PSRDB search.
              |              Returns only observations after this UTC timestamp.
              |  --utce      End UTC for PSRDB search.
@@ -27,6 +26,19 @@ if ( params.help ) {
              |              [default: ${params.use_edge_subints}]
              |  --fluxcal   Calibrate flux densities. Should only be done for calibrator observations
              |              [default: ${params.fluxcal}]
+             |Ephemerides and template options:
+             |  --ephemerides_dir
+             |              Base directory of the ephermerides. Will be used to find a default ephemeris:
+             |              \${ephemerides_dir}/\${project}/\${pulsar}.par
+             |              [default: ${params.ephemerides_dir}]
+             |  --templates_dir
+             |              Base directory of the templates. Will be used to find a default templates:
+             |              \${templates_dir}/\${project}/\${band}/\${pulsar}.std
+             |              [default: ${params.templates_dir}]
+             |  --ephemeris Path to the ephemris which will overwrite the default described above.
+             |              Recomended to only be used for single observations.
+             |  --template  Path to the template which will overwrite the default described above.
+             |              Recomended to only be used for single observations.
              |Other arguments (optional):
              |  --out_dir   Output directory for the candidates files
              |              [default: ${params.out_dir}]
@@ -110,13 +122,26 @@ process obs_list{
             pulsar_obs = get_pulsarname(ob, client, "${params.psrdb_url}", "${params.psrdb_token}")
             utc_obs = utc_psrdb2normal(ob['node']['processing']['observation']['utcStart'])
             pid_obs = pid_getshort(ob['node']['processing']['observation']['project']['code'])
+
             # Extra data from obs header
             header_data = get_obsheadinfo(glob(f"${params.input_path}/{pulsar_obs}/{utc_obs}/*/*/obs.header")[0])
             band = get_rcvr(header_data)
 
             # Estimate intergration from number of archives
             nfiles = len(glob(f"${params.input_path}/{pulsar_obs}/{utc_obs}/*/*/*.ar"))
-            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{band},{int(nfiles*8)}")
+
+            # Grab ephermis and templates
+            if "${params.ephemeris}" == "null":
+                ephemeris = f"${params.ephemerides_dir}/{pid_obs}/{pulsar_obs}.par"
+            else:
+                ephemeris = "${params.ephemeris}"
+            if "${params.template}" == "null":
+                template = f"${params.templates_dir}/{pid_obs}/{band}/{pulsar_obs}.std"
+            else:
+                template = "${params.template}"
+
+            # Write out results
+            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{band},{int(nfiles*8)},{ephemeris},{template}")
     """
 }
 
@@ -129,10 +154,10 @@ process psradd {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path("${pulsar}_${utc}.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path("${pulsar}_${utc}.ar")
 
     """
     if ${params.use_edge_subints}; then
@@ -157,10 +182,10 @@ process calibrate {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path("${pulsar}_${utc}.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path("${pulsar}_${utc}.ar")
 
     """
     if ${params.use_edge_subints}; then
@@ -177,7 +202,7 @@ process calibrate {
     done
 
     # Combine the calibrate archives
-    psradd -E ${params.meertime_ephemerides}/${pulsar}.par -o ${pulsar}_${utc}.ar *calib
+    psradd -E ${ephemeris} -o ${pulsar}_${utc}.ar *calib
     """
 }
 
@@ -191,13 +216,13 @@ process meergaurd {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(archive)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(archive), path("${pulsar}_${utc}_zap.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(archive), path("${pulsar}_${utc}_zap.ar")
 
     """
-    clean_archive.py -a ${archive} -T ${params.meertime_templates}/${pulsar}.std -o ${pulsar}_${utc}_zap.ar
+    clean_archive.py -a ${archive} -T ${template} -o ${pulsar}_${utc}_zap.ar
     """
 }
 
@@ -211,10 +236,10 @@ process decimate {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path("${pulsar}_${utc}_zap.*.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path("${pulsar}_${utc}_zap.*.ar")
 
     """
     for nsub in ${params.time_subs.join(' ')}; do
@@ -236,13 +261,13 @@ process fluxcal {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path(decimated_archives)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.fluxcal")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.fluxcal")
 
     """
-    fluxcal -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -TPfile ${cleaned_archive} -rawfile ${raw_archive} -dec_files ${decimated_archives.join(' ')} -parfile ${params.meertime_ephemerides}/${pulsar}.par
+    fluxcal.py -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -TPfile ${cleaned_archive} -rawfile ${raw_archive} -dec_files ${decimated_archives.join(' ')} -parfile ${ephemeris}
     """
 }
 
@@ -256,10 +281,10 @@ process generate_toas {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(fluxcal_archives)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(fluxcal_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(fluxcal_archives), path("*.tim")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(fluxcal_archives), path("*.tim")
 
     """
     # Loop over each decimated archive
@@ -268,7 +293,7 @@ process generate_toas {
         nchan=\$(vap -c nchan \$ar | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
         nsub=\$( vap -c nsub  \$ar | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
         # Grab template nchan
-        tnchan=\$(vap -c nchan ${params.meertime_templates}/${pulsar}.std | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+        tnchan=\$(vap -c nchan ${template} | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
 
         # Use portrait mode if template has more frequency channels
         if [ "\$tnchan" -gt "\$nchan" ]; then
@@ -278,7 +303,7 @@ process generate_toas {
         fi
 
         # Generate TOAs
-        pat -jp \$port  -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${params.meertime_templates}/${pulsar}.std -A FDM \$ar  > \${ar}.tim
+        pat -jp \$port  -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${template} -A FDM \$ar  > \${ar}.tim
     done
     """
 }
@@ -298,14 +323,6 @@ workflow {
             params.obs_pid,
         )
         obs_data = obs_list.out.splitCsv()
-    }
-
-    // Grab default ephemeris for each obs or the user's input one
-    if ( params.ephemeris ) {
-        obs_data = obs_data.map { pulsar, utc, obs_pid, band, dur -> [ pulsar, utc, obs_pid, band, dur, "${params.ephemeris}".toString().toFile().toPath() ]}
-    }
-    else {
-        obs_data = obs_data.map { pulsar, utc, obs_pid, band, dur -> [ pulsar, utc, obs_pid, band, dur, "${params.ephemerides_dir}/${obs_pid}/${pulsar}.par".toString() ]}
     }
     obs_data.view()
 
