@@ -20,6 +20,7 @@ if [ ${SYS_ARCH} == "milan" ]; then
     module load psrdb/d41d4b3
     module load pandas/1.4.2-scipy-bundle-2022.05
     module load matplotlib/3.5.2
+    module load nextflow/23.04.1
 elif [ ${SYS_ARCH} == "skylake" ]; then
     # Using original ozstar cluster
     module load psrchive/96b8d4477-python-3.6.4

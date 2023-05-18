@@ -39,8 +39,8 @@ if ( params.help ) {
 
 
 process obs_list{
+    label 'meerpipe'
     publishDir "./", mode: 'copy', enabled: params.list_out
-    beforeScript 'source  /fred/oz005/users/nswainst/code/meerpipe/env_setup.sh; source /home/nswainst/venv/bin/activate'
 
     input:
     val utcs
@@ -54,9 +54,10 @@ process obs_list{
     """
     #!/usr/bin/env python
 
+    from glob import glob
+    from datetime import datetime
     from joins.folded_observations import FoldedObservations
     from graphql_client import GraphQLClient
-    from datetime import datetime
     from meerpipe.db_utils import get_pulsarname, utc_psrdb2normal, pid_getshort
 
     # PSRDB setup
@@ -107,19 +108,26 @@ process obs_list{
             pulsar_obs = get_pulsarname(ob, client, "${params.psrdb_url}", "${params.psrdb_token}")
             utc_obs = utc_psrdb2normal(ob['node']['processing']['observation']['utcStart'])
             pid_obs = pid_getshort(ob['node']['processing']['observation']['project']['code'])
-            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs}")
+
+            # Estimate intergration from number of archives
+            nfiles = len(glob(f"${params.input_path}/{pulsar_obs}/{utc_obs}/*/*/*.ar"))
+            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{int(nfiles*8)}")
     """
 }
 
 
 process psradd {
-    beforeScript 'module use /apps/users/pulsar/skylake/modulefiles; module load psrchive/c216582a0'
+    label 'cpu'
+    label 'psrchive'
+
+    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid)
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), path("${pulsar}_${utc}.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path("${pulsar}_${utc}.ar")
 
     """
     if ${params.use_edge_subints}; then
@@ -136,14 +144,18 @@ process psradd {
 
 
 process calibrate {
-    beforeScript 'module use /apps/users/pulsar/skylake/modulefiles; module load psrchive/c216582a0'
+    label 'cpu'
+    label 'psrchive'
+
     publishDir "${params.output_path}/${pulsar}/${utc}/calibrated", mode: 'copy'
+    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid)
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), path("${pulsar}_${utc}.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path("${pulsar}_${utc}.ar")
 
     """
     if ${params.use_edge_subints}; then
@@ -166,14 +178,18 @@ process calibrate {
 
 
 process meergaurd {
-    beforeScript 'module use /apps/users/pulsar/skylake/modulefiles; module load coast_guard/56b8d81'
+    label 'cpu'
+    label 'coast_guard'
+
     publishDir "${params.output_path}/${pulsar}/${utc}/cleaned", mode: 'copy'
+    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), path(archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(archive)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), path(archive), path("${pulsar}_${utc}_zap.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(archive), path("${pulsar}_${utc}_zap.ar")
 
     """
     clean_archive.py -a ${archive} -T ${params.meertime_templates}/${pulsar}.std -o ${pulsar}_${utc}_zap.ar
@@ -182,14 +198,18 @@ process meergaurd {
 
 
 process decimate {
-    beforeScript 'module use /apps/users/pulsar/skylake/modulefiles; module load psrchive/c216582a0'
+    label 'cpu'
+    label 'psrchive'
+
     publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy'
+    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), path(raw_archive), path(cleaned_archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), path(raw_archive), path(cleaned_archive), path("${pulsar}_${utc}_zap.*.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path("${pulsar}_${utc}_zap.*.ar")
 
     """
     for nsub in ${params.time_subs.join(' ')}; do
@@ -203,18 +223,58 @@ process decimate {
 
 
 process fluxcal {
-    debug=true
-    beforeScript 'source  /fred/oz005/users/nswainst/code/meerpipe/env_setup.sh; source /home/nswainst/venv/bin/activate'
-    publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy'
+    label 'cpu'
+    label 'meerpipe'
+
+    publishDir "${params.output_path}/${pulsar}/${utc}/fluxcal", mode: 'copy'
+    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), path(raw_archive), path(cleaned_archive), path(decimated_archives)
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path(decimated_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), path("${pulsar}_${utc}_zap.*.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.fluxcal")
 
     """
     fluxcal -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -TPfile ${cleaned_archive} -rawfile ${raw_archive} -dec_files ${decimated_archives.join(' ')} -parfile ${params.meertime_ephemerides}/${pulsar}.par
+    """
+}
+
+
+process generate_toas {
+    label 'cpu'
+    label 'psrchive'
+
+    publishDir "${params.output_path}/${pulsar}/${utc}/timing", mode: 'copy'
+    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+
+    input:
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(fluxcal_archives)
+
+    output:
+    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(fluxcal_archives), path("*.tim")
+
+    """
+    # Loop over each decimated archive
+    for ar in ${decimated_archives.join(' ')}; do
+        # Grab archive nchan and nsub
+        nchan=\$(vap -c nchan \$ar | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+        nsub=\$( vap -c nsub  \$ar | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+        # Grab template nchan
+        tnchan=\$(vap -c nchan ${params.meertime_templates}/${pulsar}.std | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+
+        # Use portrait mode if template has more frequency channels
+        if [ "\$tnchan" -gt "\$nchan" ]; then
+            port="-P"
+        else
+            port=""
+        fi
+
+        # Generate TOAs
+        pat -jp \$port  -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${params.meertime_templates}/${pulsar}.std -A FDM \$ar  > \${ar}.tim
+    done
     """
 }
 
@@ -253,7 +313,7 @@ workflow {
     fluxcal( decimate.out )
 
     // Generate TOAs
-    // generate_toas(output_dir,config_params,psrname,logger)
+    generate_toas( fluxcal.out )
 
     // Summary and clean up jobs
     // generate_summary(output_dir,config_params,psrname,logger)
