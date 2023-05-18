@@ -10,8 +10,6 @@ __version__ = "0.1"
 #Basic imports
 import os
 import sys
-import argparse
-import time
 import numpy as np
 import glob
 import shlex
@@ -53,6 +51,7 @@ from graphql_client import GraphQLClient
 from db_utils import (create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage,
                       get_results, update_processing, update_folding, get_procid_by_location, get_toa_id, check_toa_nominal,
                       get_proc_embargo)
+from initialize import setup_logging
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):
@@ -2363,6 +2362,18 @@ def calc_dynspec_zap_fraction(dynspec_file):
 # produce PSRDB images for website upload
 # WORK IN PROGRESS!
 def generate_images(output_dir, cparams, psrname, logger):
+# def generate_images(
+#         output_dir,
+#         psrname,
+#         cparams=None,
+#         logger=None,
+#     ):
+#     # Load logger if no provided
+#     if logger is None:
+#         logger = setup_logging(
+#             filedir=output_dir,
+#             console=True,
+#         )
 
     # Note - the functionality of this code is based on the outputs expected by 'generate_summary'
     # Should these expected outputs change, the conditions of this code should be re-assessed
@@ -2427,19 +2438,10 @@ def generate_images(output_dir, cparams, psrname, logger):
     image_data = []
 
     if (clean_file != None and toa_file != None):
-
         # we've got the file we want to analyse, now let's make some pretty pictures
 
         # skip this portion depending on image reprocessing specifications
         if ((cparams["image_flag"] and cparams["image_type"] == "ALL") or not cparams["image_flag"]):
-
-            # basic pav images
-            #plot_commands = [
-            #    {'comm': 'pav -FTDp', 'name': 'profile_ftp', 'rank': 1, 'type': 'profile.int'} ,
-            #    {'comm': 'pav -FTS', 'name': 'profile_fts', 'rank': 2, 'type': 'profile.pol'},
-            #    {'comm': 'pav -GTdp', 'name': 'phase_freq', 'rank': 3, 'type': 'phase.freq'},
-            #    {'comm': 'pav -FYdp', 'name': 'phase_time', 'rank': 4, 'type': 'phase.time'}
-            #]
 
             # get channel number of cleaned file
             comm = "vap -c nchan {0}".format(clean_file)
@@ -2451,31 +2453,60 @@ def generate_images(output_dir, cparams, psrname, logger):
 
             # basic psrplot images - mimicking ingest images
             plot_commands = [
-                {'comm': 'psrplot -p flux -jFTDp -jC', 'name': 'profile_ftp', 'title': 'Stokes I Profile ({0})'.format(cparams["pid"]), 'rank': 1, 'type': '{0}.profile-int.hi'.format(local_pid)} ,
-                {'comm': 'psrplot -p Scyl -jFTD -jC', 'name': 'profile_fts', 'title': 'Polarisation Profile ({0})'.format(cparams["pid"]), 'rank': 2, 'type': '{0}.profile-pol.hi'.format(local_pid)},
-                {'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)), 'name': 'phase_freq', 'title': 'Phase vs. Frequency ({0})'.format(cparams["pid"]), 'rank': 4, 'type': '{0}.phase-freq.hi'.format(local_pid)},
-                {'comm': 'psrplot -p time -jFDp -jC', 'name': 'phase_time', 'title': 'Phase vs. Time ({0})'.format(cparams["pid"]), 'rank': 3, 'type': '{0}.phase-time.hi'.format(local_pid)},
-                {'comm': 'psrplot -p b -x -jT -lpol=0,1 -O -c log=1', 'name': 'bandpass', 'title': 'Cleaned bandpass ({0})'.format(cparams["pid"]), 'rank': 8, 'type': '{0}.bandpass.hi'.format(local_pid)},
+                {
+                    'comm': 'psrplot -p flux -jFTDp -jC',
+                    'name': 'profile_ftp',
+                    'title': 'Stokes I Profile ({0})'.format(cparams["pid"]),
+                    'rank': 1,
+                    'type': '{0}.profile-int.hi'.format(local_pid),
+                },
+                {
+                    'comm': 'psrplot -p Scyl -jFTD -jC',
+                    'name': 'profile_fts',
+                    'title': 'Polarisation Profile ({0})'.format(cparams["pid"]),
+                    'rank': 2,
+                    'type': '{0}.profile-pol.hi'.format(local_pid),
+                },
+                {
+                    'comm': "psrplot -p freq -jTDp -jC -j 'F {0}'".format(int(nchan/2.0)),
+                    'name': 'phase_freq',
+                    'title': 'Phase vs. Frequency ({0})'.format(cparams["pid"]),
+                    'rank': 4,
+                    'type': '{0}.phase-freq.hi'.format(local_pid),
+                },
+                {
+                    'comm': 'psrplot -p time -jFDp -jC',
+                    'name': 'phase_time',
+                    'title': 'Phase vs. Time ({0})'.format(cparams["pid"]),
+                    'rank': 3,
+                    'type': '{0}.phase-time.hi'.format(local_pid),
+                },
+                {
+                    'comm': 'psrplot -p b -x -jT -lpol=0,1 -O -c log=1',
+                    'name': 'bandpass',
+                    'title': 'Cleaned bandpass ({0})'.format(cparams["pid"]),
+                    'rank': 8,
+                    'type': '{0}.bandpass.hi'.format(local_pid),
+                },
             ]
 
             logger.info("Creating psrsplot images...")
-
-            for x in range(0, len(plot_commands)):
+            for plot_command in plot_commands:
 
                 # need to protect against unexpected image crashes
                 try:
 
-                    logger.info("Creating image type {0}...".format(plot_commands[x]['type']))
+                    logger.info("Creating image type {0}...".format(plot_command['type']))
 
                     # create / overwrite the image
-                    image_name = "{0}.png".format(plot_commands[x]['name'])
+                    image_name = "{0}.png".format(plot_command['name'])
                     image_file = os.path.join(images_path,image_name)
                     tmp_image_file = os.path.join(loc_path,image_name)
 
                     if (os.path.exists(image_file)):
                         os.remove(image_file)
                     # comm = "{0} -g {1}/png {2}".format(plot_commands[x]['comm'], image_name, clean_file)
-                    comm = "{0} {2} -g 1024x768 -c above:l= -c above:c='{3}' -D {1}/png".format(plot_commands[x]['comm'], tmp_image_file, clean_file, plot_commands[x]['title'])
+                    comm = "{0} {2} -g 1024x768 -c above:l= -c above:c='{3}' -D {1}/png".format(plot_command['comm'], tmp_image_file, clean_file, plot_command['title'])
                     args = shlex.split(comm)
                     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
                     proc.wait()
@@ -2489,10 +2520,10 @@ def generate_images(output_dir, cparams, psrname, logger):
                         os.system("cp {0} {1}".format(tmp_image_file, image_file))
 
                     # log results to array for later recording
-                    image_data.append({'file': image_file, 'rank': plot_commands[x]['rank'], 'type': plot_commands[x]['type']})
+                    image_data.append({'file': image_file, 'rank': plot_command['rank'], 'type': plot_command['type']})
 
                 except:
-                    logger.error("Attempt to create image type {0} failed - skipping...".format(plot_commands[x]['type']))
+                    logger.error("Attempt to create image type {0} failed - skipping...".format(plot_command['type']))
 
         # skip this portion depending on image reprocessing specifications
         if ((cparams["image_flag"] and cparams["image_type"] == "ALL") or not cparams["image_flag"]):
@@ -2589,27 +2620,45 @@ def generate_images(output_dir, cparams, psrname, logger):
 
             # plot results - single subint snr
             matplot_commands = [
-                {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[1], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Single subint SNR ({0})'.format(cparams["pid"]), 'name': 'SNR_single', 'rank': 7, 'type': '{0}.snr-single.hi'.format(local_pid)},
-                {'x-axis': np.transpose(snr_data)[0], 'y-axis': np.transpose(snr_data)[2], 'xlabel': 'Time (seconds)', 'ylabel': 'SNR', 'title': 'Cumulative SNR ({0})'.format(cparams["pid"]), 'name': 'SNR_cumulative', 'rank': 6, 'type': '{0}.snr-cumul.hi'.format(local_pid)},
+                {
+                    'x-axis': np.transpose(snr_data)[0],
+                    'y-axis': np.transpose(snr_data)[1],
+                    'xlabel': 'Time (seconds)',
+                    'ylabel': 'SNR',
+                    'title': 'Single subint SNR ({0})'.format(cparams["pid"]),
+                    'name': 'SNR_single',
+                    'rank': 7,
+                    'type': '{0}.snr-single.hi'.format(local_pid),
+                },
+                {
+                    'x-axis': np.transpose(snr_data)[0],
+                    'y-axis': np.transpose(snr_data)[2],
+                    'xlabel': 'Time (seconds)',
+                    'ylabel': 'SNR',
+                    'title': 'Cumulative SNR ({0})'.format(cparams["pid"]),
+                    'name': 'SNR_cumulative',
+                    'rank': 6,
+                    'type': '{0}.snr-cumul.hi'.format(local_pid),
+                },
             ]
 
-            for x in range(0, len(matplot_commands)):
+            for matplot_command in matplot_commands:
 
-                logger.info("Creating image type {0}...".format(matplot_commands[x]['type']))
+                logger.info("Creating image type {0}...".format(matplot_command['type']))
 
                 # create the plot
-                image_name = "{0}.png".format(matplot_commands[x]['name'])
+                image_name = "{0}.png".format(matplot_command['name'])
                 image_file = os.path.join(images_path,image_name)
                 plt.clf()
-                plt.plot(matplot_commands[x]['x-axis'],matplot_commands[x]['y-axis'])
-                plt.xlabel(matplot_commands[x]['xlabel'])
-                plt.ylabel(matplot_commands[x]['ylabel'])
-                plt.title(matplot_commands[x]['title'])
+                plt.plot(  matplot_command['x-axis'], matplot_command['y-axis'])
+                plt.xlabel(matplot_command['xlabel'])
+                plt.ylabel(matplot_command['ylabel'])
+                plt.title( matplot_command['title'])
                 plt.savefig(image_file)
                 plt.clf()
 
                 # log the plot
-                image_data.append({'file': image_file, 'rank': matplot_commands[x]['rank'], 'type': matplot_commands[x]['type']})
+                image_data.append({'file': image_file, 'rank': matplot_command['rank'], 'type': matplot_command['type']})
 
             # cleanup
             os.remove(scrunched_file)
@@ -2767,21 +2816,29 @@ def generate_images(output_dir, cparams, psrname, logger):
 
         # look for two fixed dynspec images
         dynspec_commands = [
-            {'ext': 'zap.dynspec', 'rank': 9, 'type': '{0}.zap-dynspec.hi'.format(local_pid)},
-            {'ext': 'calib.dynspec', 'rank': 10, 'type': '{0}.calib-dynspec.hi'.format(local_pid)}
+            {
+                'ext': 'zap.dynspec',
+                'rank': 9,
+                'type': '{0}.zap-dynspec.hi'.format(local_pid),
+            },
+            {
+                'ext': 'calib.dynspec',
+                'rank': 10,
+                'type': '{0}.calib-dynspec.hi'.format(local_pid),
+            }
         ]
 
-        for x in range (0, len(dynspec_commands)):
+        for dynspec_command in dynspec_commands:
 
             # check/recall image and store image_data
-            data = glob.glob(os.path.join(ds_path, "*{0}.png".format(dynspec_commands[x]['ext'])))
+            data = glob.glob(os.path.join(ds_path, "*{0}.png".format(dynspec_command['ext'])))
             if (len(data) == 0):
-                logger.error("No matches found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
+                logger.error("No matches found in {0} for extension {1}".format(ds_path, dynspec_command['ext']))
             elif (len(data) > 1):
-                logger.error("Non-unique match found in {0} for extension {1} - skipping".format(ds_path, dynspec_commands[x]['ext']))
+                logger.error("Non-unique match found in {0} for extension {1} - skipping".format(ds_path, dynspec_command['ext']))
             else:
                 # unique match found
-                logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_commands[x]['ext']))
+                logger.info("Unique match found in {0} for extension {1}".format(ds_path, dynspec_command['ext']))
 
                 if (cparams["db_flag"]):
 
@@ -2803,14 +2860,12 @@ def generate_images(output_dir, cparams, psrname, logger):
                             og_sizes = og_image.size
                             data_split = os.path.splitext(data[0])
                             small_image_name = "{0}.small.jpg".format(data_split[0])
-                            next_image = og_image
                             next_image_name = data[0]
                         else:
                             # make a downsized copy
                             small_image = og_image.convert('RGB')
                             small_image = small_image.resize((round(og_sizes[0]*current_factor), round(og_sizes[1]*current_factor)), Image.ANTIALIAS)
                             small_image.save(small_image_name, optimize=True, quality=95)
-                            next_image = small_image
                             next_image_name = small_image_name
 
                         # image to be considered is ready - test file size (in KB)
@@ -2824,7 +2879,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 else:
                     next_image_name = data[0]
 
-                image_data.append({'file': next_image_name, 'rank': dynspec_commands[x]['rank'], 'type': dynspec_commands[x]['type']})
+                image_data.append({'file': next_image_name, 'rank': dynspec_command['rank'], 'type': dynspec_command['type']})
 
     # write all images to PSRDB
     if (cparams["db_flag"]):
@@ -2835,14 +2890,14 @@ def generate_images(output_dir, cparams, psrname, logger):
         # set up PSRDB functionality
         db_client = GraphQLClient(cparams["db_url"], False)
 
-        for x in range (0, len(image_data)):
+        for image_d in image_data:
 
             # test for image creation success and write to PSRDB
-            if (os.path.exists(image_data[x]['file'])):
-                logger.info("Successfully created {0} - recording to PSRDB.".format(image_data[x]['file']))
-                create_pipelineimage(image_data[x]['file'], image_data[x]['type'], image_data[x]['rank'], cparams, db_client, logger)
+            if (os.path.exists(image_d['file'])):
+                logger.info("Successfully created {0} - recording to PSRDB.".format(image_d['file']))
+                create_pipelineimage(image_d['file'], image_d['type'], image_d['rank'], cparams, db_client, logger)
             else:
-                logger.error("Unable to create {0} - no output recorded to PSRDB.".format(image_data[x]['file']))
+                logger.error("Unable to create {0} - no output recorded to PSRDB.".format(image_d['file']))
 
     logger.info("Image generation & logging complete.")
 
