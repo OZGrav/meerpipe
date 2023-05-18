@@ -59,6 +59,7 @@ process obs_list{
     from joins.folded_observations import FoldedObservations
     from graphql_client import GraphQLClient
     from meerpipe.db_utils import get_pulsarname, utc_psrdb2normal, pid_getshort
+    from meerpipe.archive_utils import get_obsheadinfo, get_rcvr
 
     # PSRDB setup
     client = GraphQLClient("${params.psrdb_url}", False)
@@ -105,13 +106,17 @@ process obs_list{
     # Output file
     with open("processing_jobs.csv", "w") as out_file:
         for ob in obs_data:
+            # Extract data from obs_data
             pulsar_obs = get_pulsarname(ob, client, "${params.psrdb_url}", "${params.psrdb_token}")
             utc_obs = utc_psrdb2normal(ob['node']['processing']['observation']['utcStart'])
             pid_obs = pid_getshort(ob['node']['processing']['observation']['project']['code'])
+            # Extra data from obs header
+            header_data = get_obsheadinfo(glob(f"${params.input_path}/{pulsar_obs}/{utc_obs}/*/*/obs.header")[0])
+            band = get_rcvr(header_data)
 
             # Estimate intergration from number of archives
             nfiles = len(glob(f"${params.input_path}/{pulsar_obs}/{utc_obs}/*/*/*.ar"))
-            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{int(nfiles*8)}")
+            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{band},{int(nfiles*8)}")
     """
 }
 
@@ -124,10 +129,10 @@ process psradd {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(dur), path("${pulsar}_${utc}.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path("${pulsar}_${utc}.ar")
 
     """
     if ${params.use_edge_subints}; then
@@ -138,7 +143,7 @@ process psradd {
         archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar | head -n-1 | tail -n+2)
     fi
 
-    psradd -E ${params.meertime_ephemerides}/${pulsar}.par -o ${pulsar}_${utc}.ar \${archives}
+    psradd -E ${ephemeris} -o ${pulsar}_${utc}.ar \${archives}
     """
 }
 
@@ -294,6 +299,15 @@ workflow {
         )
         obs_data = obs_list.out.splitCsv()
     }
+
+    // Grab default ephemeris for each obs or the user's input one
+    if ( params.ephemeris ) {
+        obs_data = obs_data.map { pulsar, utc, obs_pid, band, dur -> [ pulsar, utc, obs_pid, band, dur, "${params.ephemeris}".toString().toFile().toPath() ]}
+    }
+    else {
+        obs_data = obs_data.map { pulsar, utc, obs_pid, band, dur -> [ pulsar, utc, obs_pid, band, dur, "${params.ephemerides_dir}/${obs_pid}/${pulsar}.par".toString() ]}
+    }
+    obs_data.view()
 
     // Combine archives and flux calibrate if option selected
     if ( params.fluxcal ) {
