@@ -26,7 +26,7 @@ from tables import *
 from joins import *
 from graphql_client import GraphQLClient
 #sys.path.append('/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/')
-from db_utils import (check_response, update_pipelinefile)
+from meerpipe.db_utils import (check_response, update_pipelinefile)
 
 # Important paths
 PSRDB = "psrdb.py"

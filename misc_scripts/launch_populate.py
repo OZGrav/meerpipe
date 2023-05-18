@@ -23,7 +23,7 @@ import numpy as np
 from tables import *
 from graphql_client import GraphQLClient
 #sys.path.append('/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/')
-from db_utils import (check_response, get_pulsar_id, check_pipeline, create_launch)
+from meerpipe.db_utils import (check_response, get_pulsar_id, check_pipeline, create_launch)
 
 # Important paths
 PSRDB = "psrdb.py"

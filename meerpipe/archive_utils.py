@@ -42,16 +42,16 @@ import json
 import requests
 
 #Meerwatch imports
-from meerwatch_tools import get_res_fromtim, plot_toas_fromarr, get_dm_fromtim
+from meerpipe.meerwatch_tools import get_res_fromtim, plot_toas_fromarr, get_dm_fromtim
 
 # PSRDB imports - assumes psrdb/latest module
 from util import ephemeris
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import (create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage,
+from meerpipe.db_utils import (create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage,
                       get_results, update_processing, update_folding, get_procid_by_location, get_toa_id, check_toa_nominal,
                       get_proc_embargo)
-from initialize import setup_logging
+from meerpipe.initialize import setup_logging
 
 #---------------------------------- General functions --------------------------------------
 def get_ephemeris(psrname,output_path,cparams,logger):

@@ -9,7 +9,7 @@ import logging
 import subprocess
 import shlex
 
-from initialize import parse_config, setup_logging
+from meerpipe.initialize import parse_config, setup_logging
 
 parser = argparse.ArgumentParser(description="Run MeerPipe automatically on new data")
 parser.add_argument("-cfile", dest="configfile", help="Path to the configuration file")

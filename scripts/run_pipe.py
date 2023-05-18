@@ -31,7 +31,7 @@ import pickle
 import json
 
 #Importing pipeline utilities
-from initialize import (parse_config, create_structure, get_outputinfo, setup_logging)
+from meerpipe.initialize import (parse_config, create_structure, get_outputinfo, setup_logging)
 
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives,
                            calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary,
@@ -40,7 +40,7 @@ from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archi
 # PSRDB imports
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_foldedobservation_obsid,
+from meerpipe.db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_foldedobservation_obsid,
                       get_project_embargo, get_observation_project_code, get_project_id, job_state_code,
                       get_node_name, get_folding_id, check_pipeline, create_processing, update_processing,
                       get_fold_parent_procid)

@@ -24,7 +24,7 @@ from tables import *
 from joins import *
 from graphql_client import GraphQLClient
 #sys.path.append('/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/')
-from db_utils import (check_response, check_pipeline, get_pulsar_id, get_observation_target_id, check_pulsar_target,
+from meerpipe.db_utils import (check_response, check_pipeline, get_pulsar_id, get_observation_target_id, check_pulsar_target,
                       get_job_state, get_target_name, utc_psrdb2normal, get_observation_utc, job_state_code)
 
 # Important paths

@@ -21,7 +21,7 @@ import pickle
 PSRDB = "psrdb.py"
 
 #Importing pipeline utilities
-from initialize import setup_logging
+from meerpipe.initialize import setup_logging
 
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives, calibrate_data,
                            dynamic_spectra, fluxcalibrate, cleanup, generate_summary, check_summary,
@@ -30,7 +30,7 @@ from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archi
 # PSRDB imports
 from tables import *
 from graphql_client import GraphQLClient
-from db_utils import (get_node_name, job_state_code, get_job_output, get_job_state, job_state_code,
+from meerpipe.db_utils import (get_node_name, job_state_code, get_job_output, get_job_state, job_state_code,
                       update_processing)
 
 #Argument parsing
