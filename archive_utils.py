@@ -1261,10 +1261,10 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
                 if len(freqs) == 928:
 
-                    for num in range(0,len(decimation_info)):
-                        while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                        if decimation_info[num][0] == psrname:
-                            for item in decimation_info[num]:
+                    for dec_info in decimation_info:
+                        while 'None' in dec_info: dec_info.remove('None')
+                        if dec_info[0] == psrname:
+                            for item in dec_info:
                                 if not item == psrname:
                                     extension = get_extension(item,False)
                                     if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
@@ -1284,10 +1284,10 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
-                        for num in range(0,len(decimation_info)):
-                            while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                            if decimation_info[num][0] == psrname:
-                                for item in decimation_info[num]:
+                        for dec_info in decimation_info:
+                            while 'None' in dec_info: dec_info.remove('None')
+                            if dec_info[0] == psrname:
+                                for item in dec_info:
                                     if not item == psrname:
                                         extension = get_extension(item,True)
                                         if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
@@ -1331,10 +1331,10 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
                 if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
                     cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
-                    for num in range(0,len(decimation_info)):
-                        while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                        if decimation_info[num][0] == psrname:
-                            for item in decimation_info[num]:
+                    for dec_info in decimation_info:
+                        while 'None' in dec_info: dec_info.remove('None')
+                        if dec_info[0] == psrname:
+                            for item in dec_info:
                                 if not item == psrname:
                                         
                                     #Scaling the scrunch factors to 1024 channels (only for UHF data)
@@ -1488,9 +1488,9 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info.values.tolist()
             print (decimation_info)
             psrname = archive_name.split("_")[0]
-            for num in range(0,en(decimation_info)):
-                while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                for item in decimation_info[num]:
+            for dec_info in decimation_info:
+                while 'None' in dec_info: dec_info.remove('None')
+                for item in dec_info:
                     if not item == "all":
                         extension = get_extension(item,False)
                         if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
