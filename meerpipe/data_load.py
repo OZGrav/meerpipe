@@ -13,3 +13,6 @@ UHF_TSKY_FILE = os.path.join(datadir, 'UHF_Tsky.dat')
 
 # Used for LBAND Tsky calcs
 CHIPASS_EQU_CSV = os.path.join(datadir, 'CHIPASS_Equ.fits')
+
+# Rotation measure values for MSPs
+RM_CAT = os.path.join(datadir, 'meerpipe_rms_msps.txt')

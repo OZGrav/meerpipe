@@ -4,7 +4,7 @@ version = "2.0.0"
 description = "Pulsar timing data processing pipeline for MeerTime data."
 authors = ["Your Name <you@example.com>"]
 packages = [{include = "meerpipe"}, {include = "scripts"}]
-include = ["meerpip/data/CHIPASS_Equ.fits", "meerpip/data/UHF_Tsky.dat"]
+include = ["meerpip/data/CHIPASS_Equ.fits", "meerpip/data/UHF_Tsky.dat", "meerpip/data/meerpipe_rms_msps.txt.dat"]
 
 [tool.poetry.dependencies]
 python = "^3.10"

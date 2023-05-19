@@ -146,36 +146,9 @@ process obs_list{
 }
 
 
-process psradd {
+process psradd_calibrate {
     label 'cpu'
-    label 'psrchive'
-
-    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
-
-    input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template)
-
-    output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path("${pulsar}_${utc}.ar")
-
-    """
-    if ${params.use_edge_subints}; then
-        # Grab all archives
-        archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar)
-    else
-        # Grab all archives except for the first and last one
-        archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar | head -n-1 | tail -n+2)
-    fi
-
-    psradd -E ${ephemeris} -o ${pulsar}_${utc}.ar \${archives}
-    """
-}
-
-
-process calibrate {
-    label 'cpu'
-    label 'psrchive'
+    label 'meerpipe'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/calibrated", mode: 'copy'
     time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
@@ -203,6 +176,16 @@ process calibrate {
 
     # Combine the calibrate archives
     psradd -E ${ephemeris} -o ${pulsar}_${utc}.ar *calib
+
+    # Update the RM value if available
+    rm_cat=\$(python -c "from meerpipe.data_load import RM_CAT;print(RM_CAT)")
+    if grep -q "${pulsar}" \${rm_cat}; then
+        rm=\$(grep ${pulsar} \${rm_cat} | tr -s ' ' | cut -d ' ' -f 2)
+    else
+        rm=\$(psrcat -c RM ${pulsar} -X -all | tr -s ' ' | cut -d ' ' -f 1)
+    fi
+    echo \${rm}
+    pam --RM \${rm} -m ${pulsar}_${utc}.ar
     """
 }
 
@@ -356,16 +339,11 @@ workflow {
     }
     obs_data.view()
 
-    // Combine archives and flux calibrate if option selected
-    if ( params.fluxcal ) {
-        obs_data_archive = calibrate( obs_data )
-    }
-    else {
-        obs_data_archive = psradd( obs_data )
-    }
+    // Combine archives and flux calibrate
+    psradd_calibrate( obs_data )
 
     // Clean of RFI with MeerGaurd
-    meergaurd( obs_data_archive )
+    meergaurd( psradd_calibrate.out )
 
     // Flux calibrate
     fluxcal( meergaurd.out )
