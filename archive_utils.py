@@ -409,13 +409,14 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
 
 def calibrate_data(added_archives,output_dir,cparams,logger):
     
-   #Routine to calibrate the data - either using jones matrices or just use pac -XP
+    #Routine to calibrate the data - either using jones matrices or just use pac -XP
 
     if os.path.exists(os.path.join(str(output_dir),"obs.header")):
         header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
     else:
         header_params = None
 
+    rcvr = get_rcvr(header_params)
     pid = cparams["pid"]
     calibrated_archives=[]
     flags = cparams["flags"]
@@ -438,8 +439,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
         calibrated_path = os.path.join(str(output_dir),"calibrated")
 
         # swapping predence order here - receiver first
-        rcvr = get_rcvr(header_params)
-
         if rcvr == "UHF":
 
             # UHF branch
@@ -456,8 +455,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
                     p_pac.wait()
                 else:
                     logger.info("Calibrated data already exists")
-
-                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
 
             elif (archive_utc_datetime - UHF_reference_calib_date).total_seconds() <=0:
 
@@ -488,7 +485,10 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
                 else:
                     logger.info("Calibrated data already exists")
 
-                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
+            cfile = os.path.join(calibrated_path,archive_name+".calib")
+            if os.path.exists(cfile):
+                set_pol_flag(cfile, logger)
+                calibrated_archives.append(cfile)
 
         elif rcvr == "LBAND":
 
@@ -506,8 +506,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
                     p_pac.wait()
                 else:
                     logger.info("Calibrated data already exists")
-
-                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
 
             elif (archive_utc_datetime - LBAND_reference_calib_date).total_seconds() <=0:
 
@@ -535,21 +533,35 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
                 else:
                     logger.info("Calibrated data already exists")
 
-                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
+            cfile = os.path.join(calibrated_path,archive_name+".calib")
+            if os.path.exists(cfile):
+                set_pol_flag(cfile, logger)
+                calibrated_archives.append(cfile)
 
+        elif ("SBAND" in rcvr):
+
+            logger.info("S-Band receiver configuration detected ({}) - calibration not yet implemented.".format(rcvr))
+            logger.info("Skipping calibration and referring raw file directly to mitigate_rfi()")
+
+            calibrated_archives.append(add_archive)
+        
         else:
 
             # unrecognised receiver choice
             logger.warning("Unknown receiver ({0}) - unable to calibrate data.".format(rcvr))
 
-    #Setting polc=1 in calibrated archives
-    for carchive in calibrated_archives:
-        ar = ps.Archive_load(carchive)
-        ar.set_poln_calibrated()
-        logger.info("polc=1 for {0}".format(carchive))
-        ar.unload(carchive)
-
     return calibrated_archives
+
+# utility function for setting polarisation flag in header
+def set_pol_flag(archive, logger):
+
+    #Setting polc=1 in archive    
+    ar = ps.Archive_load(archive)
+    ar.set_poln_calibrated()
+    logger.info("polc=1 for {0}".format(archive))
+    ar.unload(archive)
+
+    return
 
 
 def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
@@ -757,7 +769,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
     return cleaned_archives
 
-# Utility function - adjustes a template to match the requirements of RFI mitigation
+# Utility function - adjusts a template to match the requirements of RFI mitigation
 # This includes:
 # - matching the phase bins of the provided file, if possible
 # - de-dedispersing the template, if required
@@ -1140,6 +1152,25 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                 else:
                                     logger.info("{0}.{1} exists".format(archive_name,extension))
                                     processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+
+            elif ("SBAND" in rcvr):
+                
+                # produce standard 1024 channel decimation products until further notice
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+
+                    for item in decimation_info:
+                        if not item == "all":
+                            extension = get_extension(item,True)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                logger.info("Producing {0} SBAND archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
             
             elif (rcvr == "UHF"):
 
@@ -1176,7 +1207,6 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                             else:
                                 logger.info("{0}.{1} exists".format(archive_name,extension))
                                 processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-
 
         elif pid == "NGC6440":
 
@@ -1273,6 +1303,28 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                         else:
                                             logger.info("{0}.{1} exists".format(archive_name,extension))
                                             processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+
+            elif ("SBAND" in rcvr):
+                
+                # produce standard 1024 channel decimation products until further notice
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+
+                    for dec_info in decimation_info:
+                        while 'None' in dec_info: dec_info.remove('None')
+                        if dec_info[0] == psrname:
+                            for item in dec_info:
+                                if not item == psrname:
+                                    extension = get_extension(item,True)
+                                    if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                        pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                        logger.info("Producing {0} SBAND archives".format(extension))
+                                        proc_pam = shlex.split(pam_command)
+                                        subprocess.call(proc_pam)
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                    else:
+                                        logger.info("{0}.{1} exists".format(archive_name,extension))
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
             elif (rcvr == "UHF"):
 
@@ -1374,7 +1426,26 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                     logger.info("{0}.{1} exists".format(archive_name,extension))
                                     processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
+            elif ("SBAND" in rcvr):
 
+                # produce standard 1024 channel decimation products until further notice
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+
+                    for item in decimation_info:
+                        if not item == "all":
+                            extension = get_extension(item,True)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                logger.info("Producing {0} SBAND archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))
+
+                
             elif (rcvr == "UHF"):
             
                 logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
