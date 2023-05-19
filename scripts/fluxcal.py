@@ -1,18 +1,16 @@
 #!/usr/bin/env python
 
 import os
-import sys
 import shlex
 import subprocess
 import argparse
 import os.path
 import numpy as np
-from shutil import copyfile, rmtree
-
-import getopt
 
 from astropy.io import fits
 from astropy.coordinates import (SkyCoord, Longitude, Latitude)
+
+from meerpipe.data_load import UHF_TSKY_FILE, CHIPASS_EQU_CSV
 
 #=============================================================================
 
@@ -179,9 +177,7 @@ def get_tsky_updated(rajd, decjd, psr, rcvr):
         # but that the pixels not covered by the survey are set to nan.
         # WARNING: The survey only goes to +25 declination
         # WARNING: The Galactic centre pixels are blanked out, I'm looking into it.
-        #CHIPASS_PATH = "/fred/oz005/meerpipe/configuration_files/additional_info" - TEMP SWITCH FOR LOCAL TESTING - ADC
-        CHIPASS_PATH = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/configuration_files/additional_info"
-        hdul = fits.open(os.path.join(CHIPASS_PATH,'CHIPASS_Equ.fits'))
+        hdul = fits.open(CHIPASS_EQU_CSV)
         data = hdul[0].data
 
         # naxis1 is the number of pixels on axis1
@@ -254,8 +250,7 @@ def get_tsky_updated(rajd, decjd, psr, rcvr):
         tsky_default = 5.5
 
         # include path to lookup table and extract data
-        UHFlist_path = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/configuration_files/additional_info/UHF_Tsky.dat"
-        UHFlist_data = get_listinfo(UHFlist_path)
+        UHFlist_data = get_listinfo(UHF_TSKY_FILE)
 
         # recall Tsky value for the relevant pulsar
         if psr in UHFlist_data:
@@ -379,26 +374,23 @@ def main():
     parser.add_argument("-psrname", dest="psrname", help="psrname", required=True)
     parser.add_argument("-obsname", dest="obsname", help="Observation name", required=True)
     parser.add_argument("-obsheader", dest="obsheader", help="obsheader", required=True)
-    parser.add_argument("-TPfile", dest="tpfile", help="T+P scrunched archive", required=True)
+    parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive", required=True)
     parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
-    parser.add_argument("-dec_path", dest="dec_path", help="List of decimated directories")
-    parser.add_argument("-dec_files", dest="dec_files", help="All decimated files", nargs='*')
-    parser.add_argument("-parfile", help="Path to par file for pulsar", default="None")
+    parser.add_argument("-parfile", dest="parfile", help="Path to par file for pulsar", required=True)
     args = parser.parse_args()
 
 
     psr_name = str(args.psrname)
     obs_name = str(args.obsname)
     obsheader_path = str(args.obsheader)
-    TP_file = str(args.tpfile)
-    add_file = str(args.rawfile)
-    if args.dec_path:
-        decimated_products = np.load(args.dec_path)
-    elif args.dec_files:
-        decimated_products = args.dec_files
-    else:
-        print("ERROR: Use either --dec_path or --dec_files.")
-        exit()
+    raw_file = str(args.rawfile)
+    clean_file = str(args.cleanedfile)
+
+    # P and T scrunch the cleaned file
+    commmand = f"pam -Tp -e tp {clean_file}"
+    proc = subprocess.Popen(shlex.split(commmand),stdout=subprocess.PIPE)
+    proc.wait()
+    TP_file = proc.stdout.read().decode("utf-8").rstrip().split()[0]
 
     # extract the header parameters
     params = get_listinfo(obsheader_path)
@@ -432,9 +424,9 @@ def main():
 
     print ("============")
     #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
-    freqinfo = get_freqlist(add_file)
+    freqinfo = get_freqlist(raw_file)
     freq_list = freqinfo[-2].split(",")
-    offrms_list = get_offrms(add_file)
+    offrms_list = get_offrms(raw_file)
     #offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
     offrms_freq = dict(list(zip(freq_list, offrms_list)))
 
@@ -448,9 +440,9 @@ def main():
     print ("Multiplier is: {0}".format(multiplier))
 
     print ("============")
-    #Flux calibrate all the decimated data products
-    for archive in decimated_products:
-        fluxcalibrate(archive, multiplier)
+    #Flux calibrate all the raw and cleaned file
+    fluxcalibrate(raw_file, multiplier)
+    fluxcalibrate(clean_file, multiplier)
 
     print ("============")
     print ("Flux calibrated {0}:{1}".format(psr_name, obs_name))

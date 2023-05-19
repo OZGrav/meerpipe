@@ -211,7 +211,7 @@ process meergaurd {
     label 'cpu'
     label 'coast_guard'
 
-    publishDir "${params.output_path}/${pulsar}/${utc}/cleaned", mode: 'copy'
+    publishDir "${params.output_path}/${pulsar}/${utc}/cleaned", mode: 'copy', pattern: "*_zap.ar"
     time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
@@ -231,7 +231,7 @@ process psrplot_images {
     label 'cpu'
     label 'psrchive'
 
-    publishDir "${params.output_path}/${pulsar}/${utc}/images", mode: 'copy'
+    publishDir "${params.output_path}/${pulsar}/${utc}/images", mode: 'copy', pattern: "*png"
     time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
@@ -286,18 +286,18 @@ process fluxcal {
     label 'cpu'
     label 'meerpipe'
 
-    publishDir "${params.output_path}/${pulsar}/${utc}/fluxcal", mode: 'copy'
+    publishDir "${params.output_path}/${pulsar}/${utc}/fluxcal", mode: 'copy', pattern: "*fluxcal"
     time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.fluxcal")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path("${pulsar}_${utc}.fluxcal"), path("${pulsar}_${utc}_zap.fluxcal") // Replace the archives with flux calced ones
 
     """
-    fluxcal.py -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -TPfile ${cleaned_archive} -rawfile ${raw_archive} -dec_files ${decimated_archives.join(' ')} -parfile ${ephemeris}
+    fluxcal.py -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris}
     """
 }
 
@@ -311,10 +311,10 @@ process generate_toas {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(fluxcal_archives)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(fluxcal_archives), path("*.tim")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.tim")
 
     """
     # Loop over each decimated archive
@@ -367,17 +367,17 @@ workflow {
     // Clean of RFI with MeerGaurd
     meergaurd( obs_data_archive )
 
+    // Flux calibrate
+    fluxcal( meergaurd.out )
+
     // Make psrplot images
-    psrplot_images( meergaurd.out )
+    psrplot_images( fluxcal.out )
 
     // Decimate into different time and freq chunnks using pam
-    decimate( meergaurd.out )
-
-    // Flux calibrate
-    fluxcal( decimate.out )
+    decimate( fluxcal.out )
 
     // Generate TOAs
-    generate_toas( fluxcal.out )
+    generate_toas( decimate.out )
 
     // Summary and clean up jobs
     // generate_summary(output_dir,config_params,psrname,logger)
