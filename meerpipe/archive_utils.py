@@ -744,7 +744,7 @@ def template_adjuster(template, archive, output_dir, logger):
     # setup
     template_ar = ps.Archive_load(str(template))
     template_bins = int(template_ar.get_nbin())
-    archive_bins = int(archive.get_nbin())
+    archive_bins = int(ps.Archive_load(str(archive)).get_nbin())
 
     # NEW 10/02/2023 - check for dedispersion and channel count
     if (template_ar.get_dedispersed() and template_ar.get_nchan() == 1):
@@ -2955,122 +2955,6 @@ def build_dm_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, nc
     # check if file creation was successful and return
     return os.path.exists(toa_archive_file)
 
-# builds the toas used for the production of TOA image specific to this observation
-def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, cparams, psrname, logger):
-
-    # set up paths and filenames
-    toa_archive_ext = "temptoa.ar"
-    dlyfix_script = "/fred/oz005/users/mkeith/dlyfix/dlyfix"
-    toa_archive_file = os.path.join(toa_archive_path,toa_archive_name)
-
-    # query file parameters
-    comm = "vap -c length {0}".format(clean_file)
-    args = shlex.split(comm)
-    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-    proc.wait()
-    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
-    length = float(info[1].split()[1])
-
-    # determine desired number of nchans and size of tobs
-    toa_config_success = False
-
-    # option 1 - the config file included a catalog with parameters for specific pulsars
-    if ("toa_display_list" in cparams and os.path.exists(cparams["toa_display_list"])):
-
-        logger.info("Generating TOA images based on a toa display list: {0}".format(cparams["toa_display_list"]))
-
-        # find the pulsar in the list and extract the relevant parameters
-        comm = "grep {0} {1}".format(psrname, cparams["toa_display_list"])
-        args = shlex.split(comm)
-        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-        proc.wait()
-        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
-        # safety checks
-        if ((len(info) == 1) and not (info[0] == '')):
-
-            subinfo = info[0].split()
-
-            if (subinfo[0] == psrname):
-                # match found
-                logger.info("Unique match found for {0}".format(psrname))
-                toa_nchan = int(subinfo[2])
-                toa_tobs = float(subinfo[1])
-                toa_config_success = True
-            else:
-                logger.error("No list entry match for {0} - diverting to a default method".format(psrname))
-                toa_config_success = False
-
-        else:
-            logger.error("Unable to find a unique list entry for {0} - diverting to a default method".format(psrname))
-            toa_config_success = False
-
-    # option 2 - no catalog, or pulsar not listed in the catalog; revert to a project-based default
-    if (toa_config_success == False and "pid" in cparams):
-
-        logger.info("PID-based TOA images are implemented, but may need fine tuning for your particular pulsar")
-        logger.info("Please adjust the default settings for your project or provide a toa config catalog as part of the pipeline config file, and then reprocess.")
-
-        # check for which pid and assign parameters - these may need some fine tuning/expanding for more PIDs
-        if (cparams["pid"] == "TPA"):
-            toa_nchan = 1
-            toa_tobs = 1200
-            toa_config_success = True
-        elif (cparams["pid"] == "RelBin"):
-            toa_nchan = 1
-            toa_tobs = 240
-            toa_config_success = True
-        elif (cparams["pid"] == "GC"):
-            toa_nchan = 1
-            toa_tobs = 1800
-            toa_config_success = True
-        elif (cparams["pid"] == "PTA"):
-            #toa_nchan = 4
-            #toa_tobs = 600
-            # default reset as per specifications of Matt Miles - 23/01/2023
-            toa_nchan = 16
-            toa_tobs = 1000
-            toa_config_success = True
-        else:
-            # redundant but just in case
-            toa_config_success = False
-
-    # option 3 - no project, no catalog; revert to a global default
-    if (toa_config_success == False):
-
-        logger.info("Using default TOA image parameters - these may need fine tuning for your particular pulsar.")
-        logger.info("Please adjust the default settings for your project or provide a toa config catalog as part of the pipeline config file, and then reprocess.")
-        toa_nchan = 4
-        toa_tobs = 300
-        toa_config_success = True
-
-    # calculate nsub and build temporary toa file
-    toa_nsub = int(np.round(length/float(toa_tobs)))
-    if (toa_nsub < 1):
-        toa_nsub = 1
-
-    logger.info("Constructing TOA archive with nsub={0} and nchan={1} - storing in {2}".format(toa_nsub, toa_nchan, toa_archive_path))
-    comm = "pam -p --setnsub={0} --setnchn={1} -e {4} -u {2} {3}".format(toa_nsub, toa_nchan, toa_archive_path, clean_file, toa_archive_ext)
-    args = shlex.split(comm)
-    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-    proc.wait()
-    toa_archive_temp = proc.stdout.read().decode("utf-8").rstrip().split()[0]
-
-    # rename the file to desired name
-    logger.info("Renaming the archive to {0}".format(toa_archive_file))
-    comm = "mv -f {0} {1}".format(toa_archive_temp, toa_archive_file)
-    args = shlex.split(comm)
-    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-    proc.wait()
-
-    # correct the delays
-    logger.info("Applying delay corrections via {0}".format(dlyfix_script))
-    comm = "{0} -u {1} {2}".format(dlyfix_script, toa_archive_path, toa_archive_file)
-    args = shlex.split(comm)
-    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-    proc.wait()
-
-    # check if file creation was successful and return
-    return os.path.exists(toa_archive_file)
 
 # create dm toas and return DM measurement
 def measure_dm(toa_archive, image_path, parfile, template, selfile, logger):

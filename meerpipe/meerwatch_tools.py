@@ -19,6 +19,20 @@ import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 import json
 
+
+
+def get_bw_freq(rcvr):
+    """
+    Estimate the bandwidth and frequency from the rcvr
+    """
+    if rcvr == "UHF":
+        bw = 544
+        freq = 816
+    if rcvr == "LBAND":
+        bw = 856
+        freq = 1284
+
+    return bw, freq
 # calculate the rms of the toa format used in this library
 # danger: assumes correct residual wrt to zero
 def weighted_rms(toas):
@@ -106,8 +120,9 @@ def clean_toas(input_toas,outlier_factor=3):
         new_toas[name] = input_toas[name][indices].squeeze()
     return(new_toas)
 
+
 def plot_toas_fromarr(
-        toas,
+        residuals_file,
         pid="unk",
         mjd=None,
         fs=14,
@@ -116,17 +131,24 @@ def plot_toas_fromarr(
         sequential=True,
         title=None,
         verb=False,
-        bw=856,
-        cfrq=1284,
-        nchn=None,
+        rcvr="LBAND",
+        nchan=None,
         outlier_factor=None,
     ):
+    bw, cfrq = get_bw_freq(rcvr)
+
+    # load in the toa residuals
+    residuals = np.loadtxt(residuals_file, usecols=(0, 1, 2, 3), dtype=[('mjd', 'f8'), ('res', 'f4'), ('err', 'f4'), ('freq', 'f4')])
 
     if outlier_factor is not None:
-        toas = clean_toas(toas,outlier_factor=outlier_factor)
-        weighted_mean_toa = weighted_mean(toas)
-        for k in range (0, len(toas)):
-            toas['res'][k]-=weighted_mean_toa
+        residuals = clean_toas(residuals, outlier_factor=outlier_factor)
+        weighted_mean_toa = weighted_mean(residuals)
+        for k in range (0, len(residuals)):
+            residuals['res'][k]-=weighted_mean_toa
+
+    if nchan is None:
+        # get parameters from file name
+        nchan = int(residuals_file.split('ch')[0].split('t')[1])
 
     if out_dir:
         out_file = os.path.join(out_dir, out_file)
@@ -136,7 +158,7 @@ def plot_toas_fromarr(
     f_max = cfrq+bw/2.0
     norm = Normalize(vmin=f_min, vmax=f_max)
     # Make tupes of RGBA values for some manual error bar fixing
-    y_norm = (toas['freq'] - f_min) / (f_max - f_min)
+    y_norm = (residuals['freq'] - f_min) / (f_max - f_min)
     cmap = cm.get_cmap('viridis')
     rgba_values = cmap(y_norm)
     rgba_tuples = [tuple(rgba) for rgba in rgba_values]
@@ -150,29 +172,29 @@ def plot_toas_fromarr(
         if verb:
             print("Plotting serial ToAs")
 
-        if nchn is None:
+        if nchan is None:
             raise(RuntimeError("Cannot get number of channels"))
 
-        chan = range(nchn)
-        freq_mins = [f_min+(i*bw/nchn) for i in chan]
-        freq_maxs = [f_min+((i+1)*bw/nchn) for i in chan]
+        chan = range(nchan)
+        freq_mins = [f_min+(i*bw/nchan) for i in chan]
+        freq_maxs = [f_min+((i+1)*bw/nchan) for i in chan]
         pulse = 0
         last_chan = -1
         num = []
 
-        for f in toas['freq']:
+        for f in residuals['freq']:
             for i, mi, ma in zip(chan, freq_mins, freq_maxs):
                 if mi < f < ma:
                     if i <= last_chan:
-                        pulse += nchn
+                        pulse += nchan
 
                     num.append(pulse+i)
 
                     last_chan = i
                     break
 
-        if len(num) != len(toas['freq']):
-            print(num, toas['freq'], freq_mins, freq_maxs)
+        if len(num) != len(residuals['freq']):
+            print(num, residuals['freq'], freq_mins, freq_maxs)
             raise(RuntimeError("Error determining ToA Number for {}".format(out_file)))
 
         xdata = np.array(num)
@@ -180,12 +202,12 @@ def plot_toas_fromarr(
         if verb:
             print("Plotting against MJD")
 
-        xdata = toas['mjd']
+        xdata = residuals['mjd']
 
 
-    scat = ax.scatter(xdata, toas['res']*1e6, s=8, c=toas['freq'], marker='s', norm=norm, cmap='viridis')
+    scat = ax.scatter(xdata, residuals['res']*1e6, s=8, c=residuals['freq'], marker='s', norm=norm, cmap='viridis')
     cb = fig.colorbar(scat, ax=ax, fraction=0.1)
-    ebar = ax.errorbar(xdata, toas['res']*1e6, 1e6*toas['err'], ls='', marker='', ms=1, zorder=0)
+    ebar = ax.errorbar(xdata, residuals['res']*1e6, 1e6*residuals['err'], ls='', marker='', ms=1, zorder=0)
     ebar[2][0].set_color(rgba_tuples)
 
 
@@ -204,8 +226,8 @@ def plot_toas_fromarr(
         ax.set_xlabel("MJD", fontsize=fs)
 
         # new - include WRMS as part of the plot
-        if (len(toas) > 0):
-            wrms = weighted_rms(toas)/(1e-6)
+        if (len(residuals) > 0):
+            wrms = weighted_rms(residuals)/(1e-6)
             ax.set_title("Global TOAs ({0}) | Wrms={1:.2f}$\mu$s".format(pid, wrms), fontsize=fs)
         else:
             ax.set_title("Global TOAs ({0})".format(pid), fontsize=fs)

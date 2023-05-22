@@ -150,7 +150,7 @@ process psradd_calibrate {
     label 'cpu'
     label 'meerpipe'
 
-    publishDir "${params.output_path}/${pulsar}/${utc}/calibrated", mode: 'copy'
+    publishDir "${params.output_path}/${pulsar}/${utc}/calibrated", mode: 'copy', pattern: "*.ar"
     time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
@@ -244,7 +244,7 @@ process decimate {
     label 'cpu'
     label 'psrchive'
 
-    publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy'
+    publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy', pattern: "${pulsar}_${utc}_zap.*.ar"
     time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
@@ -256,9 +256,21 @@ process decimate {
 
     """
     for nsub in ${params.time_subs.join(' ')}; do
+        input_nsub=\$(vap -c nsub J1811-2405_2021-11-05-13:22:56.fluxcal | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+        if [ \$nsub -gt \$input_nsub ]; then
+            # Skip if obs not long enough
+            continue
+        fi
         for nchan in ${params.freq_subs.join(' ')}; do
-            pam -t \${nsub} -f \${nchan} -S -p -e \${nsub}t\${nchan}ch1p.ar ${cleaned_archive}
-            pam -t \${nsub} -f \${nchan} -S -e \${nsub}t\${nchan}ch4p.ar ${cleaned_archive}
+            echo "Decimate nsub=\${nsub}  nchan=\${nchan} stokes=1"
+            pam --setnsub \${nsub} --setnchn \${nchan} -S -p -e \${nsub}t\${nchan}ch1p.temp ${cleaned_archive}
+            echo "Delay correct"
+            /fred/oz005/users/mkeith/dlyfix/dlyfix -e \${nsub}t\${nchan}ch1p.ar *\${nsub}t\${nchan}ch1p.temp
+
+            echo "Decimate nsub=\${nsub}  nchan=\${nchan} stokes=4"
+            pam --setnsub \${nsub} --setnchn \${nchan} -S    -e \${nsub}t\${nchan}ch4p.temp ${cleaned_archive}
+            echo "Delay correct"
+            /fred/oz005/users/mkeith/dlyfix/dlyfix -e \${nsub}t\${nchan}ch4p.ar *\${nsub}t\${nchan}ch4p.temp
         done
     done
     """
@@ -289,7 +301,7 @@ process generate_toas {
     label 'cpu'
     label 'psrchive'
 
-    publishDir "${params.output_path}/${pulsar}/${utc}/timing", mode: 'copy'
+    publishDir "${params.output_path}/${pulsar}/${utc}/timing", mode: 'copy', pattern: "*.{residual,tim,par,std}"
     time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
@@ -297,7 +309,7 @@ process generate_toas {
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.tim")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.tim"), path("*.residual")
 
     """
     # Loop over each decimated archive
@@ -315,9 +327,35 @@ process generate_toas {
             port=""
         fi
 
-        # Generate TOAs
+        echo "Generating TOAs\n----------------------------------"
         pat -jp \$port  -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${template} -A FDM \$ar  > \${ar}.tim
+
+        echo "Generating residuals\n----------------------------------"
+        tempo2 -nofit -set START 40000 -set FINISH 99999 -output general2 -s "{bat} {post} {err} {freq} BLAH\n" -nobs 1000000 -npsr 1 -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select -f ${ephemeris} \${ar}.tim > \${ar}.tempo2out
+        cat \${ar}.tempo2out | grep BLAH | awk '{print \$1,\$2,\$3*1e-6,\$4}' > \${ar}.residual
     done
+    """
+}
+
+
+process matplotlib_images {
+    label 'cpu'
+    label 'meerpipe'
+
+    publishDir "${params.output_path}/${pulsar}/${utc}/images", mode: 'copy', pattern: "{c,t,r}*png"
+    publishDir "${params.output_path}/${pulsar}/${utc}/scintillation", mode: 'copy', pattern: "*dynspec*"
+    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+
+    input:
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(toas), path(residuals)
+
+    output:
+    tuple path("*.dat"), path("*.png"), path("*dynspec*")
+
+
+    """
+    generate_images.py -pid ${obs_pid} -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris} -template ${template} -residuals ${residuals} -rcvr ${band}
     """
 }
 
@@ -356,6 +394,8 @@ workflow {
 
     // Generate TOAs
     generate_toas( decimate.out )
+
+    matplotlib_images( generate_toas.out )
 
     // Summary and clean up jobs
     // generate_summary(output_dir,config_params,psrname,logger)

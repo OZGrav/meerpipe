@@ -128,7 +128,7 @@ def parse_config(path_cfile):
 def setup_logging(
         console=True,
         logfile=False,
-        filedir=None,
+        filedir="./",
         filename='meerpipe.log',
         level=logging.INFO,
     ):
@@ -169,8 +169,6 @@ def setup_logging(
 
     # Create a file handler and set the logging level if logfile is True
     if logfile:
-        if not filedir:
-            raise ValueError("Filedir must be specified when enabling logfile output.")
         if not os.path.exists(filedir):
             os.makedirs(filedir)
         file_handler = logging.FileHandler(os.path.join(filedir, filename))
