@@ -209,10 +209,29 @@ def get_rcvr(params):
     bw = params["BW"]
     freq = float(params["FREQ"])
 
+    # 18/05/2023 - now expanding this with S-Band functionality
+    # Specifications per Vivek
+    # BAND - FREQ (MHz) - BW (MHz)
+    # S0   - 2187.50    - 1750.00 - 2625.00 (875)
+    # S1   - 2406.25    - 1968.75 - 2843.75 (875)
+    # S2   - 2625.00    - 2187.50 - 3062.50 (875)
+    # S3   - 2843.75    - 2406.25 - 3281.25 (875)
+    # S4   - 3062.50    - 2625.00 - 3500.00 (875)
+
     if (bw == "544.0") and (freq < 816) and (freq > 815):
         rcvr = "UHF"
     elif (freq < 1284) and (freq > 1283):
         rcvr = "LBAND"
+    elif (bw == "875.0") and (freq < 2189) and (freq > 2185):
+        rcvr = "SBAND_0"
+    elif (bw == "875.0") and (freq < 2408) and (freq > 2404):
+        rcvr = "SBAND_1"
+    elif (bw == "875.0") and (freq < 2627) and (freq > 2623):
+        rcvr = "SBAND_2"
+    elif (bw == "875.0") and (freq < 2845) and (freq > 2841):
+        rcvr = "SBAND_3"
+    elif (bw == "875.0") and (freq < 3064) and (freq > 3060):
+        rcvr = "SBAND_4"
     else:
         rcvr = None
 
@@ -948,6 +967,15 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
     output_path = cparams["output_path"]
     pid = cparams["pid"]
 
+    # abstract header_parms code to common location
+    if os.path.exists(os.path.join(str(output_dir),"obs.header")):
+        header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
+    else:
+        header_params = None
+
+    # determine receiver based on header information
+    rcvr = get_rcvr(header_params)
+
     processed_archives = []
     decimated_path = os.path.join(str(output_dir),"decimated")
 
@@ -1066,31 +1094,25 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info[0]
             psrname = archive_name.split("_")[0]
 
-            if len(freqs) == 928:
-                logger.info("Recorded number of channels is 928. Producing decimated data products")
-                for item in decimation_info:
-                    if not item == "all":
-                        extension = get_extension(item,False)
-                        if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                            pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
-                            logger.info("Producing {0} archives".format(extension))
-                            proc_pam = shlex.split(pam_command)
-                            subprocess.call(proc_pam)
-                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                        else:
-                            logger.info("{0}.{1} exists".format(archive_name,extension))
-                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+            if (rcvr == "LBAND"):
+
+                if (len(freqs) == 928):
+                    logger.info("Recorded number of channels is 928. Producing decimated data products")
+                    for item in decimation_info:
+                        if not item == "all":
+                            extension = get_extension(item,False)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
+                                logger.info("Producing {0} archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
 
-            elif len(freqs) > 928:
-
-                if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-                    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-                else:
-                    header_params = None
-
-                #L-band data
-                if not header_params["BW"] == "544.0":
+                elif (len(freqs) > 928):
 
                     # chopping functionality now replaced by abstracted utility function
                     chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
@@ -1114,42 +1136,41 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                     logger.info("{0}.{1} exists".format(archive_name,extension))
                                     processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
+            elif (rcvr == "UHF"):
 
-                #UHF DATA
-                elif header_params["BW"] == "544.0":
-                    logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
-                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
-                        cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+                logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
 
-                        # Adjust for 4096 channel count
-                        if (header_params["NCHAN"] == "4096"):
-                            # add a new decimation product
-                            decimation_info.append('-f 4 -T -S')
+                    # Adjust for 4096 channel count
+                    if (header_params["NCHAN"] == "4096"):
+                        # add a new decimation product
+                        decimation_info.append('-f 4 -T -S')
 
-                        for item in decimation_info:
-                            if not item == "all":
-                                #Scaling the scrunch factors to 1024 channels (only for UHF data)
-                                if item == "-f 116 -T -S":
-                                    if (header_params["NCHAN"] == "4096"):
-                                        item = "-f 512 -T -S"
-                                    else:
-                                        item = "-f 128 -T -S"
-                                if item == "-f 29 -T -S":
-                                    if (header_params["NCHAN"] == "4096"):
-                                        item = "-f 128 -T -S"
-                                    else:
-                                        item = "-f 32 -T -S"
-
-                                extension = get_extension(item,False)
-                                if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                                    pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
-                                    logger.info("Producing {0} UHF archives".format(extension))
-                                    proc_pam = shlex.split(pam_command)
-                                    subprocess.call(proc_pam)
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                    for item in decimation_info:
+                        if not item == "all":
+                            #Scaling the scrunch factors to 1024 channels (only for UHF data)
+                            if item == "-f 116 -T -S":
+                                if (header_params["NCHAN"] == "4096"):
+                                    item = "-f 512 -T -S"
                                 else:
-                                    logger.info("{0}.{1} exists".format(archive_name,extension))
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                    item = "-f 128 -T -S"
+                            if item == "-f 29 -T -S":
+                                if (header_params["NCHAN"] == "4096"):
+                                    item = "-f 128 -T -S"
+                                else:
+                                    item = "-f 32 -T -S"
+
+                            extension = get_extension(item,False)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                logger.info("Producing {0} UHF archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
 
         elif pid == "NGC6440":
@@ -1200,49 +1221,38 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
             decimation_info = decimation_info.values.tolist()
 
-            #If the recorded number of channels is 928 (Mostly L-band observations)
-            if len(freqs) == 928:
 
-                for num in range(0,len(decimation_info)):
-                    while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                    if decimation_info[num][0] == psrname:
-                        for item in decimation_info[num]:
-                            if not item == psrname:
-                                extension = get_extension(item,False)
-                                if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                                    pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
-                                    logger.info("Producing {0} archives".format(extension))
-                                    proc_pam = shlex.split(pam_command)
-                                    subprocess.call(proc_pam)
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                                else:
-                                    logger.info("{0}.{1} exists".format(archive_name,extension))
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+            if (rcvr == "LBAND"):
 
+                if len(freqs) == 928:
 
+                    for dec_info in decimation_info:
+                        while 'None' in dec_info: dec_info.remove('None')
+                        if dec_info[0] == psrname:
+                            for item in dec_info:
+                                if not item == psrname:
+                                    extension = get_extension(item,False)
+                                    if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                        pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
+                                        logger.info("Producing {0} archives".format(extension))
+                                        proc_pam = shlex.split(pam_command)
+                                        subprocess.call(proc_pam)
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                    else:
+                                        logger.info("{0}.{1} exists".format(archive_name,extension))
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
-
-            #If the recorded number of channels is greater than 928 (could be either L-band or UHF)
-
-            elif len(freqs) > 928:
-
-                if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-                    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-                else:
-                    header_params = None
-
-                #L-BAND DATA
-                if not header_params["BW"] == "544.0":
+                elif len(freqs) > 928:
 
                     # chopping functionality now replaced by abstracted utility function
                     chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
-                        for num in range(0,len(decimation_info)):
-                            while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                            if decimation_info[num][0] == psrname:
-                                for item in decimation_info[num]:
+                        for dec_info in decimation_info:
+                            while 'None' in dec_info: dec_info.remove('None')
+                            if dec_info[0] == psrname:
+                                for item in dec_info:
                                     if not item == psrname:
                                         extension = get_extension(item,True)
                                         if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
@@ -1259,42 +1269,39 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                             logger.info("{0}.{1} exists".format(archive_name,extension))
                                             processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
-                #UHF DATA
-                elif header_params["BW"] == "544.0":
-                    logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
-                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
-                        cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
-                        for num in range(0,len(decimation_info)):
-                            while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                            if decimation_info[num][0] == psrname:
-                                for item in decimation_info[num]:
-                                    if not item == psrname:
+            elif (rcvr == "UHF"):
 
-                                        #Scaling the scrunch factors to 1024 channels (only for UHF data)
-                                        #if item == "-f 58 -t 8":
-                                        #    item = "-f 64 -t 8"
-                                        #if item == "-f 58 -t 8 -p":
-                                        #    item = "-f 64 -t 8 -p"
-                                        #if item == "-f 116 -t 128 -p":
-                                        #    item = "-f 128 -t 128 -p"
-                                        #if item == "-f 116 -t 32 -p":
-                                        #    item = "-f 128 -t 32 -p"
-                                        # making the above more general
-                                        item.replace('-f 58', '-f 64').replace('-f 116', '-f 128')
+                logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+                    for dec_info in decimation_info:
+                        while 'None' in dec_info: dec_info.remove('None')
+                        if dec_info[0] == psrname:
+                            for item in dec_info:
+                                if not item == psrname:
 
-                                        extension = get_extension(item,False)
-                                        if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                                            pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
-                                            logger.info("Producing {0} UHF archives".format(extension))
-                                            proc_pam = shlex.split(pam_command)
-                                            subprocess.call(proc_pam)
-                                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                                        else:
-                                            logger.info("{0}.{1} exists".format(archive_name,extension))
-                                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                    #Scaling the scrunch factors to 1024 channels (only for UHF data)
+                                    #if item == "-f 58 -t 8":
+                                    #    item = "-f 64 -t 8"
+                                    #if item == "-f 58 -t 8 -p":
+                                    #    item = "-f 64 -t 8 -p"
+                                    #if item == "-f 116 -t 128 -p":
+                                    #    item = "-f 128 -t 128 -p"
+                                    #if item == "-f 116 -t 32 -p":
+                                    #    item = "-f 128 -t 32 -p"
+                                    # making the above more general
+                                    item.replace('-f 58', '-f 64').replace('-f 116', '-f 128')
 
-
-
+                                    extension = get_extension(item,False)
+                                    if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                        pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                        logger.info("Producing {0} UHF archives".format(extension))
+                                        proc_pam = shlex.split(pam_command)
+                                        subprocess.call(proc_pam)
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                    else:
+                                        logger.info("{0}.{1} exists".format(archive_name,extension))
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
         elif pid == "PTA":
 
@@ -1320,31 +1327,25 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info[0]
             psrname = archive_name.split("_")[0]
 
-            if len(freqs) == 928:
-                logger.info("Recorded number of channels is 928. Producing decimated data products")
-                for item in decimation_info:
-                    if not item == "all":
-                        extension = get_extension(item,False)
-                        if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                            pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
-                            logger.info("Producing {0} archives".format(extension))
-                            proc_pam = shlex.split(pam_command)
-                            subprocess.call(proc_pam)
-                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                        else:
-                            logger.info("{0}.{1} exists".format(archive_name,extension))
-                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
+            if (rcvr == "LBAND"):
 
-            elif len(freqs) > 928:
+                if len(freqs) == 928:
+                    logger.info("Recorded number of channels is 928. Producing decimated data products")
+                    for item in decimation_info:
+                        if not item == "all":
+                            extension = get_extension(item,False)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
+                                logger.info("Producing {0} archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
-                if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-                    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-                else:
-                    header_params = None
-
-                #L-band data
-                if not header_params["BW"] == "544.0":
+                elif len(freqs) > 928:
 
                     # chopping functionality now replaced by abstracted utility function
                     chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
@@ -1369,34 +1370,31 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                     processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
 
-                #UHF DATA
-                elif header_params["BW"] == "544.0":
-                    logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
-                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
-                        cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
-                        for item in decimation_info:
-                            if not item == "all":
-                                #Scaling the scrunch factors to 1024 channels (only for UHF data)
-                                if item == "-t 32 -f 116 -p":
-                                    item = "-t 32 -f 128 -p"
-                                if item == "-T -f 29":
-                                    item = "-T -f 32 "
-                                if item == "-T -f 58":
-                                    item = "-T -f 64"
+            elif (rcvr == "UHF"):
 
-                                extension = get_extension(item,False)
-                                if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                                    pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
-                                    logger.info("Producing {0} UHF archives".format(extension))
-                                    proc_pam = shlex.split(pam_command)
-                                    subprocess.call(proc_pam)
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                                else:
-                                    logger.info("{0}.{1} exists".format(archive_name,extension))
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+                    for item in decimation_info:
+                        if not item == "all":
+                            #Scaling the scrunch factors to 1024 channels (only for UHF data)
+                            if item == "-t 32 -f 116 -p":
+                                item = "-t 32 -f 128 -p"
+                            if item == "-T -f 29":
+                                item = "-T -f 32 "
+                            if item == "-T -f 58":
+                                item = "-T -f 64"
 
-
-
+                            extension = get_extension(item,False)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                logger.info("Producing {0} UHF archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
         elif pid == "ngcsearch":
             #Using pta_decimation.list (in additional_info) for decimating cleaned archives.
@@ -1414,9 +1412,9 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info.values.tolist()
             print (decimation_info)
             psrname = archive_name.split("_")[0]
-            for num in range(0,en(decimation_info)):
-                while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                for item in decimation_info[num]:
+            for dec_info in decimation_info:
+                while 'None' in dec_info: dec_info.remove('None')
+                for item in dec_info:
                     if not item == "all":
                         extension = get_extension(item,False)
                         if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
@@ -1428,8 +1426,6 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                         else:
                             logger.info("{0}.{1} exists".format(archive_name,extension))
                             processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-
-
 
         else:
             #For all other PIDs
@@ -3355,5 +3351,85 @@ def folding_resync(cparams,logger):
         logger.error("Failure to update 'foldings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_fold_id"]))
     else:
         logger.info("Updated PSRDB entry in 'foldings' table, ID = {0}".format(cparams["db_fold_id"]))
+
+    return
+
+# function to upload specified pulsar archive data products to PSRDB
+# WIP
+def upload_data_archives(output_dir, cparams, psrname, logger):
+
+    # Note - the functionality of this code is based on the renaming scheme performed by cleanup()
+    # Should these expected outputs change, the conditions of this code should be re-assessed
+
+    logger.info("Uploading decimated data products - Pipeline PID = {0}".format(cparams["pid"]))
+    # update - pid now to be included in the naming structure (type)
+    local_pid = cparams["pid"].lower()
+    files_to_store = []
+    files_to_delete = []
+
+    # identify the decimated path
+    output_dir = str(output_dir)
+    decimated_path = os.path.join(output_dir,"decimated")
+
+    # select the required decimated products and structure for upload
+    decimated_archives = sorted(glob.glob(os.path.join(decimated_path, "*")))
+
+    # isolate a single FTS archive in case of multiples
+    # choice is currently arbitrary
+    FTS_archives = []
+
+    for arch in decimated_archives:
+
+        if "FTS" in arch:
+            FTS_archives.append(arch)
+
+    if (len(FTS_archives) > 0):
+
+        # select first file for upload
+        # produce renamed copy of the file in PSRDB friendly format
+        FTS_selectfile = FTS_archives[0]
+        FTS_time = datetime.datetime.strptime(os.path.basename(FTS_selectfile).split("_")[1], '%Y-%m-%d-%H:%M:%S')
+        FTS_uploadfile = os.path.join(decimated_path, "{0}_{1}_{2}.ar".format(psrname, FTS_time.strftime('%y%m%d_%H%M%S'), "FTS"))
+        copyfile(FTS_selectfile, FTS_uploadfile)
+        logger.info("Copied {} to {} for upload.".format(FTS_selectfile, FTS_uploadfile))
+
+        # prepare file type
+        file_type = "{0}.archive.{1}".format(local_pid, "FTS")
+
+        # document file to be uploaded
+        files_to_store.append({'filename': FTS_uploadfile, 'type': file_type})
+        files_to_delete.append(FTS_uploadfile)
+        logger.info("Identified {} for FTS upload.".format(FTS_archives[0]))
+
+    else:
+        logger.info("No FTS file identified for upload.")
+
+    # write all files to PSRDB
+    if (cparams["db_flag"]):
+
+        logger.info("PSRDB functionality activated - uploading specified data products to PSRDB")
+
+        # set up PSRDB functionality
+        db_client = GraphQLClient(cparams["db_url"], False)
+
+        # loop through the listed files and store
+        for entry in files_to_store:
+
+            if (os.path.exists(entry['filename'])):
+                logger.info("File {0} identified (type {1}) - recording to PSRDB.".format(entry['filename'], entry['type']))
+                create_pipelinefile(entry['filename'], entry['type'], cparams, db_client, logger)
+            else:
+                logger.error("File {0} not located (type {1}) - no output recorded to PSRDB.".format(entry['filename'], entry['type']))
+
+        logger.info("PSRDB file upload complete.")
+
+    else:
+
+        logger.info("PSRDB functionality not actived - not uploading specified data products.")
+
+    # cleanup
+    for f in files_to_delete:
+        os.remove(f)
+        logger.info("Deleted {}.".format(f))
 
     return
