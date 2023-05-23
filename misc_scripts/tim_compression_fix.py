@@ -25,7 +25,7 @@ import time
 from tables import *
 from joins import *
 from graphql_client import GraphQLClient
-sys.path.append('/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/')
+#sys.path.append('/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/')
 from db_utils import (check_response, update_pipelinefile)
 
 # Important paths
@@ -88,7 +88,7 @@ for x in range(0, len(proc_list)):
         ext = '.tar.gz'
 
         for y in pipefile_data:
-            
+
             pf = y['node']['file'].split("/")
             fn = pf[len(pf) - 1]
             pipefile_id = pipelinefiles.decode_id(y['node']['id'])
@@ -100,13 +100,13 @@ for x in range(0, len(proc_list)):
                 target_tg_file = os.path.join(target_tg_location, fn)
 
                 if os.path.exists(target_tg_file):
-                    
+
                     print ("Identified file to be updated - {} (ID: {})".format(target_tg_file, pipefile_id))
 
                     # we have found a real match for the file
                     # delete the .tar.gz file, recompress the original file as a .gz file
                     # then re-upload it with the correct file type
-                    
+
                     # change into the relevant directory
                     print ("Changing directory to {}".format(target_tg_location))
                     os.chdir(target_tg_location)
@@ -118,14 +118,14 @@ for x in range(0, len(proc_list)):
                     if os.path.exists(os.path.join(target_tg_location, original_file)):
                         # safe to delete .tar.gz file
                         os.remove(target_tg_file)
-                    
+
                         # compress the original file
                         timzip = "{}.gz".format(original_file)
                         comm = "gzip -9 {0}".format(original_file)
                         args = shlex.split(comm)
                         proc = subprocess.Popen(args,stdout=subprocess.PIPE)
                         proc.wait()
-                        
+
                         # update the entry in the database
                         filetype = y['node']['fileType']
                         filename = os.path.join(target_tg_location, timzip)
@@ -135,9 +135,9 @@ for x in range(0, len(proc_list)):
                         success = False
                         tries = 0
                         max_tries = 3
-                        
+
                         while (not success) and (tries < max_tries):
-                            
+
                             try:
                                 update_id = update_pipelinefile(
                                     int(pipefile_id),
@@ -172,11 +172,11 @@ for x in range(0, len(proc_list)):
                         error_handle.write("Not safe to delete {} for processing {} - check and retry.\n".format(fn, proc_list[x]))
                         continue
 
-                    
+
     else:
         error_handle ("Invalid processing ID - {0}".format(proc_list[x]))
         continue
-                    
+
 error_handle.close()
 
 print ("Script complete.")

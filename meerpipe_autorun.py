@@ -9,7 +9,7 @@ import logging
 import subprocess
 import shlex
 
-from initialize import parse_config, get_outputinfo
+from initialize import parse_config, setup_logging
 
 parser = argparse.ArgumentParser(description="Run MeerPipe automatically on new data")
 parser.add_argument("-cfile", dest="configfile", help="Path to the configuration file")
@@ -71,55 +71,6 @@ def get_pid(pid):
 
     return pid_dir
 
-def setup_logging(path,verbose,file_log):
-    """
-    Setup log handler - this logs in the terminal (if not run with --slurm).
-    For slurm based runs - the logging is done by the job queue system
-
-    """
-    log_toggle=False
-
-    # create formatter
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    if file_log == True:
-        logfile = "MP_autorun.log"
-        logger = logging.getLogger(logfile)
-        logger.setLevel(logging.INFO)
-
-        if not os.path.exists(path):
-            os.makedirs(path)
-        #Create file logging only if logging file path is specified
-        fh = logging.FileHandler(os.path.join(path,logfile))
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
-        #Check if file already exists, if so, add a demarcator to differentiate among runs
-        if os.path.exists(os.path.join(path, logfile)):
-            with open(os.path.join(path,logfile), 'a') as f:
-                f.write(20*"#")
-                f.write("\n")
-        logger.info("File handler created")
-        log_toggle=True
-
-    if verbose:
-        #Create console handler with a lower log level (INFO)
-        logfile = "MP_autorun.log"
-        logger = logging.getLogger(logfile)
-        logger.setLevel(logging.INFO)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        ch.setFormatter(formatter)
-        # add the handlers to the logger
-        logger.addHandler(ch)
-        logger.info("Verbose mode enabled")
-        log_toggle=True
-
-    if log_toggle:
-        return logger
-    else:
-        return none
-
 def run_meerpipe(utc):
     """
     Routine to execute meerpipe as a Slurm job on a particular UTC
@@ -159,7 +110,7 @@ def run_meerwatch(slurm_path,psrname):
     com_sbatch = "sbatch {0}".format(os.path.join(slurm_path,str(job_name)))
     args_sbatch = shlex.split(com_sbatch)
     proc_sbatch = subprocess.Popen(args_sbatch)
-        
+
     print ("MeerWatch job submitted for PSR:{0}".format(psrname))
 
 #--------------------------- Main -------------------------
@@ -177,7 +128,10 @@ if mw == False:
         sys.exit()
 
 
-    logger = setup_logging(config_params["output_path"], args.verbose, False)
+    logger = setup_logging(
+        filedir=config_params["output_path"],
+        console=args.verbose,
+    )
 
     if args.jitter:
         jitter_file = "/fred/oz005/users/aparthas/Meertime_Jitter/psr_path.list"
@@ -201,9 +155,9 @@ if mw == False:
             kronos_obs_2 = os.path.join(kronos_path_2,"{0}/{1}".format(obsname,psrname)) #Observations in /kronos/<utc>/<psrname>
             kronos_obs_3 = os.path.join(kronos_path_3,"{0}/{1}".format(obsname,psrname)) #Observations in /kronos/<utc>/<psrname>
             kronos_obs_4 = os.path.join(kronos_path_4,"{0}/{1}".format(obsname,psrname)) #Observations in /kronos/<utc>/<psrname>
-           
+
             #For every /timing observation, check if the utc already exists in /timing_processed and if not, confirm that it's finished transferring
-            #checking /kronos and if it exists in /kronos, then run meerpipe on that pulsar and utc. 
+            #checking /kronos and if it exists in /kronos, then run meerpipe on that pulsar and utc.
             if not os.path.exists(proc_obs):
                 if os.path.exists(kronos_obs_1):
                     if not pid == "all":
@@ -227,14 +181,14 @@ if mw == False:
                                     run_meerpipe(proc_obs)
 
                     else:
-                        if args.viewlist: 
+                        if args.viewlist:
                             print (proc_obs)
                         if args.run:
                             run_meerpipe(proc_obs)
 
                 if os.path.exists(kronos_obs_2):
                     if not pid == "all":
-                        if os.path.exists(os.path.join(kronos_obs_2,"obs.header")): 
+                        if os.path.exists(os.path.join(kronos_obs_2,"obs.header")):
                             obshead_params = get_obsheadinfo(os.path.join(kronos_obs_2,"obs.header"))
                         raw_pid = get_pid(obshead_params["PID"])
                         if raw_pid == pid:
@@ -254,14 +208,14 @@ if mw == False:
                                     run_meerpipe(proc_obs)
 
                     else:
-                        if args.viewlist: 
+                        if args.viewlist:
                             print (proc_obs)
                         if args.run:
                             run_meerpipe(proc_obs)
 
                 if os.path.exists(kronos_obs_3):
                     if not pid == "all":
-                        if os.path.exists(os.path.join(kronos_obs_3,"obs.header")): 
+                        if os.path.exists(os.path.join(kronos_obs_3,"obs.header")):
                             obshead_params = get_obsheadinfo(os.path.join(kronos_obs_3,"obs.header"))
                         raw_pid = get_pid(obshead_params["PID"])
                         if raw_pid == pid:
@@ -283,7 +237,7 @@ if mw == False:
 
 
                     else:
-                        if args.viewlist: 
+                        if args.viewlist:
                             print (proc_obs)
                         if args.run:
                             run_meerpipe(proc_obs)
@@ -303,7 +257,7 @@ if mw == False:
                                         print ("kronos_4", proc_obs)
                                     if args.run:
                                         run_meerpipe(proc_obs)
-                                        
+
                             else:
                                 if args.viewlist:
                                     print ("kronos_4", proc_obs)
@@ -312,11 +266,11 @@ if mw == False:
 
 
                     else:
-                        if args.viewlist: 
+                        if args.viewlist:
                             print (proc_obs)
                         if args.run:
                             run_meerpipe(proc_obs)
-               
+
 if mw == True:
     config_params = parse_config(str(args.configfile))
 
@@ -346,7 +300,7 @@ if mw == True:
                     if args.run:
                         run_meerwatch(mw_slurm,psrname)
 
-        
+
 
 
 
