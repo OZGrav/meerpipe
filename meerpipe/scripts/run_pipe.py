@@ -38,8 +38,8 @@ from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archi
                            check_summary, generate_images, secondary_cleanup, folding_resync)
 
 # PSRDB imports
-from tables import *
-from graphql_client import GraphQLClient
+from psrdb.tables import *
+from psrdb.graphql_client import GraphQLClient
 from meerpipe.db_utils import (utc_normal2date, utc_normal2psrdb, utc_date2psrdb, get_foldedobservation_obsid,
                       get_project_embargo, get_observation_project_code, get_project_id, job_state_code,
                       get_node_name, get_folding_id, check_pipeline, create_processing, update_processing,

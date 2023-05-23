@@ -24,15 +24,15 @@ import json
 import time
 import datetime
 
-from graphql_client import GraphQLClient
+from psrdb.graphql_client import GraphQLClient
 
 # PSRDB imports
-from tables.launches import Launches
-from tables.pipelines import Pipelines
-from tables.processings import Processings
-from tables.pulsars import Pulsars
-from tables.pulsartargets import Pulsartargets
-from joins.folded_observations import FoldedObservations
+from psrdb.tables.launches import Launches
+from psrdb.tables.pipelines import Pipelines
+from psrdb.tables.processings import Processings
+from psrdb.tables.pulsars import Pulsars
+from psrdb.tables.pulsartargets import Pulsartargets
+from psrdb.joins.folded_observations import FoldedObservations
 from meerpipe.db_utils import (utc_normal2psrdb, utc_psrdb2normal, utc_normal2date, utc_psrdb2date, pid_getofficial,
                       check_response, pid_getshort, get_pulsar_id, pid_getdefaultpipe, get_pipe_config,
                       check_pipeline, get_foldedobservation_obsid, get_job_output, get_pulsarname)

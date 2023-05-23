@@ -68,8 +68,8 @@ process obs_list{
 
     from glob import glob
     from datetime import datetime
-    from joins.folded_observations import FoldedObservations
-    from graphql_client import GraphQLClient
+    from psrdb.joins.folded_observations import FoldedObservations
+    from psrdb.graphql_client import GraphQLClient
     from meerpipe.db_utils import get_pulsarname, utc_psrdb2normal, pid_getshort
     from meerpipe.archive_utils import get_obsheadinfo, get_rcvr
 
@@ -79,40 +79,18 @@ process obs_list{
     foldedobs.get_dicts = True
     foldedobs.set_use_pagination(True)
 
-    # change blanks to nones
-    if "${pulsar}" == "":
-        pulsar = None
-    else:
-        pulsar = "${pulsar}"
-    if "${obs_pid}" == "":
-        obs_pid = None
-    else:
-        obs_pid = "${obs_pid}"
-
-    # Also convert dates to correct format
-    if "${utcs}" == "":
-        utcs = None
-    else:
-        d = datetime.strptime("${utcs}", '%Y-%m-%d-%H:%M:%S')
-        utcs = f"{d.date()}T{d.time()}+00:00"
-    if "${utce}" == "":
-        utce = None
-    else:
-        d = datetime.strptime("${utce}", '%Y-%m-%d-%H:%M:%S')
-        utce = f"{d.date()}T{d.time()}+00:00"
-
     # Query based on provided parameters
     obs_data = foldedobs.list(
         None,
-        pulsar,
+        "${pulsar}",
         None,
         None,
         None,
-        obs_pid,
+        "${obs_pid}",
         None,
         None,
-        utcs,
-        utce,
+        "${utcs}",
+        "${utce}",
     )
 
     # Output file
@@ -292,7 +270,7 @@ process fluxcal {
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path("${pulsar}_${utc}.fluxcal"), path("${pulsar}_${utc}_zap.fluxcal") // Replace the archives with flux calced ones
 
     """
-    fluxcal.py -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris}
+    fluxcal -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris}
     """
 }
 
@@ -355,7 +333,7 @@ process matplotlib_images {
 
 
     """
-    generate_images.py -pid ${obs_pid} -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris} -template ${template} -residuals ${residuals} -rcvr ${band}
+    generate_images -pid ${obs_pid} -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris} -template ${template} -residuals ${residuals} -rcvr ${band}
     """
 }
 

@@ -18,12 +18,12 @@ import subprocess
 import shlex
 import json
 import pandas as pd
-from util import time as util_time
+from psrdb.util import time as util_time
 import getpass
 from astropy.time import Time as astrotime
 
-from tables import *
-from joins import *
+from psrdb.tables import *
+from psrdb.joins import *
 
 # Important paths
 PSRDB = "psrdb.py"

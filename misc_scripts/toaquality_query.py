@@ -20,9 +20,9 @@ import subprocess
 import numpy as np
 
 # PSRDB imports
-from tables import *
-from joins import *
-from graphql_client import GraphQLClient
+from psrdb.tables import *
+from psrdb.joins import *
+from psrdb.graphql_client import GraphQLClient
 #sys.path.append('/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe/')
 from meerpipe.db_utils import check_response
 

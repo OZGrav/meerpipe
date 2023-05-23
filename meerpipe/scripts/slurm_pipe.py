@@ -28,8 +28,8 @@ from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archi
                            generate_images, secondary_cleanup, folding_resync)
 
 # PSRDB imports
-from tables import *
-from graphql_client import GraphQLClient
+from psrdb.tables import *
+from psrdb.graphql_client import GraphQLClient
 from meerpipe.db_utils import (get_node_name, job_state_code, get_job_output, get_job_state, job_state_code,
                       update_processing)
 
