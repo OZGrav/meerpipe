@@ -25,7 +25,7 @@ from initialize import setup_logging
 
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives, calibrate_data,
                            dynamic_spectra, fluxcalibrate, cleanup, generate_summary, check_summary,
-                           generate_images, secondary_cleanup, folding_resync)
+                           generate_images, secondary_cleanup, folding_resync, upload_data_archives)
 
 # PSRDB imports
 from tables import *
@@ -196,6 +196,10 @@ try:
         # Secondary cleanup
         secondary_cleanup(output_dir,config_params,psrname,logger)
         logger.info("PIPE - Second-stage cleanup complete.")
+
+        # Upload data products after all renaming is complete
+        upload_data_archives(output_dir,config_params,psrname,logger)
+        logger.info("PIPE - Data product upload complete.")
 
         # Trigger PSRDB resync
         folding_resync(config_params,logger)
