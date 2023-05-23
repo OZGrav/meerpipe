@@ -2,6 +2,7 @@
 
 Meerpipe is a python-based data analysis pipeline that produces the cleaned and calibrated data that forms the basis of all pulsar timing projects with the MeerKAT radio telescope as part of the [MeerTime project](http://www.meertime.org/). For an overview of MeerTime and the various science themes, please refer to [Bailes et al. 2020](https://arxiv.org/abs/2005.14366)  
 
+
 ## Functionalities
 
 The raw data recorded by the Pulsar Timing User Supplied Equipment (PTUSE) is transferred to the OzStar supercomputing facility in Melbourne, Australia where meerpipe is hosted. Each new observation automatically triggers an instance of the pipeline that is launched using the Slurm job manager. The pipeline optimizes the requested memory and wall time based on the length of the observation. 
@@ -17,7 +18,6 @@ For each observation, meerpipe implements the following routines:
 4. User-defined data products: Following the requirements laid out by the various science themes within MeerTime, meerpipe produces the requested decimated data products post-cleaning. These include data products at various frequency and time resolutions along with the dynamic spectra for scintillation studies. S
 
 5. Times-of-arrival: Using the decimated data products, the times-of-arrival per observation are computed using [PSRCHIVE](http://psrchive.sourceforge.net/). 
-
 
 ## Database management
 
