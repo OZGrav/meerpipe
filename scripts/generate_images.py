@@ -16,7 +16,6 @@ import psrchive as ps
 from coast_guard import clean_utils
 
 #Importing scintools (@dreardon)
-sys.path.append('/fred/oz005/software/scintools')
 from scintools.dynspec import Dynspec
 
 from meerpipe.initialize import setup_logging

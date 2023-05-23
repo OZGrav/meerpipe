@@ -27,7 +27,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 #Importing scintools (@dreardon)
-sys.path.append('/fred/oz005/software/scintools')
 from scintools.dynspec import Dynspec
 
 #psrchive imports
