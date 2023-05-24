@@ -193,14 +193,19 @@ def get_obsheadinfo(obsheader_path):
     """
     Parse the obs.header file and return important parameters
     """
-    params={}
-    with open(obsheader_path) as file:
-        lines=file.readlines()
-        for line in lines:
-            (key, val) = line.split()
-            params[str(key)] = str(val).rstrip()
+    if os.path.exists(obsheader_path):
+        params={}
+        with open(obsheader_path) as file:
+            lines=file.readlines()
+            for line in lines:
+                (key, val) = line.split()
+                params[str(key)] = str(val).rstrip()
 
-    file.close()
+        file.close()
+
+    else:
+        params = None
+
     return params
 
 def get_rcvr(params):
@@ -208,32 +213,37 @@ def get_rcvr(params):
     Determine which receiver is in use
     External conditions may be required for this function, depending on use
     """
-    bw = params["BW"]
-    freq = float(params["FREQ"])
 
-    # 18/05/2023 - now expanding this with S-Band functionality
-    # Specifications per Vivek
-    # BAND - FREQ (MHz) - BW (MHz)
-    # S0   - 2187.50    - 1750.00 - 2625.00 (875)
-    # S1   - 2406.25    - 1968.75 - 2843.75 (875)
-    # S2   - 2625.00    - 2187.50 - 3062.50 (875)
-    # S3   - 2843.75    - 2406.25 - 3281.25 (875)
-    # S4   - 3062.50    - 2625.00 - 3500.00 (875)
+    if not (params == None):
+        bw = params["BW"]
+        freq = float(params["FREQ"])
 
-    if (bw == "544.0") and (freq < 816) and (freq > 815):
-        rcvr = "UHF"
-    elif (freq < 1284) and (freq > 1283):
-        rcvr = "LBAND"
-    elif (bw == "875.0") and (freq < 2189) and (freq > 2185):
-        rcvr = "SBAND_0"
-    elif (bw == "875.0") and (freq < 2408) and (freq > 2404):
-        rcvr = "SBAND_1"
-    elif (bw == "875.0") and (freq < 2627) and (freq > 2623):
-        rcvr = "SBAND_2"
-    elif (bw == "875.0") and (freq < 2845) and (freq > 2841):
-        rcvr = "SBAND_3"
-    elif (bw == "875.0") and (freq < 3064) and (freq > 3060):
-        rcvr = "SBAND_4"
+        # 18/05/2023 - now expanding this with S-Band functionality
+        # Specifications per Vivek
+        # BAND - FREQ (MHz) - BW (MHz)
+        # S0   - 2187.50    - 1750.00 - 2625.00 (875)
+        # S1   - 2406.25    - 1968.75 - 2843.75 (875)
+        # S2   - 2625.00    - 2187.50 - 3062.50 (875)
+        # S3   - 2843.75    - 2406.25 - 3281.25 (875)
+        # S4   - 3062.50    - 2625.00 - 3500.00 (875)
+
+        if (bw == "544.0") and (freq < 816) and (freq > 815):
+            rcvr = "UHF"
+        elif (freq < 1284) and (freq > 1283):
+            rcvr = "LBAND"
+        elif (bw == "875.0") and (freq < 2189) and (freq > 2185):
+            rcvr = "SBAND_0"
+        elif (bw == "875.0") and (freq < 2408) and (freq > 2404):
+            rcvr = "SBAND_1"
+        elif (bw == "875.0") and (freq < 2627) and (freq > 2623):
+            rcvr = "SBAND_2"
+        elif (bw == "875.0") and (freq < 2845) and (freq > 2841):
+            rcvr = "SBAND_3"
+        elif (bw == "875.0") and (freq < 3064) and (freq > 3060):
+            rcvr = "SBAND_4"
+        else:
+            rcvr = None
+
     else:
         rcvr = None
 
@@ -411,11 +421,7 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
     
     #Routine to calibrate the data - either using jones matrices or just use pac -XP
 
-    if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-        header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-    else:
-        header_params = None
-
+    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
     rcvr = get_rcvr(header_params)
     pid = cparams["pid"]
     calibrated_archives=[]
@@ -832,7 +838,11 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
 
     cleaned_dir = os.path.join(str(output_dir),"cleaned")
     cleaned_archives = sorted(glob.glob(os.path.join(str(cleaned_dir),"*.ar")))
-    cleaned_archives.append(glob.glob(os.path.join(str(output_dir),"calibrated/*.calib"))[0])
+
+    # quick patch for S-band data, which is currently uncalibrated. May need future revision.
+    calib_archives = glob.glob(os.path.join(str(output_dir),"calibrated/*.calib"))
+    if (len(calib_archives) > 0):
+        cleaned_archives.append(calib_archives[0])
 
     if not orig_template == None:
 
@@ -984,11 +994,8 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
     output_path = cparams["output_path"]
     pid = cparams["pid"]
 
-    # abstract header_parms code to common location
-    if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-        header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-    else:
-        header_params = None
+    # abstract header_params code to common location
+    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
 
     # determine receiver based on header information
     rcvr = get_rcvr(header_params)
@@ -1443,7 +1450,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                 processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
                             else:
                                 logger.info("{0}.{1} exists".format(archive_name,extension))
-                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
                 
             elif (rcvr == "UHF"):
@@ -1799,6 +1806,10 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
         else:
             logger.warning("Flux calibration failed")
 
+    elif ("SBAND" in rcvr):
+        logger.info("SBAND receiver configuration identified ({0}) - flux calibration not yet implemented.".format(rcvr))
+        pass
+
     else:
         logger.info("Unknown receiver ({0}) - flux calibration not yet implemented.".format(rcvr))
         pass
@@ -2151,11 +2162,17 @@ def generate_summary(output_dir, cparams, psrname, logger):
     # depending on where results are being stored, while the lower directory structure remains constant.
 
     # This will need modification once the S-Band receiver comes online. I have already made an appropriate start.
-    if str(split_path[path_args - 2]) == "816" or str(split_path[path_args - 2]) == "815":
-        rcvr = "UHF"
-    elif str(split_path[path_args - 2]) == "1284" or str(split_path[path_args - 2]) == "1283":
-        rcvr = "L-band"
-    else:
+
+    #if str(split_path[path_args - 2]) == "816" or str(split_path[path_args - 2]) == "815":
+    #    rcvr = "UHF"
+    #elif str(split_path[path_args - 2]) == "1284" or str(split_path[path_args - 2]) == "1283":
+    #    rcvr = "L-band"
+    #else:
+    #    rcvr = "RCVR Unknown"
+
+    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
+    rcvr = get_rcvr(header_params)
+    if (rcvr == None):
         rcvr = "RCVR Unknown"
 
     summaryfile = os.path.join(output_dir,"{0}_{1}.summary".format(psrname,utcname))
@@ -2203,15 +2220,8 @@ def generate_summary(output_dir, cparams, psrname, logger):
         cleaned_path = os.path.join(output_dir,"cleaned")
         cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
 
-        # Holding this code to be re-used when S-Band is deployed.
-        """
-        if (rcvr == "UHF"):
-            if (len(cleanedfiles) == 2):
-                if ((".ch" in cleanedfiles[0] or ".ch" in cleanedfiles[1]) and not (".ch" in cleanedfiles[0] and ".ch" in cleanedfiles[1])):
-                    sfile.write("CleanedChoppedFiles: CHECK \n")
-                else:
-                    sfile.write("CleanedChoppedFiles: FAIL \n")
-            elif (len(cleanedfiles) == 1 and ".ch" not in cleanedfiles[0]):
+        if ("SBAND" in rcvr):
+            if (len(cleanedfiles) == 1):
                 sfile.write("CleanedFiles: CHECK \n")
             else:
                 sfile.write("CleanedFiles: FAIL \n")
@@ -2221,21 +2231,10 @@ def generate_summary(output_dir, cparams, psrname, logger):
                 sfile.write("CleanedFluxFiles: CHECK \n")
             elif len(cleanedfiles) < 2:
                 sfile.write("CleanedFluxFiles: FAIL \n")
-
             elif len(cleanedfiles) == 4:
                 sfile.write("CleanedChoppedFluxFile: CHECK \n")
-            elif len(cleanedfiles) < 4 and len(cleanedfiles) > 2:
+            elif (len(cleanedfiles) < 4 and len(cleanedfiles) > 2) or (len(cleanedfiles) > 4):
                 sfile.write("CleanedChoppedFluxFile: FAIL \n")
-        """
-
-        if len(cleanedfiles)  == 2:
-            sfile.write("CleanedFluxFiles: CHECK \n")
-        elif len(cleanedfiles) < 2:
-            sfile.write("CleanedFluxFiles: FAIL \n")
-        elif len(cleanedfiles) == 4:
-            sfile.write("CleanedChoppedFluxFile: CHECK \n")
-        elif (len(cleanedfiles) < 4 and len(cleanedfiles) > 2) or (len(cleanedfiles) > 4):
-            sfile.write("CleanedChoppedFluxFile: FAIL \n")
 
         #Checking if decimated files exist
         decimated_path = os.path.join(output_dir,"decimated")
@@ -3465,29 +3464,35 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
 # echos back a folding entry to PSRDB so as to trigger a resync of the online DB instance
 def folding_resync(cparams,logger):
 
-    logger.info("Echoing an update of folding ID {0} to initiate PSRDB online synchronisation...".format(cparams['db_fold_id']))
+    # check for PSRDB toggle
+    if (cparams["db_flag"]):
 
-    # create client
-    db_client = GraphQLClient(cparams["db_url"], False)
+        logger.info("Echoing an update of folding ID {0} to initiate PSRDB online synchronisation...".format(cparams['db_fold_id']))
 
-    update_id = update_folding(
-        cparams['db_fold_id'],
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        db_client,
-        cparams["db_url"],
-        cparams["db_token"]
-    )
+        # create client
+        db_client = GraphQLClient(cparams["db_url"], False)
 
-    if (update_id != cparams["db_fold_id"]) or (update_id == None):
-        logger.error("Failure to update 'foldings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_fold_id"]))
+        update_id = update_folding(
+            cparams['db_fold_id'],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            db_client,
+            cparams["db_url"],
+            cparams["db_token"]
+        )
+
+        if (update_id != cparams["db_fold_id"]) or (update_id == None):
+            logger.error("Failure to update 'foldings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_fold_id"]))
+        else:
+            logger.info("Updated PSRDB entry in 'foldings' table, ID = {0}".format(cparams["db_fold_id"]))
+
     else:
-        logger.info("Updated PSRDB entry in 'foldings' table, ID = {0}".format(cparams["db_fold_id"]))
+        logger.info("PSRDB functionality not active - exiting folding_resync function.")
 
     return
 
