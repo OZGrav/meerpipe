@@ -18,12 +18,14 @@ import subprocess
 import shlex
 import json
 import pandas as pd
-from psrdb.util import time as util_time
 import getpass
 from astropy.time import Time as astrotime
 
-from psrdb.tables import *
-from psrdb.joins import *
+from meerpipe.initialize import setup_logging
+
+from psrdb.util import time as util_time
+from psrdb.tables import Processings, Pipelines, Foldings, Targets, Pulsars, Launches, Projects, Observations, Toas, Ephemerides, Templates, Pipelineimages, Pipelinefiles, Pulsartargets
+from psrdb.joins import FoldedObservations
 
 # Important paths
 PSRDB = "psrdb.py"
@@ -178,10 +180,10 @@ def job_state_code(jid):
     else:
         state = None
 
-    if not (state == None):
-        return json.loads(json.dumps({"job_state": state}))
-    else:
+    if state is None:
         return state
+    else:
+        return json.loads(json.dumps({"job_state": state}))
 
 # ROLE   : Return the name of the node on which a given job is operating
 # INPUTS : None
@@ -848,16 +850,62 @@ def create_launch(pipe_id, parent_id, pulsar_id, client, url, token):
 
     return retval
 
-# ROLE   : Creates a Processing entry with the specified parameters.
-#        : If a matching entry exists, that is returned instead.
-# INPUTS : Integer, Integer, Integer, String, Boolean, GraphQL client, String, String, Logger object
-# RETURNS: Integer (success) | None (failure)
-def create_processing(obs_id, pipe_id, parent_id, location, results_overwrite, client, url, token, logger):
+
+def create_processing(
+        obs_id,
+        pipe_id,
+        location,
+        client,
+        url,
+        token,
+        logger=None,
+    ):
+    """"
+    Creates a Processing entry with the specified parameters. If a matching entry exists, that is returned instead.
+
+    Parameters
+    ----------
+    obs_id, `str`
+        Observation ID
+    pipe_id,
+    location,
+    client,
+    url,
+    token,
+    logger=None,
+
+    """
+    # Load logger if no provided
+    if logger is None:
+        logger = setup_logging(console=True)
 
     # PSRDB setup
     pipelines = Pipelines(client, url, token)
     processings = Processings(client, url, token)
     processings.set_field_names(True, False)
+
+    # Work out parent processing ID
+    response = processings.list(
+        None,     # id
+        obs_id,   # observation_id
+        None,     # parent_id
+        None,     # location
+        None,     # utc_start
+    )
+    check_response(response)
+    proc_content = json.loads(response.content)
+    processings_data = proc_content['data']['allProcessings']['edges']
+
+    # Look for a process with same pipeline id
+    match_counter = 0
+    logger.info(processings_data)
+    logger.info(proc_content)
+    for proc_data in processings_data:
+        proc_pipe_id = int(pipelines.decode_id(proc_data['node']['pipeline']['id']))
+        logger.info(proc_pipe_id)
+        if proc_pipe_id == 1:
+            # PTSUE Processing so this is the parent ID
+            parent_id = int(processings.decode_id(proc_data['node']['id']))
 
     # Input sanitisation and preparation of defaults
     location = os.path.normpath(location)
@@ -866,25 +914,31 @@ def create_processing(obs_id, pipe_id, parent_id, location, results_overwrite, c
     job_output = json.loads('{}')
     results = json.loads('{}')
 
-    # Query for processings matching input parameters
+    # Find out if there has been other Processings
     response = processings.list(
-        None,
-        obs_id,
-        parent_id,
-        location,
-        None
+        None,     # id
+        obs_id,   # observation_id
+        None,     # parent_id
+        location, # location
+        None,     # utc_start
     )
     check_response(response)
     proc_content = json.loads(response.content)
-    proc_data = proc_content['data']['allProcessings']['edges']
+    processings_data = proc_content['data']['allProcessings']['edges']
 
-    # Check for matches of non-query parameters
+    # Look for a process with same pipeline id
     match_counter = 0
-    for x in range(0, len(proc_data)):
-        proc_pipe_id = int(pipelines.decode_id(proc_data[x]['node']['pipeline']['id']))
-        if (proc_pipe_id == pipe_id):
-            proc_id = int(processings.decode_id(proc_data[x]['node']['id']))
+    logger.info(processings_data)
+    logger.info(proc_content)
+    for proc_data in processings_data:
+        proc_pipe_id = int(pipelines.decode_id(proc_data['node']['pipeline']['id']))
+        logger.info(proc_pipe_id)
+        if proc_pipe_id == pipe_id:
+            proc_id = int(processings.decode_id(proc_data['node']['id']))
             match_counter = match_counter + 1
+        elif proc_pipe_id == 1:
+            # PTSUE Processing so this is the parent ID
+            parent_id = int(processings.decode_id(proc_data['node']['id']))
 
     # Take action based on number of matching entries
     if (match_counter == 1):
@@ -892,10 +946,6 @@ def create_processing(obs_id, pipe_id, parent_id, location, results_overwrite, c
         logger.info("Found existing entry in 'processings' matching launch parameters, ID = {0}".format(proc_id))
         logger.info("Updating to default starting parameters")
         retval = int(proc_id)
-
-        # check for results overwrite
-        if not (results_overwrite):
-            results = None
 
         update_id = update_processing(
             proc_id,

@@ -67,20 +67,22 @@ process obs_list{
     #!/usr/bin/env python
 
     from glob import glob
+    import base64
     from datetime import datetime
-    from psrdb.joins.folded_observations import FoldedObservations
+    from psrdb.tables.observations import Observations
     from psrdb.graphql_client import GraphQLClient
-    from meerpipe.db_utils import get_pulsarname, utc_psrdb2normal, pid_getshort
+    from meerpipe.db_utils import get_pulsarname, utc_psrdb2normal, pid_getshort, create_processing
     from meerpipe.archive_utils import get_obsheadinfo, get_rcvr
 
     # PSRDB setup
     client = GraphQLClient("${params.psrdb_url}", False)
-    foldedobs = FoldedObservations(client, "${params.psrdb_url}", "${params.psrdb_token}")
-    foldedobs.get_dicts = True
-    foldedobs.set_use_pagination(True)
+    obs = Observations(client, "${params.psrdb_url}", "${params.psrdb_token}")
+    obs.get_dicts = True
+    obs.set_use_pagination(True)
 
     # Query based on provided parameters
-    obs_data = foldedobs.list(
+    obs_data = obs.list(
+        None,
         None,
         "${pulsar}",
         None,
@@ -97,9 +99,10 @@ process obs_list{
     with open("processing_jobs.csv", "w") as out_file:
         for ob in obs_data:
             # Extract data from obs_data
-            pulsar_obs = get_pulsarname(ob, client, "${params.psrdb_url}", "${params.psrdb_token}")
-            utc_obs = utc_psrdb2normal(ob['node']['processing']['observation']['utcStart'])
-            pid_obs = pid_getshort(ob['node']['processing']['observation']['project']['code'])
+            pulsar_obs = ob['node']['target']['name']
+            obs_id = int(base64.b64decode(ob['node']['id']).decode("utf-8").split(":")[1])
+            utc_obs = utc_psrdb2normal(ob['node']['utcStart'])
+            pid_obs = pid_getshort(ob['node']['project']['code'])
 
             # Extra data from obs header
             header_data = get_obsheadinfo(glob(f"${params.input_path}/{pulsar_obs}/{utc_obs}/*/*/obs.header")[0])
@@ -118,8 +121,18 @@ process obs_list{
             else:
                 template = "${params.template}"
 
+            # Set job as running
+            proc_id = create_processing(
+                obs_id,
+                13, # TODO NOT HARDCODE THIS
+                f"${params.output_path}/{pulsar_obs}/{utc_obs}",
+                client,
+                "${params.psrdb_url}",
+                "${params.psrdb_token}",
+            )
+
             # Write out results
-            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{band},{int(nfiles*8)},{ephemeris},{template}")
+            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{band},{int(nfiles*8)},{proc_id},{ephemeris},{template}")
     """
 }
 
@@ -133,10 +146,10 @@ process psradd_calibrate {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path("${pulsar}_${utc}.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path("${pulsar}_${utc}.ar")
 
     """
     if ${params.use_edge_subints}; then
@@ -177,10 +190,10 @@ process meergaurd {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(archive)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(archive), path("${pulsar}_${utc}_zap.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(archive), path("${pulsar}_${utc}_zap.ar")
 
     """
     clean_archive.py -a ${archive} -T ${template} -o ${pulsar}_${utc}_zap.ar
@@ -197,7 +210,7 @@ process psrplot_images {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
 
     output:
     path "*png"
@@ -227,10 +240,10 @@ process decimate {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path("${pulsar}_${utc}_zap.*.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path("${pulsar}_${utc}_zap.*.ar")
 
     """
     for nsub in ${params.time_subs.join(' ')}; do
@@ -264,10 +277,10 @@ process fluxcal {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path("${pulsar}_${utc}.fluxcal"), path("${pulsar}_${utc}_zap.fluxcal") // Replace the archives with flux calced ones
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path("${pulsar}_${utc}.fluxcal"), path("${pulsar}_${utc}_zap.fluxcal") // Replace the archives with flux calced ones
 
     """
     fluxcal -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris}
@@ -284,10 +297,10 @@ process generate_toas {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.tim"), path("*.residual")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.tim"), path("*.residual")
 
     """
     # Loop over each decimated archive
@@ -326,7 +339,7 @@ process matplotlib_images {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(toas), path(residuals)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(toas), path(residuals)
 
     output:
     tuple path("*.dat"), path("*.png"), path("*dynspec*")
