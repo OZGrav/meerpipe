@@ -124,8 +124,9 @@ process obs_list{
             # Set job as running
             proc_id = create_processing(
                 obs_id,
-                13, # TODO NOT HARDCODE THIS
-                f"${params.output_path}/{pulsar_obs}/{utc_obs}",
+                4, # TODO NOT HARDCODE THIS
+                # f"${params.output_path}/{pulsar_obs}/{utc_obs}",
+                "/fred/oz005/timing_processed/PTA/J1811-2405/2021-11-05-13:22:56/4/1284",
                 client,
                 "${params.psrdb_url}",
                 "${params.psrdb_token}",
@@ -197,36 +198,6 @@ process meergaurd {
 
     """
     clean_archive.py -a ${archive} -T ${template} -o ${pulsar}_${utc}_zap.ar
-    """
-}
-
-
-process psrplot_images {
-    label 'cpu'
-    label 'psrchive'
-
-    publishDir "${params.output_path}/${pulsar}/${utc}/images", mode: 'copy', pattern: "*png"
-    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
-
-    input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
-
-    output:
-    path "*png"
-
-    """
-    for i in "raw ${raw_archive}" "cleaned ${cleaned_archive}"; do
-        set -- \$i
-        type=\$1
-        file=\$2
-        # Do the plots for raw file then cleaned file
-        psrplot -p flux -jFTDp -jC                -g 1024x768 -c above:l= -c above:c="Stokes I Profile (\${type})"     -D \${type}_profile_fts.png/png \$file
-        psrplot -p Scyl -jFTD  -jC                -g 1024x768 -c above:l= -c above:c="Polarisation Profile (\${type})" -D \${type}_profile_ftp.png/png \$file
-        psrplot -p freq -jTDp  -jC                -g 1024x768 -c above:l= -c above:c="Phase vs. Frequency (\${type})"  -D \${type}_phase_freq.png/png  \$file
-        psrplot -p time -jFDp  -jC                -g 1024x768 -c above:l= -c above:c="Phase vs. Time (\${type})"       -D \${type}_phase_time.png/png  \$file
-        psrplot -p b -x -jT -lpol=0,1 -O -c log=1 -g 1024x768 -c above:l= -c above:c="Cleaned bandpass (\${type})"     -D \${type}_bandpass.png/png    \$file
-    done
     """
 }
 
@@ -329,7 +300,7 @@ process generate_toas {
 }
 
 
-process matplotlib_images {
+process generate_images {
     label 'cpu'
     label 'meerpipe'
 
@@ -342,11 +313,76 @@ process matplotlib_images {
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(toas), path(residuals)
 
     output:
-    tuple path("*.dat"), path("*.png"), path("*dynspec*")
+    tuple val(obs_pid), val(proc_id), path("*.png"), path("*.dat"), path("*dynspec")
 
 
     """
+    # psrplot images
+    for i in "raw ${raw_archive}" "cleaned ${cleaned_archive}"; do
+        set -- \$i
+        type=\$1
+        file=\$2
+        # Do the plots for raw file then cleaned file
+        psrplot -p flux -jFTDp -jC                -g 1024x768 -c above:l= -c above:c="Stokes I Profile (\${type})"     -D \${type}_profile_fts.png/png \$file
+        psrplot -p Scyl -jFTD  -jC                -g 1024x768 -c above:l= -c above:c="Polarisation Profile (\${type})" -D \${type}_profile_ftp.png/png \$file
+        psrplot -p freq -jTDp  -jC                -g 1024x768 -c above:l= -c above:c="Phase vs. Frequency (\${type})"  -D \${type}_phase_freq.png/png  \$file
+        psrplot -p time -jFDp  -jC                -g 1024x768 -c above:l= -c above:c="Phase vs. Time (\${type})"       -D \${type}_phase_time.png/png  \$file
+        psrplot -p b -x -jT -lpol=0,1 -O -c log=1 -g 1024x768 -c above:l= -c above:c="Cleaned bandpass (\${type})"     -D \${type}_bandpass.png/png    \$file
+    done
+
+    # Matplotlib images
     generate_images -pid ${obs_pid} -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris} -template ${template} -residuals ${residuals} -rcvr ${band}
+    """
+}
+
+
+process upload_results {
+    debug true
+    label 'meerpipe'
+
+    maxForks 1
+
+    input:
+    tuple val(obs_pid), val(proc_id), path(dat_files), path(png_files), path(dynspec_files)
+
+
+    """
+    #!/usr/bin/env python
+
+    from glob import glob
+    from psrdb.graphql_client import GraphQLClient
+    from meerpipe.db_utils import create_pipelineimages
+    from meerpipe.initialize import setup_logging
+
+    logger = setup_logging(console=True)
+    client = GraphQLClient("${params.psrdb_url}", False)
+    pid = '${obs_pid.toLowerCase()}'
+
+    image_data = []
+    # grab toa files
+    for toa_file in glob("toa*png"):
+        # file_loc, file_type, file_rank
+        image_data.append( (1, toa_file, f'{pid}.toa-single.hi') )
+
+    # file_rank, file_loc, file_type
+    image_data.append( (2,     "raw_profile_ftp.png",       'raw.profile.hi') )
+    image_data.append( (2, "cleaned_profile_ftp.png",    f'{pid}.profile-int.hi') )
+    image_data.append( (3,     "raw_profile_fts.png",       'raw.profile-pol.hi') )
+    image_data.append( (3, "cleaned_profile_fts.png",    f'{pid}.profile-pol.hi') )
+    image_data.append( (4,     "raw_phase_time.png",        'raw.phase-time.hi' ) )
+    image_data.append( (4, "cleaned_phase_time.png",     f'{pid}.phase-time.hi' ) )
+    image_data.append( (5,     "raw_phase_freq.png",        'raw.phase-freq.hi' ) )
+    image_data.append( (5, "cleaned_phase_freq.png",     f'{pid}.phase-freq.hi' ) )
+    image_data.append( (6,     "raw_bandpass.png",          'raw.bandpass.hi'   ) )
+    image_data.append( (6, "cleaned_bandpass.png",       f'{pid}.bandpass.hi'   ) )
+    image_data.append( (7,     "raw_SNR_cumulative.png",    'raw.snr-cumul.hi'  ) )
+    image_data.append( (7, "cleaned_SNR_cumulative.png", f'{pid}.snr-cumul.hi'  ) )
+    image_data.append( (8,     "raw_SNR_single.png",        'raw.snr-single.hi' ) )
+    image_data.append( (8, "cleaned_SNR_single.png",     f'{pid}.snr-single.hi' ) )
+
+    # Upload
+    # for file_rank, file_loc, file_type in image_data:
+    create_pipelineimages(image_data, "${proc_id}", client, "${params.psrdb_url}", "${params.psrdb_token}", logger)
     """
 }
 
@@ -377,19 +413,17 @@ workflow {
     // Flux calibrate
     fluxcal( meergaurd.out )
 
-    // Make psrplot images
-    psrplot_images( fluxcal.out )
-
     // Decimate into different time and freq chunnks using pam
     decimate( fluxcal.out )
 
     // Generate TOAs
     generate_toas( decimate.out )
 
-    matplotlib_images( generate_toas.out )
+    // Other images using matplotlib and psrplot
+    generate_images( generate_toas.out )
 
-    // Summary and clean up jobs
-    // generate_summary(output_dir,config_params,psrname,logger)
+    // Upload images and results
+    upload_results( generate_images.out )
 }
 
 

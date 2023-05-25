@@ -19,6 +19,7 @@ import shlex
 import json
 import pandas as pd
 import getpass
+import base64
 from astropy.time import Time as astrotime
 
 from meerpipe.initialize import setup_logging
@@ -897,12 +898,8 @@ def create_processing(
     processings_data = proc_content['data']['allProcessings']['edges']
 
     # Look for a process with same pipeline id
-    match_counter = 0
-    logger.info(processings_data)
-    logger.info(proc_content)
     for proc_data in processings_data:
         proc_pipe_id = int(pipelines.decode_id(proc_data['node']['pipeline']['id']))
-        logger.info(proc_pipe_id)
         if proc_pipe_id == 1:
             # PTSUE Processing so this is the parent ID
             parent_id = int(processings.decode_id(proc_data['node']['id']))
@@ -928,11 +925,8 @@ def create_processing(
 
     # Look for a process with same pipeline id
     match_counter = 0
-    logger.info(processings_data)
-    logger.info(proc_content)
     for proc_data in processings_data:
         proc_pipe_id = int(pipelines.decode_id(proc_data['node']['pipeline']['id']))
-        logger.info(proc_pipe_id)
         if proc_pipe_id == pipe_id:
             proc_id = int(processings.decode_id(proc_data['node']['id']))
             match_counter = match_counter + 1
@@ -1325,69 +1319,77 @@ def create_template(psrname, template, cparams, client, logger):
 #        : If a matching entry exists, that is updated returned instead.
 # INPUTS : String, String, Integer, Dictionary, GraphQL client, Logger object
 # RETURNS: Integer (success) | Exception (failure)
-def create_pipelineimage(image, image_type, rank, cparams, client, logger):
-
-    logger.info("Checking for existing images matching {0} from processing {1}".format(image,cparams["db_proc_id"]))
+def create_pipelineimages(
+        image_data,
+        proc_id,
+        client,
+        db_url,
+        db_token,
+        logger=None,
+    ):
+    # Load logger if no provided
+    if logger is None:
+        logger = setup_logging(console=True)
 
     # PSRDB setup
-    pipelineimages = Pipelineimages(client, cparams["db_url"], cparams["db_token"])
-
-    # Sanitise input
-    image = os.path.normpath(image)
-
+    pipelineimages = Pipelineimages(client, db_url, db_token)
     # Query matching Pipelineimages entries and check for equivalence
     response = pipelineimages.list(
         None,
-        int(cparams["db_proc_id"])
+        int(proc_id)
     )
-
     check_response(response)
     pipeimage_content = json.loads(response.content)
     pipeimage_data = pipeimage_content['data']['allPipelineimages']['edges']
 
-    # Check for matches based on image type
-    matches = 0
-    for x in range(0, len(pipeimage_data)):
-        if (pipeimage_data[x]['node']['imageType'] == image_type):
-            matches = matches +1
-            pipeimage_id = pipelineimages.decode_id(pipeimage_data[x]['node']['id'])
+    for rank, image, image_type in image_data:
+        image = os.path.normpath(image)
+        logger.info(f"Checking for existing images matching {image} (type: {image_type}) from processing ID: {proc_id}")
 
-    if (matches == 0):
-        # if no entry exists, create one
-        response = pipelineimages.create(
-            image,
-            image_type,
-            int(rank),
-            int(cparams["db_proc_id"]),
-        )
-        pipeimage_content = json.loads(response.content)
-        pipeimage_id = pipeimage_content['data']['createPipelineimage']['pipelineimage']['id']
-        retval = int(pipeimage_id)
-        logger.info("No match found, new pipelineimage entry created, ID = {0}".format(retval))
+        # Check for matches based on image type
+        matches = 0
+        for pipeimage in pipeimage_data:
+            logger.info(f"ID: {int(base64.b64decode(pipeimage['node']['id']).decode('utf-8').split(':')[1])}  imagetype: {pipeimage['node']['imageType']}")
+            if (pipeimage['node']['imageType'] == image_type):
+                matches += 1
+                pipeimage_id = pipelineimages.decode_id(pipeimage['node']['id'])
 
-    elif (matches == 1):
-        # entry already exists - update and return
-        logger.info("Match found, pipelineimage ID = {0}".format(pipeimage_id))
-        retval = int(pipeimage_id)
-        update_id = update_pipelineimage(
-            retval,
-            image,
-            image_type,
-            rank,
-            int(cparams["db_proc_id"]),
-            client,
-            cparams["db_url"],
-            cparams["db_token"]
-        )
-        #logger.info(update_id)
-        if (update_id != retval) or (update_id == None):
-            logger.error("Failure to update 'pipelineimages' entry ID {0} - PSRDB cleanup may be required.".format(retval))
+        if (matches == 0):
+            # if no entry exists, create one
+            response = pipelineimages.create(
+                image,
+                image_type,
+                int(rank),
+                int(proc_id),
+            )
+            pipeimage_content = json.loads(response.content)
+            pipeimage_id = pipeimage_content['data']['createPipelineimage']['pipelineimage']['id']
+            retval = int(pipeimage_id)
+            logger.info(f"No match found, new pipelineimage entry created, ID = {retval}, imagetype: {image_type}")
+
+        elif (matches == 1):
+            # entry already exists - update and return
+            logger.info("Match found, pipelineimage ID = {0}".format(pipeimage_id))
+            retval = int(pipeimage_id)
+            update_id = update_pipelineimage(
+                retval,
+                image,
+                image_type,
+                rank,
+                int(proc_id),
+                client,
+                db_url,
+                db_token,
+            )
+            #logger.info(update_id)
+            if (update_id != retval) or (update_id == None):
+                logger.error("Failure to update 'pipelineimages' entry ID {0} - PSRDB cleanup may be required.".format(retval))
+            else:
+                logger.info("Updated PSRDB entry in 'pipelineimages' table, ID = {0}".format(retval))
         else:
-            logger.info("Updated PSRDB entry in 'pipelineimages' table, ID = {0}".format(retval))
-    else:
-        # Houston, we have a problem
-        raise Exception("Multiple 'pipelineimage' entries found for combination of processing ID {0} and filename {1}".format(cparams["db_proc_id"], image))
-        retval = None
+            # Houston, we have a problem
+            raise Exception("Multiple 'pipelineimage' entries found for combination of processing ID {0} and filename {1}".format(proc_id, image))
+            retval = None
 
     return retval
 
@@ -1689,7 +1691,7 @@ def update_pipelineimage(image_id, image, image_type, rank, proc_id, client, url
     pipeimage_data = pipeimage_content['data']['pipelineimage']
 
     # Check for validity and update
-    if not (pipeimage_data == None):
+    if pipeimage_data is not None:
 
         # Check for parameters
         if (image == None):
