@@ -7,24 +7,9 @@ import subprocess
 import argparse
 import os.path
 import numpy as np
-import logging
-import glob
 from shutil import copyfile, rmtree
-import matplotlib.pyplot as plt
-import pandas as pd
-import psrchive as ps
-from scipy import stats
 
 import getopt
-
-# WARNING - This next instruction is horrible code and I don't condone ever doing it again
-# Unfortunately, my hand is forced by a lack of other apparent options
-# Andrew Cameron - 10/02/2022
-
-sys.path.insert(1, sys.path[len(sys.path)-1])
-import astropy
-
-# end horrible code
 
 from astropy.io import fits
 from astropy.coordinates import (SkyCoord, Longitude, Latitude)
@@ -55,7 +40,7 @@ def get_info(archive):
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
     info = str(proc.stdout.readline().decode("utf-8")).split()
-    return info 
+    return info
 
 def get_rcvr(params):
     """
@@ -77,7 +62,7 @@ def get_rcvr(params):
 
 def get_freqlist(archive):
     """
-    Get a list of frequencies 
+    Get a list of frequencies
     """
     print ("Getting frequency list..")
     info = 'psrstat -c int:freq,nchan {0} -jTD -Q'.format(archive)
@@ -93,20 +78,20 @@ def get_freqlist(archive):
 #Stuff for Tsky
 def get_glgb(psrname):
     "Get GL and GB from psrname"
-    
+
     info = 'psrcat -c "GL GB" {0} -all -X'.format(psrname)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
     info = proc.stdout.readline().split()
     gl = float(info[0])
     gb = float(info[1])
-    
+
     return gl,gb
 
 
 def get_radec(psrname):
     "Get RAJD and DECJD (in degrees) from psrname"
-    
+
     info = 'psrcat -c "rajd decjd" {0} -all -X -x -o short'.format(psrname)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
@@ -117,7 +102,7 @@ def get_radec(psrname):
         print ("RAJD:{0}, DECJD:{1}".format(str(info[0].decode("utf-8")), str(info[1].decode("utf-8"))))
     except ValueError:
         raise(RuntimeError("Cannot convert values {} and {} to floats".format(str(info[0].decode("utf-8")), str(info[1].decode("utf-8")))))
-                       
+
     return rajd, decjd
 
 
@@ -179,7 +164,7 @@ def get_tsky_updated(rajd, decjd, psr, rcvr):
 
     # some constants
     G = 19 #K
-    
+
     # Calculate Tsky as a function of the chosen receiver
     if (rcvr == "LBAND"):
 
@@ -218,8 +203,8 @@ def get_tsky_updated(rajd, decjd, psr, rcvr):
         pix2 = (decjd-crval2)/cdelt2 + crpix2
 
         # convert to integer
-        ipix1 = np.int(pix1+0.5)
-        ipix2 = np.int(pix2+0.5)
+        ipix1 = int(pix1+0.5)
+        ipix2 = int(pix2+0.5)
 
         print('Pixel1: {0},Pixel2: {1}'.format(ipix1,ipix2))
 
@@ -248,7 +233,7 @@ def get_tsky_updated(rajd, decjd, psr, rcvr):
         if np.isnan(tsky):
             print('ERROR:, Pixel blanked! Using default tsky: {0}'.format(tsky_default))
             tsky = tsky_default
-        
+
         print ('### Sky Temperature(mK) used for flux calibration: {0} ###'.format(tsky))
 
         #Converting to Jy and subtracting 3372mK as per SARAO specifications
@@ -260,7 +245,7 @@ def get_tsky_updated(rajd, decjd, psr, rcvr):
         new_scaling_factor = 1.7202 # +0.0002 - commented out as a likely error - 01/02/2023
         tsky_jy = (new_scaling_factor*(tsky-3372)) * (G / 1000)
         print ("Tsky (new) in Jy: {0}".format(tsky_jy))
-    
+
     elif (rcvr == "UHF"):
 
         # Implement Simon's new code for UHF Tsky calculation
@@ -311,19 +296,19 @@ def get_Ssys(tsky_jy,Nant,rcvr):
 
 def get_expectedRMS(info,ssys):
     "Compute the exepected RMS"
-    
-    tobs = np.float(info[1]) #Length of the observation
-    nbin = np.float(info[2]) #Number of phase bins
-    bw = np.float(info[3]) #Observing bandwidth
-    nchan = np.float(info[4]) #Number of frequency channels
-    
+
+    tobs  = float(info[1]) #Length of the observation
+    nbin  = float(info[2]) #Number of phase bins
+    bw    = float(info[3]) #Observing bandwidth
+    nchan = float(info[4]) #Number of frequency channels
+
     denom = np.sqrt(2*bw/nchan * tobs/nbin)
     rms = ssys/denom
-    
+
     print ("Expected RMS: {0}".format(rms))
     channel_bw = bw/nchan
     print ("Tobs: {0}, nbin: {1}, nchan: {2}, Obs.BW: {3}, channelBW: {4}".format(tobs,nbin,nchan,bw,channel_bw))
-    
+
     return rms
 
 def get_offrms(archive):
@@ -334,7 +319,7 @@ def get_offrms(archive):
     info = 'psrstat -c off:rms -l chan=0: -jTDp -Q {0}'.format(archive)
     arg = shlex.split(info)
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
-    
+
     lines = proc.stdout.readlines()
     offpulse_rms_list = []
     for line in lines:
@@ -346,7 +331,7 @@ def get_offrms(archive):
 
 def get_median_offrms(offrms_freq_dictionary, rcvr):
     "Select channels centered at 1390 MHz and compute the median of their off-pulse rms values"
-    
+
     # make distinctions based on receiver
     if (rcvr == "LBAND"):
         ref_freq = 1390
@@ -372,22 +357,22 @@ def get_median_offrms(offrms_freq_dictionary, rcvr):
     print ("Number of channels used: {0}".format(len(selected_offrms)))
     print ("Frequencies used: {0}".format(sorted(selected_freqs)))
     print ("Selected Offrms values: {0}".format(sorted(selected_offrms)))
-    
+
     median = np.median(selected_offrms)
     print ("Median off-pulse rms: {0}".format(median))
     return median
 
 def fluxcalibrate(archive,multiplier):
     "Applying the multiplier to all the decimated data products"
-    
-    
+
+
     print ("Flux calibrating {0}".format(os.path.split(archive)[-1]))
     info = "pam --mult {0} {1} -e fluxcal".format(multiplier,archive)
     arg = shlex.split(info)
     proc = subprocess.call(arg)
-    
-    
-    
+
+
+
 #=============================================================================
 
 
@@ -432,7 +417,7 @@ if str(args.parfile) == "None" or rajd is None:
 tsky_jy = get_tsky_updated(rajd, decjd, psr_name, rcvr)
 
 #Get receiver dependent ssys (LBAND -> 1390 MHz, UHF -> 800 MHz)
-nant = len(params["ANTENNAE"].split(",")) 
+nant = len(params["ANTENNAE"].split(","))
 ssys = get_Ssys(tsky_jy, nant, rcvr)
 
 #Get expected RMS in a single channel at 1390 MHz / 800 MHz
@@ -443,7 +428,7 @@ print ("============")
 #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
 freqinfo = get_freqlist(add_file)
 freq_list = freqinfo[-2].split(",")
-offrms_list = get_offrms(add_file)                
+offrms_list = get_offrms(add_file)
 #offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
 offrms_freq = dict(list(zip(freq_list, offrms_list)))
 

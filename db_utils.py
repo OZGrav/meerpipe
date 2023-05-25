@@ -12,23 +12,18 @@ __status__ = "Development"
 """
 
 # Import packages
-import os,sys
-import argparse
+import os
 import datetime
 import subprocess
 import shlex
 import json
-import time
 import pandas as pd
-import logging
-from util import header, ephemeris
 from util import time as util_time
 import getpass
 from astropy.time import Time as astrotime
 
 from tables import *
 from joins import *
-from graphql_client import GraphQLClient
 
 # Important paths
 PSRDB = "psrdb.py"
@@ -836,7 +831,7 @@ def create_launch(pipe_id, parent_id, pulsar_id, client, url, token):
 
     # check for existing launch entry
     retval = get_launch_id(pipe_id, parent_id, pulsar_id, client, url, token)
-    if not (retval == None):
+    if retval is not None:
         print ("Existing launch entry found matching PIPE = {0}, PARENT = {1}, PULSAR = {2}".format(pipe_id, parent_id, pulsar_id))
         print ("Skipping...")
     else:
@@ -1061,7 +1056,7 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
 
 # ROLE   : Creates a TOA entry linking a template, folding, ephemeris and processing.
 #        : If a matching entry exists, that is returned instead.
-# INPUTS : Integer, Integer, JSON object, Float, Float, String[1], Float, Boolean, 
+# INPUTS : Integer, Integer, JSON object, Float, Float, String[1], Float, Boolean,
 #          Dictionary, GraphQL client, Logger object
 # RETURNS: Integer (success) | Exception (failure)
 def create_toa_record(eph_id, template_id, flags, freq, mjd, site, uncertainty, quality, cparams, client, logger):
@@ -1797,3 +1792,58 @@ def write_obs_list(fh, arr):
         fh.write("%s\t%s\t%s\n" % (arr[x][psr_index], utc_psrdb2normal(arr[x][utc_index]), pid_getshort(arr[x][pid_index])))
 
     return
+
+
+# ROLE   : Returns the name of a pulsar associated with a single entry of folded obs data
+# INPUTS : PSRDB JSON data, GraphQL client, String, String
+# RETURNS: String | None (failure)
+def get_pulsarname(dbdata, client, url, token):
+
+    # check for valid input
+    if (isinstance(dbdata, list)):
+        raise Exception("Passed array to function expecting non-array input - aborting.")
+
+    # PSRDB setup
+    pulsars = Pulsars(client, url, token)
+    pulsartargets = Pulsartargets(client, url, token)
+
+    # get the name of the target
+    target_name = dbdata['node']['processing']['observation']['target']['name']
+
+    # check that this is a valid pulsar name
+    response = pulsars.list(
+        None,
+        target_name
+    )
+    check_response(response)
+    psr_content = json.loads(response.content)
+    psr_data = psr_content['data']['allPulsars']['edges']
+
+    # check output
+    retval = None
+    if (len(psr_data) == 1):
+        # success
+        retval = target_name
+    elif (len(psr_data) > 1):
+        raise Exception("Multiple entries in table 'pulsars' found with the same JNAME - PSRDB integrity checks required.")
+    elif (len(psr_data) == 0):
+        # no records found for pulsars matching the target - check for cross matches with pulsarTargets
+        eph_name = dbdata['node']['foldingEphemeris']['pulsar']['jname']
+
+        response = pulsartargets.list(
+            None,
+            None,
+            target_name,
+            None,
+            eph_name
+        )
+        check_response(response)
+        tgt_content = json.loads(response.content)
+        tgt_data = tgt_content['data']['allPulsartargets']['edges']
+
+        # check for valid result
+        if (len(tgt_data) == 1):
+            # success
+            retval = eph_name
+
+    return retval
