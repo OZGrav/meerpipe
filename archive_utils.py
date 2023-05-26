@@ -1,8 +1,8 @@
 """
 Code containing utilities for parsing/processing pulsar archive files
 
-__author__ = "Aditya Parthasarathy"
-__copyright__ = "Copyright (C) 2018 Aditya Parthasarathy"
+__author__ = "Aditya Parthasarathy, Andrew Cameron"
+__copyright__ = "Copyright (C) 2023 Aditya Parthasarathy, Andrew Cameron"
 __license__ = "Public Domain"
 __version__ = "0.1"
 """
@@ -44,14 +44,14 @@ import json
 import requests
 
 #Meerwatch imports
-from meerwatch_tools import get_res_fromtim, plot_toas_fromarr
+from meerwatch_tools import get_res_fromtim, plot_toas_fromarr, get_dm_fromtim
 
 # PSRDB imports - assumes psrdb/latest module
 from util import ephemeris
 from tables import *
 from graphql_client import GraphQLClient
 from db_utils import (create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimage,
-                      get_results, update_processing, update_folding, get_procid_by_location, get_toa_id, check_toa_nominal, 
+                      get_results, update_processing, update_folding, get_procid_by_location, get_toa_id, check_toa_nominal,
                       get_proc_embargo)
 
 #---------------------------------- General functions --------------------------------------
@@ -177,7 +177,7 @@ def get_meertimetemplate(psrname,output_path,cparams,logger):
         template_dir = os.path.join(output_path,"meertime_templates")
         psr_template = os.path.join(template_dir,str(psrname)+".std")
 
-    
+
     if os.path.exists(psr_template):
         #Template sanity checks
         logger.info("Template: {0}".format(psr_template))
@@ -193,14 +193,19 @@ def get_obsheadinfo(obsheader_path):
     """
     Parse the obs.header file and return important parameters
     """
-    params={}
-    with open(obsheader_path) as file:
-        lines=file.readlines()
-        for line in lines:
-            (key, val) = line.split()
-            params[str(key)] = str(val).rstrip()
+    if os.path.exists(obsheader_path):
+        params={}
+        with open(obsheader_path) as file:
+            lines=file.readlines()
+            for line in lines:
+                (key, val) = line.split()
+                params[str(key)] = str(val).rstrip()
 
-    file.close()
+        file.close()
+
+    else:
+        params = None
+
     return params
 
 def get_rcvr(params):
@@ -208,13 +213,37 @@ def get_rcvr(params):
     Determine which receiver is in use
     External conditions may be required for this function, depending on use
     """
-    bw = params["BW"]
-    freq = float(params["FREQ"])
 
-    if (bw == "544.0") and (freq < 816) and (freq > 815):
-        rcvr = "UHF"
-    elif (freq < 1284) and (freq > 1283):
-        rcvr = "LBAND"
+    if not (params == None):
+        bw = params["BW"]
+        freq = float(params["FREQ"])
+
+        # 18/05/2023 - now expanding this with S-Band functionality
+        # Specifications per Vivek
+        # BAND - FREQ (MHz) - BW (MHz)
+        # S0   - 2187.50    - 1750.00 - 2625.00 (875)
+        # S1   - 2406.25    - 1968.75 - 2843.75 (875)
+        # S2   - 2625.00    - 2187.50 - 3062.50 (875)
+        # S3   - 2843.75    - 2406.25 - 3281.25 (875)
+        # S4   - 3062.50    - 2625.00 - 3500.00 (875)
+
+        if (bw == "544.0") and (freq < 816) and (freq > 815):
+            rcvr = "UHF"
+        elif (freq < 1284) and (freq > 1283):
+            rcvr = "LBAND"
+        elif (bw == "875.0") and (freq < 2189) and (freq > 2185):
+            rcvr = "SBAND_0"
+        elif (bw == "875.0") and (freq < 2408) and (freq > 2404):
+            rcvr = "SBAND_1"
+        elif (bw == "875.0") and (freq < 2627) and (freq > 2623):
+            rcvr = "SBAND_2"
+        elif (bw == "875.0") and (freq < 2845) and (freq > 2841):
+            rcvr = "SBAND_3"
+        elif (bw == "875.0") and (freq < 3064) and (freq > 3060):
+            rcvr = "SBAND_4"
+        else:
+            rcvr = None
+
     else:
         rcvr = None
 
@@ -239,7 +268,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
     if os.path.exists(os.path.join(str(tmp_path),"obs.header")):
         copyfile(os.path.join(str(tmp_path),"obs.header"),os.path.join(str(output_dir),"obs.header"))
         logger.info("obs.header file copied")
-    
+
     if not os.path.exists(os.path.join(str(output_dir),str(added_fname))):
 
         logger.info("Adding raw archive files")
@@ -258,12 +287,12 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
             p_add.wait()
 
         elif cparams["fluxcal"]:
-            #Adding flux cal observations. 
+            #Adding flux cal observations.
             add_raw = 'psradd -M {0} -o {1}/{2}'.format(raw_archives,str(output_dir),str(added_fname))
             proc_add = shlex.split(add_raw)
             p_add = subprocess.Popen(proc_add)
             p_add.wait()
- 
+
         if pid == "TPA" or pid == "PTA" or pid == "RelBin" or pid == "GC":
             #Check for new MK DMs and RMs and apply if present. If not, the DM is applied from the ephemeris and the RM from psrcat.
             #Applying DM
@@ -277,14 +306,14 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 proc_dm = shlex.split(set_dm)
                 p_dm = subprocess.Popen(proc_dm)
                 p_dm.wait()
-            
-            else:    
+
+            else:
                 logger.info("Updating DM in header using the value in the ephemeris")
                 set_dm = 'pam {0}/{1} --update_dm -m -E {2}'.format(str(output_dir),str(added_fname), ephem)
                 proc_dm = shlex.split(set_dm)
                 p_dm = subprocess.Popen(proc_dm)
                 p_dm.wait()
-        
+
         else:
             if not cparams["fluxcal"]:
                 logger.info("Updating DM in header using the value in the ephemeris")
@@ -293,7 +322,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 p_dm = subprocess.Popen(proc_dm)
                 p_dm.wait()
 
-        
+
         if pid == "TPA" or pid == "PTA" or pid == "J0437_LT" or pid == "RelBin" or pid == "GC":
             #Applying RMs
             rm_path = cparams["rmcat"]
@@ -306,7 +335,7 @@ def add_archives(archive_list,output_dir,cparams,psrname,logger):
                 proc_rm = shlex.split(set_rm)
                 p_rm = subprocess.Popen(proc_rm)
                 p_rm.wait()
-            
+
             else:
                 logger.info("Obtaining and applying RM to the archive file")
                 cat_rm = 'psrcat -c RM {0} -X -all'.format(psrname)
@@ -355,9 +384,9 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
         utc = datetime.datetime.strptime(utc, '%Y-%m-%d-%H:%M:%S')
         if (archive_utc-utc).total_seconds() > 0:
             time_diff.append(calib_utc)
-  
+
     if not header_params==None:
-        #Obtaining the reference antenna and comparing it with the antenna list for the data. 
+        #Obtaining the reference antenna and comparing it with the antenna list for the data.
         reference_strings = ['reference', 'antenna', 'name:']
         desired_strings = ['desired', 'antenna', 'name:']
         for item in reversed(time_diff):
@@ -390,19 +419,16 @@ def get_calibrator(archive_utc,calib_utcs,header_params,logger):
 
 def calibrate_data(added_archives,output_dir,cparams,logger):
     
-   #Routine to calibrate the data - either using jones matrices or just use pac -XP
+    #Routine to calibrate the data - either using jones matrices or just use pac -XP
 
-    if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-        header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-    else:
-        header_params = None
-
+    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
+    rcvr = get_rcvr(header_params)
     pid = cparams["pid"]
     calibrated_archives=[]
     flags = cparams["flags"]
     output_path = cparams["output_path"]
     calibrators_path = cparams["calibrators_path"]
-    
+
     for add_archive in added_archives:
         add_ar = ps.Archive_load(add_archive)
         archive_path,archive_name = os.path.split(add_ar.get_filename())
@@ -419,8 +445,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
         calibrated_path = os.path.join(str(output_dir),"calibrated")
 
         # swapping predence order here - receiver first
-        rcvr = get_rcvr(header_params)
-
         if rcvr == "UHF":
 
             # UHF branch
@@ -437,8 +461,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
                     p_pac.wait()
                 else:
                     logger.info("Calibrated data already exists")
-
-                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
 
             elif (archive_utc_datetime - UHF_reference_calib_date).total_seconds() <=0:
 
@@ -469,7 +491,10 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
                 else:
                     logger.info("Calibrated data already exists")
 
-                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
+            cfile = os.path.join(calibrated_path,archive_name+".calib")
+            if os.path.exists(cfile):
+                set_pol_flag(cfile, logger)
+                calibrated_archives.append(cfile)
 
         elif rcvr == "LBAND":
 
@@ -488,8 +513,6 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
                 else:
                     logger.info("Calibrated data already exists")
 
-                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
-
             elif (archive_utc_datetime - LBAND_reference_calib_date).total_seconds() <=0:
 
                 # apply Jones matrices
@@ -497,7 +520,7 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
 
                 #Identify the jones matrix file to use for polarization calibration.
                 calib_utcs = sorted(glob.glob(os.path.join(calibrators_path,"*jones")))
-            
+
                 calibrator_archive = get_calibrator(archive_utc,calib_utcs,header_params,logger)
 
                 logger.info("Found jones matrix file:{0}".format(calibrator_archive))
@@ -516,21 +539,35 @@ def calibrate_data(added_archives,output_dir,cparams,logger):
                 else:
                     logger.info("Calibrated data already exists")
 
-                calibrated_archives.append(os.path.join(calibrated_path,archive_name+".calib"))
+            cfile = os.path.join(calibrated_path,archive_name+".calib")
+            if os.path.exists(cfile):
+                set_pol_flag(cfile, logger)
+                calibrated_archives.append(cfile)
 
+        elif ("SBAND" in rcvr):
+
+            logger.info("S-Band receiver configuration detected ({}) - calibration not yet implemented.".format(rcvr))
+            logger.info("Skipping calibration and referring raw file directly to mitigate_rfi()")
+
+            calibrated_archives.append(add_archive)
+        
         else:
 
             # unrecognised receiver choice
             logger.warning("Unknown receiver ({0}) - unable to calibrate data.".format(rcvr))
 
-    #Setting polc=1 in calibrated archives
-    for carchive in calibrated_archives:
-        ar = ps.Archive_load(carchive)
-        ar.set_poln_calibrated()
-        logger.info("polc=1 for {0}".format(carchive))
-        ar.unload(carchive)
-
     return calibrated_archives
+
+# utility function for setting polarisation flag in header
+def set_pol_flag(archive, logger):
+
+    #Setting polc=1 in archive    
+    ar = ps.Archive_load(archive)
+    ar.set_poln_calibrated()
+    logger.info("polc=1 for {0}".format(archive))
+    ar.unload(archive)
+
+    return
 
 
 def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
@@ -553,7 +590,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
             archive_path,archive_name = os.path.split(archive.get_filename())
             archive_name = archive_name.split('.')[0]
             #backend = archive_name[0]
-            archive_name = archive_name+"_zap"      
+            archive_name = archive_name+"_zap"
 
             if not os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
                 logger.info(os.environ["COAST_GUARD"])
@@ -568,13 +605,13 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                         logger.info("CG environment set to: {0}, {1}".format(os.environ["COAST_GUARD"],os.environ["COASTGUARD_CFG"]))
                     else:
                         logger.info("CG environment already set to: {0}, {1}".format(os.environ["COAST_GUARD"],os.environ["COASTGUARD_CFG"]))
-               
+
                 elif cparams["rfi_alg"] == "CHIVE":
-                
+
                     #TODO: Implement PSRCHIVE based zapping (perhaps using the python interface)
                     logger.info("Using PSRCHIVE for RFI mitigation")
 
-                
+
                 elif cparams["rfi_alg"] == "MG":
                     #Uses MeerGuard
                     #Checking if env variable is set properly
@@ -593,7 +630,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
 
                 #Get templates for coastguarding
-                if cparams["type"] == "ppta_zap": 
+                if cparams["type"] == "ppta_zap":
                     orig_template = get_pptatemplate(backend,psrname,float(cloned_archive.get_centre_frequency()),int(cloned_archive.get_nbin()),logger)
                 elif cparams["type"] == "meertime":
                     orig_template = get_meertimetemplate(psrname,output_path,cparams,logger)
@@ -611,7 +648,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                     #RcvrStandard cleaner
                     logger.info("Applying rcvrstd cleaner")
                     rcvrstd_cleaner = cleaners.load_cleaner('rcvrstd')
-                    
+
                     rcvrstd_parameters = 'badfreqs=None,badsubints=None,trimbw=0,trimfrac=0,trimnum=0,response=None'
                     rcvrstd_cleaner.parse_config_string(rcvrstd_parameters)
                     rcvrstd_cleaner.run(cloned_archive)
@@ -619,7 +656,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                     #Surgical cleaner
                     logger.info("Applying the surgical cleaner")
                     surgical_cleaner = cleaners.load_cleaner('surgical')
-                    
+
                     #logger.info("Using template: {0}".format(template))
 
                     chan_thresh = 5
@@ -634,10 +671,10 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                             surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={0},subintthresh={1}'.format(chan_thresh,subint_thresh)
                         else:
                             surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={1},subintthresh={2},template={0}'.format(temporary_template,chan_thresh,subint_thresh)
-                    
+
                     else:
                         surgical_parameters = 'chan_numpieces=1,subint_numpieces=1,chanthresh={0},subintthresh={1}'.format(chan_thresh,subint_thresh)
-                    
+
                     surgical_cleaner.parse_config_string(surgical_parameters)
                     logger.info("Surgical cleaner parameters correctly parsed.")
                     surgical_cleaner.run(cloned_archive)
@@ -648,9 +685,9 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
                     bandwagon_parameters = 'badchantol=0.99,badsubtol=1.0'
                     bandwagon_cleaner.parse_config_string(bandwagon_parameters)
                     bandwagon_cleaner.run(cloned_archive)
-                    
+
                     cleaned_archives.append(os.path.join(cleaned_path,archive_name+".ar"))
-                    
+
                     #unloading
                     logger.info("Unloading the cleaned archive {0}.ar".format(archive_name))
                     if cparams["fluxcal"]:
@@ -668,12 +705,12 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
                 logger.info("Cleaned archive {0}.ar exists. Skipping RFI excision".format(archive_name))
                 cleaned_archives.append(os.path.join(cleaned_path,archive_name+".ar"))
-                
+
     else: #DO NOT ZAP
         logger.info("RFI excision disabled")
         cleaned_archives=[]
         for archive in archive_list:
-            archive_path,archive_name = os.path.split(archive) 
+            archive_path,archive_name = os.path.split(archive)
             logger.info("Adding {0}.ar to the archive list".format(archive_name))
             cleaned_archives.append(archive)
 
@@ -738,7 +775,7 @@ def mitigate_rfi(calibrated_archives,output_dir,cparams,psrname,logger):
 
     return cleaned_archives
 
-# Utility function - adjustes a template to match the requirements of RFI mitigation
+# Utility function - adjusts a template to match the requirements of RFI mitigation
 # This includes:
 # - matching the phase bins of the provided file, if possible
 # - de-dedispersing the template, if required
@@ -801,14 +838,18 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
 
     cleaned_dir = os.path.join(str(output_dir),"cleaned")
     cleaned_archives = sorted(glob.glob(os.path.join(str(cleaned_dir),"*.ar")))
-    cleaned_archives.append(glob.glob(os.path.join(str(output_dir),"calibrated/*.calib"))[0])
+
+    # quick patch for S-band data, which is currently uncalibrated. May need future revision.
+    calib_archives = glob.glob(os.path.join(str(output_dir),"calibrated/*.calib"))
+    if (len(calib_archives) > 0):
+        cleaned_archives.append(calib_archives[0])
 
     if not orig_template == None:
 
         max_rfi_frac = 0.0
 
         for clean_archive in cleaned_archives:
-     
+
             clean_ar = ps.Archive_load(clean_archive)
             archive_path,archive_name = os.path.split(clean_ar.get_filename())
             extension = archive_name.split('.')[-1]
@@ -818,7 +859,7 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
             temporary_template = template_adjuster(orig_template, clean_ar, output_dir, logger)
 
             logger.info("Archive name:{0} and extension: {1}".format(archive_name, extension))
-            
+
             if extension == "ch.ar":
                 dynspec_name = archive_name+".ch.dynspec"
             if extension == "ar":
@@ -869,7 +910,7 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
 
                 except:
                     logger.info("Scintools failed. Dyanmic spectra couldn't be created")
-                
+
             else:
                 logger.info("Dynamic spectra already exists")
 
@@ -919,7 +960,7 @@ def dynamic_spectra(output_dir,cparams,psrname,logger):
 
 
 def get_extension(commands,chopped):
-    #Routine to generate extension based on pam command 
+    #Routine to generate extension based on pam command
 
     commands = commands.split(" ")
     extension = ""
@@ -953,18 +994,24 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
     output_path = cparams["output_path"]
     pid = cparams["pid"]
 
+    # abstract header_params code to common location
+    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
+
+    # determine receiver based on header information
+    rcvr = get_rcvr(header_params)
+
     processed_archives = []
     decimated_path = os.path.join(str(output_dir),"decimated")
-    
+
     logger.info("Decimating data")
     if "saveall" in flags:
         logger.info("Saving all the decimated products")
 
     for clean_archive in cleaned_archives:
-            
+
         loaded_archive = ps.Archive_load(clean_archive)
         clean_archive = loaded_archive.clone()
-        
+
         #get archive name
         archive_path,archive_name = os.path.split(str(clean_archive.get_filename()))
         archive_name = archive_name.split('.')[0]
@@ -1040,7 +1087,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                             subprocess.call(proc_pam)
                             processed_archives.append(os.path.join(decimated_path,"{0}.{1}ch.ar".format(archive_name,nchan)))
 
-               
+
                 else:
                     logger.info("Sub-banded and t-scrunched (P or S pol) data products exist")
                     processed_archives.append(os.path.join(decimated_path,decimated_name))
@@ -1048,18 +1095,18 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
         if pid == "TPA":
 
-            
-            #Using tpa_decimation.list (in additional_info) for decimating cleaned archives. 
+
+            #Using tpa_decimation.list (in additional_info) for decimating cleaned archives.
 
             #Decimating on a fresh copy of the archive
             logger.info("Loading a fresh version of the archive file")
-            
+
             cleaned_path = os.path.join(str(output_dir),"cleaned")
             cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
             if os.path.exists(cleaned_file):
                 cleaned_ar = ps.Archive_load(cleaned_file)
                 freqs = cleaned_ar.get_frequencies().tolist()
- 
+
             #get archive name
             archive_path,archive_name = os.path.split(str(cleaned_ar.get_filename()))
             archive_name = archive_name.split('.')[0]
@@ -1071,38 +1118,32 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info[0]
             psrname = archive_name.split("_")[0]
 
-            if len(freqs) == 928:
-                logger.info("Recorded number of channels is 928. Producing decimated data products")
-                for item in decimation_info:
-                    if not item == "all":
-                        extension = get_extension(item,False)
-                        if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                            pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
-                            logger.info("Producing {0} archives".format(extension))
-                            proc_pam = shlex.split(pam_command)
-                            subprocess.call(proc_pam)
-                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                        else:
-                            logger.info("{0}.{1} exists".format(archive_name,extension))
-                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+            if (rcvr == "LBAND"):
+
+                if (len(freqs) == 928):
+                    logger.info("Recorded number of channels is 928. Producing decimated data products")
+                    for item in decimation_info:
+                        if not item == "all":
+                            extension = get_extension(item,False)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
+                                logger.info("Producing {0} archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
 
-            elif len(freqs) > 928:
-
-                if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-                    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-                else:
-                    header_params = None
-
-                #L-band data
-                if not header_params["BW"] == "544.0":
+                elif (len(freqs) > 928):
 
                     # chopping functionality now replaced by abstracted utility function
                     chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
-                        
+
                         for item in decimation_info:
                             if not item == "all":
                                 extension = get_extension(item,True)
@@ -1119,43 +1160,60 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                     logger.info("{0}.{1} exists".format(archive_name,extension))
                                     processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
+            elif ("SBAND" in rcvr):
+                
+                # produce standard 1024 channel decimation products until further notice
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
 
-                #UHF DATA
-                elif header_params["BW"] == "544.0":
-                    logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
-                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
-                        cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+                    for item in decimation_info:
+                        if not item == "all":
+                            extension = get_extension(item,True)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                logger.info("Producing {0} SBAND archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+            
+            elif (rcvr == "UHF"):
 
-                        # Adjust for 4096 channel count
-                        if (header_params["NCHAN"] == "4096"):
-                            # add a new decimation product
-                            decimation_info.append('-f 4 -T -S')
+                logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
 
-                        for item in decimation_info:
-                            if not item == "all":
-                                #Scaling the scrunch factors to 1024 channels (only for UHF data)
-                                if item == "-f 116 -T -S":
-                                    if (header_params["NCHAN"] == "4096"):
-                                        item = "-f 512 -T -S"
-                                    else:
-                                        item = "-f 128 -T -S"
-                                if item == "-f 29 -T -S":
-                                    if (header_params["NCHAN"] == "4096"):
-                                        item = "-f 128 -T -S"
-                                    else:
-                                        item = "-f 32 -T -S"
+                    # Adjust for 4096 channel count
+                    if (header_params["NCHAN"] == "4096"):
+                        # add a new decimation product
+                        decimation_info.append('-f 4 -T -S')
 
-                                extension = get_extension(item,False)
-                                if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                                    pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
-                                    logger.info("Producing {0} UHF archives".format(extension))
-                                    proc_pam = shlex.split(pam_command)
-                                    subprocess.call(proc_pam)
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                    for item in decimation_info:
+                        if not item == "all":
+                            #Scaling the scrunch factors to 1024 channels (only for UHF data)
+                            if item == "-f 116 -T -S":
+                                if (header_params["NCHAN"] == "4096"):
+                                    item = "-f 512 -T -S"
                                 else:
-                                    logger.info("{0}.{1} exists".format(archive_name,extension))
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                    item = "-f 128 -T -S"
+                            if item == "-f 29 -T -S":
+                                if (header_params["NCHAN"] == "4096"):
+                                    item = "-f 128 -T -S"
+                                else:
+                                    item = "-f 32 -T -S"
 
+                            extension = get_extension(item,False)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                logger.info("Producing {0} UHF archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
         elif pid == "NGC6440":
 
@@ -1182,17 +1240,17 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
 
 
         elif pid == "RelBin" or pid == "GC":
-            #Using relbin_decimation.list (in additional_info) for decimating cleaned archives. 
+            #Using relbin_decimation.list (in additional_info) for decimating cleaned archives.
 
             #Decimating on a fresh copy of the archive
             logger.info("Loading a fresh version of the archive file")
 
             cleaned_path = os.path.join(str(output_dir),"cleaned")
             cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
-            
+
             if os.path.exists(cleaned_file):
                 cleaned_ar = ps.Archive_load(cleaned_file)
-           
+
                 #get archive name
                 archive_path,archive_name = os.path.split(str(cleaned_ar.get_filename()))
                 archive_name = archive_name.split('.')[0]
@@ -1205,49 +1263,38 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info.replace(np.nan, 'None', regex=True)
             decimation_info = decimation_info.values.tolist()
 
-            #If the recorded number of channels is 928 (Mostly L-band observations)
-            if len(freqs) == 928:
 
-                for num in range(0,len(decimation_info)):
-                    while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                    if decimation_info[num][0] == psrname:
-                        for item in decimation_info[num]:
-                            if not item == psrname:
-                                extension = get_extension(item,False)
-                                if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                                    pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
-                                    logger.info("Producing {0} archives".format(extension))
-                                    proc_pam = shlex.split(pam_command)
-                                    subprocess.call(proc_pam)
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                                else:
-                                    logger.info("{0}.{1} exists".format(archive_name,extension))
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+            if (rcvr == "LBAND"):
 
+                if len(freqs) == 928:
 
+                    for dec_info in decimation_info:
+                        while 'None' in dec_info: dec_info.remove('None')
+                        if dec_info[0] == psrname:
+                            for item in dec_info:
+                                if not item == psrname:
+                                    extension = get_extension(item,False)
+                                    if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                        pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
+                                        logger.info("Producing {0} archives".format(extension))
+                                        proc_pam = shlex.split(pam_command)
+                                        subprocess.call(proc_pam)
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                    else:
+                                        logger.info("{0}.{1} exists".format(archive_name,extension))
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
-
-            #If the recorded number of channels is greater than 928 (could be either L-band or UHF)
-
-            elif len(freqs) > 928:
-                
-                if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-                    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-                else:
-                    header_params = None
-
-                #L-BAND DATA
-                if not header_params["BW"] == "544.0":
+                elif len(freqs) > 928:
 
                     # chopping functionality now replaced by abstracted utility function
                     chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
-                        for num in range(0,len(decimation_info)):
-                            while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                            if decimation_info[num][0] == psrname:
-                                for item in decimation_info[num]:
+                        for dec_info in decimation_info:
+                            while 'None' in dec_info: dec_info.remove('None')
+                            if dec_info[0] == psrname:
+                                for item in dec_info:
                                     if not item == psrname:
                                         extension = get_extension(item,True)
                                         if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
@@ -1264,56 +1311,75 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                             logger.info("{0}.{1} exists".format(archive_name,extension))
                                             processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
-                #UHF DATA
-                elif header_params["BW"] == "544.0":
-                    logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
-                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
-                        cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
-                        for num in range(0,len(decimation_info)):
-                            while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                            if decimation_info[num][0] == psrname:
-                                for item in decimation_info[num]:
-                                    if not item == psrname:
-                                        
-                                        #Scaling the scrunch factors to 1024 channels (only for UHF data)
-                                        #if item == "-f 58 -t 8":
-                                        #    item = "-f 64 -t 8"
-                                        #if item == "-f 58 -t 8 -p":
-                                        #    item = "-f 64 -t 8 -p"
-                                        #if item == "-f 116 -t 128 -p":
-                                        #    item = "-f 128 -t 128 -p"
-                                        #if item == "-f 116 -t 32 -p":
-                                        #    item = "-f 128 -t 32 -p"
-                                        # making the above more general
-                                        item.replace('-f 58', '-f 64').replace('-f 116', '-f 128')
+            elif ("SBAND" in rcvr):
+                
+                # produce standard 1024 channel decimation products until further notice
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
 
-                                        extension = get_extension(item,False)
-                                        if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                                            pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
-                                            logger.info("Producing {0} UHF archives".format(extension))
-                                            proc_pam = shlex.split(pam_command)
-                                            subprocess.call(proc_pam)
-                                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                                        else:
-                                            logger.info("{0}.{1} exists".format(archive_name,extension))
-                                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                    for dec_info in decimation_info:
+                        while 'None' in dec_info: dec_info.remove('None')
+                        if dec_info[0] == psrname:
+                            for item in dec_info:
+                                if not item == psrname:
+                                    extension = get_extension(item,True)
+                                    if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                        pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                        logger.info("Producing {0} SBAND archives".format(extension))
+                                        proc_pam = shlex.split(pam_command)
+                                        subprocess.call(proc_pam)
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                    else:
+                                        logger.info("{0}.{1} exists".format(archive_name,extension))
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
+            elif (rcvr == "UHF"):
 
+                logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+                    for dec_info in decimation_info:
+                        while 'None' in dec_info: dec_info.remove('None')
+                        if dec_info[0] == psrname:
+                            for item in dec_info:
+                                if not item == psrname:
 
+                                    #Scaling the scrunch factors to 1024 channels (only for UHF data)
+                                    #if item == "-f 58 -t 8":
+                                    #    item = "-f 64 -t 8"
+                                    #if item == "-f 58 -t 8 -p":
+                                    #    item = "-f 64 -t 8 -p"
+                                    #if item == "-f 116 -t 128 -p":
+                                    #    item = "-f 128 -t 128 -p"
+                                    #if item == "-f 116 -t 32 -p":
+                                    #    item = "-f 128 -t 32 -p"
+                                    # making the above more general
+                                    item.replace('-f 58', '-f 64').replace('-f 116', '-f 128')
+
+                                    extension = get_extension(item,False)
+                                    if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                        pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                        logger.info("Producing {0} UHF archives".format(extension))
+                                        proc_pam = shlex.split(pam_command)
+                                        subprocess.call(proc_pam)
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                                    else:
+                                        logger.info("{0}.{1} exists".format(archive_name,extension))
+                                        processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
         elif pid == "PTA":
-    
-            #Using pta_decimation.list (in additional_info) for decimating cleaned archives. 
+
+            #Using pta_decimation.list (in additional_info) for decimating cleaned archives.
 
             #Decimating on a fresh copy of the archive
             logger.info("Loading a fresh version of the archive file")
-            
+
             cleaned_path = os.path.join(str(output_dir),"cleaned")
             cleaned_file = glob.glob(os.path.join(cleaned_path,archive_name+".ar"))[0]
             if os.path.exists(cleaned_file):
                 cleaned_ar = ps.Archive_load(cleaned_file)
                 freqs = cleaned_ar.get_frequencies().tolist()
- 
+
             #get archive name
             archive_path,archive_name = os.path.split(str(cleaned_ar.get_filename()))
             archive_name = archive_name.split('.')[0]
@@ -1325,38 +1391,32 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info[0]
             psrname = archive_name.split("_")[0]
 
-            if len(freqs) == 928:
-                logger.info("Recorded number of channels is 928. Producing decimated data products")
-                for item in decimation_info:
-                    if not item == "all":
-                        extension = get_extension(item,False)
-                        if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                            pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
-                            logger.info("Producing {0} archives".format(extension))
-                            proc_pam = shlex.split(pam_command)
-                            subprocess.call(proc_pam)
-                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                        else:
-                            logger.info("{0}.{1} exists".format(archive_name,extension))
-                            processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
+            if (rcvr == "LBAND"):
 
-            elif len(freqs) > 928:
+                if len(freqs) == 928:
+                    logger.info("Recorded number of channels is 928. Producing decimated data products")
+                    for item in decimation_info:
+                        if not item == "all":
+                            extension = get_extension(item,False)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,clean_archive)
+                                logger.info("Producing {0} archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
-                if os.path.exists(os.path.join(str(output_dir),"obs.header")):
-                    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
-                else:
-                    header_params = None
-
-                #L-band data
-                if not header_params["BW"] == "544.0":
+                elif len(freqs) > 928:
 
                     # chopping functionality now replaced by abstracted utility function
                     chopping_utility(cleaned_ar,cleaned_path,archive_name,cparams,header_params,logger)
 
                     if os.path.exists(os.path.join(cleaned_path,archive_name+".ch.ar")):
                         chopped_cleaned_file = os.path.join(cleaned_path,archive_name+".ch.ar")
-                        
+
                         for item in decimation_info:
                             if not item == "all":
                                 extension = get_extension(item,True)
@@ -1373,38 +1433,54 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                                     logger.info("{0}.{1} exists".format(archive_name,extension))
                                     processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
+            elif ("SBAND" in rcvr):
 
-                #UHF DATA
-                elif header_params["BW"] == "544.0":
-                    logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
-                    if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
-                        cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
-                        for item in decimation_info:
-                            if not item == "all":
-                                #Scaling the scrunch factors to 1024 channels (only for UHF data)
-                                if item == "-t 32 -f 116 -p":
-                                    item = "-t 32 -f 128 -p"
-                                if item == "-T -f 29":
-                                    item = "-T -f 32 "
-                                if item == "-T -f 58":
-                                    item = "-T -f 64"
+                # produce standard 1024 channel decimation products until further notice
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
 
-                                extension = get_extension(item,False)
-                                if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
-                                    pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
-                                    logger.info("Producing {0} UHF archives".format(extension))
-                                    proc_pam = shlex.split(pam_command)
-                                    subprocess.call(proc_pam)
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-                                else:
-                                    logger.info("{0}.{1} exists".format(archive_name,extension))
-                                    processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                    for item in decimation_info:
+                        if not item == "all":
+                            extension = get_extension(item,True)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                logger.info("Producing {0} SBAND archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
+                
+            elif (rcvr == "UHF"):
 
+                logger.info("No chopping required for UHF data. Just decimating products as per 1024 channel resolution")
+                if os.path.exists(os.path.join(cleaned_path,archive_name+".ar")):
+                    cleaned_file = os.path.join(cleaned_path,archive_name+".ar")
+                    for item in decimation_info:
+                        if not item == "all":
+                            #Scaling the scrunch factors to 1024 channels (only for UHF data)
+                            if item == "-t 32 -f 116 -p":
+                                item = "-t 32 -f 128 -p"
+                            if item == "-T -f 29":
+                                item = "-T -f 32 "
+                            if item == "-T -f 58":
+                                item = "-T -f 64"
 
+                            extension = get_extension(item,False)
+                            if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
+                                pam_command = "pam {0} -e {1} -u {2} {3}".format(item,extension,decimated_path,cleaned_file)
+                                logger.info("Producing {0} UHF archives".format(extension))
+                                proc_pam = shlex.split(pam_command)
+                                subprocess.call(proc_pam)
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
+                            else:
+                                logger.info("{0}.{1} exists".format(archive_name,extension))
+                                processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
 
         elif pid == "ngcsearch":
-            #Using pta_decimation.list (in additional_info) for decimating cleaned archives. 
+            #Using pta_decimation.list (in additional_info) for decimating cleaned archives.
 
             #Decimating on a fresh copy of the archive
             logger.info("Loading a fresh version of the archive file")
@@ -1419,9 +1495,9 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
             decimation_info = decimation_info.values.tolist()
             print (decimation_info)
             psrname = archive_name.split("_")[0]
-            for num in range(0,en(decimation_info)):
-                while 'None' in decimation_info[num]: decimation_info[num].remove('None')
-                for item in decimation_info[num]:
+            for dec_info in decimation_info:
+                while 'None' in dec_info: dec_info.remove('None')
+                for item in dec_info:
                     if not item == "all":
                         extension = get_extension(item,False)
                         if not os.path.exists(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension))):
@@ -1433,8 +1509,6 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                         else:
                             logger.info("{0}.{1} exists".format(archive_name,extension))
                             processed_archives.append(os.path.join(decimated_path,"{0}.{1}".format(archive_name,extension)))
-
-
 
         else:
             #For all other PIDs
@@ -1484,7 +1558,7 @@ def decimate_data(cleaned_archives,output_dir,cparams,logger):
                 else:
                     logger.info("{0}.ar exists. Skipping full frequency scrunching".format(archive_name))
 
-        
+
     return processed_archives
 
 # NEW - 16/08/2022
@@ -1627,7 +1701,7 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
         decimated_archives = sorted(glob.glob(os.path.join(decimated_path, "J*.ar")))
         logger.info("Also adding the cleaned file for flux calibration")
         cleaned_archive = glob.glob(os.path.join(str(output_dir), "cleaned", "J*ar"))
-        
+
         if len(cleaned_archive) > 1:
             for clean_ar in cleaned_archive:
                 decimated_archives.append(clean_ar)
@@ -1732,6 +1806,10 @@ def fluxcalibrate(output_dir, cparams, psrname, logger):
         else:
             logger.warning("Flux calibration failed")
 
+    elif ("SBAND" in rcvr):
+        logger.info("SBAND receiver configuration identified ({0}) - flux calibration not yet implemented.".format(rcvr))
+        pass
+
     else:
         logger.info("Unknown receiver ({0}) - flux calibration not yet implemented.".format(rcvr))
         pass
@@ -1765,8 +1843,8 @@ def generate_toas(output_dir,cparams,psrname,logger):
 
     if os.path.exists(parfile):
         os.rename(parfile,copy_parfile)
-        logger.info("Ephemeris copied to the timing directory") 
- 
+        logger.info("Ephemeris copied to the timing directory")
+
     decimated_path = os.path.join(str(output_dir),"decimated")
     processed_archives = sorted(glob.glob(os.path.join(decimated_path,"J*.ar")))
 
@@ -1957,7 +2035,7 @@ def cleanup(output_dir, cparams, psrname, logger):
     logger.info("Running a clean up")
 
     output_dir = str(output_dir)
-    
+
     #Moving template to the timing directory
     timing_dir = os.path.join(output_dir,"timing")
     if os.path.exists(os.path.join(output_dir,"{0}.std".format(psrname))):
@@ -2050,13 +2128,13 @@ def cleanup(output_dir, cparams, psrname, logger):
                     new_extension = "zap.{0}{1}{2}.fluxcal.ar".format(ext_nch,ext_nsubint,ext_pol)
                 else:
                     new_extension = "zap.{0}{1}.fluxcal.ar".format(ext_nch,ext_pol)
- 
+
             else:
                 if ext_nsubint == "T":
                     new_extension = "zap.{0}{1}{2}.ar".format(ext_nch,ext_nsubint,ext_pol)
                 else:
                     new_extension = "zap.{0}{1}.ar".format(ext_nch,ext_pol)
- 
+
             new_name = "{0}_{1}_{2}".format(sname[0],sname[1],new_extension)
             renamed_archive = os.path.join(decimated_dir,new_name)
             os.rename(archive,renamed_archive)
@@ -2084,11 +2162,17 @@ def generate_summary(output_dir, cparams, psrname, logger):
     # depending on where results are being stored, while the lower directory structure remains constant.
 
     # This will need modification once the S-Band receiver comes online. I have already made an appropriate start.
-    if str(split_path[path_args - 2]) == "816" or str(split_path[path_args - 2]) == "815":
-        rcvr = "UHF"
-    elif str(split_path[path_args - 2]) == "1284" or str(split_path[path_args - 2]) == "1283":
-        rcvr = "L-band"
-    else:
+
+    #if str(split_path[path_args - 2]) == "816" or str(split_path[path_args - 2]) == "815":
+    #    rcvr = "UHF"
+    #elif str(split_path[path_args - 2]) == "1284" or str(split_path[path_args - 2]) == "1283":
+    #    rcvr = "L-band"
+    #else:
+    #    rcvr = "RCVR Unknown"
+
+    header_params = get_obsheadinfo(os.path.join(str(output_dir),"obs.header"))
+    rcvr = get_rcvr(header_params)
+    if (rcvr == None):
         rcvr = "RCVR Unknown"
 
     summaryfile = os.path.join(output_dir,"{0}_{1}.summary".format(psrname,utcname))
@@ -2097,7 +2181,7 @@ def generate_summary(output_dir, cparams, psrname, logger):
 
     with open(summaryfile,"w") as sfile:
         sfile.write("{0} -- {1} -- {2} \n".format(psrname,utcname,rcvr))
-        
+
         #Checking if meerpipe log file exists (only if SLURM launched)
         mpipe_out = glob.glob(os.path.join(output_dir,"meerpipe_out*"))
         bfile = glob.glob(os.path.join(output_dir,"*.bash"))
@@ -2136,15 +2220,8 @@ def generate_summary(output_dir, cparams, psrname, logger):
         cleaned_path = os.path.join(output_dir,"cleaned")
         cleanedfiles = glob.glob(os.path.join(cleaned_path,"J*.ar"))
 
-        # Holding this code to be re-used when S-Band is deployed.
-        """
-        if (rcvr == "UHF"):
-            if (len(cleanedfiles) == 2):
-                if ((".ch" in cleanedfiles[0] or ".ch" in cleanedfiles[1]) and not (".ch" in cleanedfiles[0] and ".ch" in cleanedfiles[1])):
-                    sfile.write("CleanedChoppedFiles: CHECK \n")
-                else:
-                    sfile.write("CleanedChoppedFiles: FAIL \n")
-            elif (len(cleanedfiles) == 1 and ".ch" not in cleanedfiles[0]):
+        if ("SBAND" in rcvr):
+            if (len(cleanedfiles) == 1):
                 sfile.write("CleanedFiles: CHECK \n")
             else:
                 sfile.write("CleanedFiles: FAIL \n")
@@ -2154,21 +2231,10 @@ def generate_summary(output_dir, cparams, psrname, logger):
                 sfile.write("CleanedFluxFiles: CHECK \n")
             elif len(cleanedfiles) < 2:
                 sfile.write("CleanedFluxFiles: FAIL \n")
-
             elif len(cleanedfiles) == 4:
                 sfile.write("CleanedChoppedFluxFile: CHECK \n")
-            elif len(cleanedfiles) < 4 and len(cleanedfiles) > 2:
+            elif (len(cleanedfiles) < 4 and len(cleanedfiles) > 2) or (len(cleanedfiles) > 4):
                 sfile.write("CleanedChoppedFluxFile: FAIL \n")
-        """
-
-        if len(cleanedfiles)  == 2:
-            sfile.write("CleanedFluxFiles: CHECK \n")
-        elif len(cleanedfiles) < 2:
-            sfile.write("CleanedFluxFiles: FAIL \n")
-        elif len(cleanedfiles) == 4:
-            sfile.write("CleanedChoppedFluxFile: CHECK \n")
-        elif (len(cleanedfiles) < 4 and len(cleanedfiles) > 2) or (len(cleanedfiles) > 4):
-            sfile.write("CleanedChoppedFluxFile: FAIL \n")
 
         #Checking if decimated files exist
         decimated_path = os.path.join(output_dir,"decimated")
@@ -2191,7 +2257,7 @@ def generate_summary(output_dir, cparams, psrname, logger):
         #Checking if timing files exist
         timing_path = os.path.join(output_dir,"timing")
         timingfiles = glob.glob(os.path.join(timing_path,"J*tim"))
-        
+
         # setup to prevent invalid variable access
         parfile = []
         stdfile = []
@@ -2585,7 +2651,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                 del(tscr_arch)
 
                 #logger.info("Loop {} ending...".format(x))
-            
+
             np.savetxt(snr_report, snr_data, header = " Time (seconds) | snr (single) | snr (cumulative)", comments = "#")
 
             logger.info("Analysis complete.")
@@ -2680,7 +2746,7 @@ def generate_images(output_dir, cparams, psrname, logger):
                     if (generate_globalres_image(output_dir, toa_archive_file, global_image_name, images_path, parfile, template, selfile, cparams, psrname, logger)):
                         logger.info("Successfully created global observation residual image {0}".format(global_image_file))
                         image_data.append({'file': global_image_file, 'rank': 11, 'type': '{0}.toa-global.hi'.format(local_pid)})
-                  
+
                         # copy the global TOA image to the shared path
                         if not (global_image_file == share_file):
                             copyfile(global_image_file, share_file)
@@ -2693,6 +2759,69 @@ def generate_images(output_dir, cparams, psrname, logger):
 
             else:
                 logger.info("TOA plot generation only currently enabled for L-Band observations.")
+
+            # now do DM measurement
+            logger.info("Initiating single-obs DM measurement (attached to TOA production)...")
+            dm_archive_name = "dm_toas.ar"
+            dm_archive_file = os.path.join(images_path, dm_archive_name)
+            dm_nchan = 16
+            dm_result = None
+
+            while (dm_result == None and dm_nchan >= 4 and (dm_nchan % 1 == 0)):
+
+                if (build_dm_toas(output_dir, toa_file, dm_archive_name, images_path, dm_nchan, logger)):
+
+                    # dm archive successfully created
+                    # send archive to dm measurement function
+                    dm_result = measure_dm(dm_archive_file, images_path, parfile, template, selfile, logger)
+
+                    # output will either be a JSON object or None
+                else:
+                    logger.error("Generation of {} channel DM archive was unsuccssful - dividing nchan by 2 and trying again.".format(dm_nchan))
+
+                dm_nchan = dm_nchan / 2
+
+            # loop complete - report
+            if (dm_result == None):
+                logger.info("DM fitting failed.")
+            else:
+                logger.info("DM fitting succesful.")
+
+            # cleanup
+            if (os.path.exists(dm_archive_file)):
+                os.remove(dm_archive_file)
+
+            # write results to PSRDB
+            if cparams["db_flag"]:
+
+                logger.info("PSRDB functionality activated - recording measured DM.")
+
+                # Create client
+                db_client = GraphQLClient(cparams["db_url"], False)
+
+                # recall results field and update
+                psrdb_results = get_results(cparams["db_proc_id"], db_client, cparams["db_url"], cparams["db_token"])
+                logger.info("Recalled results of processing ID {0}".format(cparams["db_proc_id"]))
+                logger.info(psrdb_results)
+                psrdb_results['dm'] = dm_result
+                update_id = update_processing(
+                    cparams["db_proc_id"],
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    psrdb_results,
+                    db_client,
+                    cparams["db_url"],
+                    cparams["db_token"]
+                )
+                if (update_id != cparams["db_proc_id"]) or (update_id == None):
+                    logger.error("Failure to update 'processings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_proc_id"]))
+                else:
+                    logger.info("Updated PSRDB entry in 'processings' table, ID = {0}".format(cparams["db_proc_id"]))
 
         else:
             logger.error("Could not identify suitable file for image generation.")
@@ -2787,6 +2916,58 @@ def generate_images(output_dir, cparams, psrname, logger):
     logger.info("Image generation & logging complete.")
 
     return
+
+# builds the toas used for the measurement of DM specific to this observation
+def build_dm_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, nchan, logger):
+
+    logger.info("Build DM Toas function entered...")
+
+    # set up paths and filenames
+    toa_archive_ext = "temptoa.ar"
+    dlyfix_script = "/fred/oz005/users/mkeith/dlyfix/dlyfix"
+    toa_archive_file = os.path.join(toa_archive_path,toa_archive_name)
+
+    # remove the DM archive if it already exists
+    if (os.path.exists(toa_archive_file)):
+        os.remove(toa_archive_file)
+
+    toa_nchan = int(nchan)
+
+    # verify correct relationship between requested nchan and file channel count
+    comm = "vap -c nchan {0}".format(clean_file)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+    ar_nchan = int(info[1].split()[1])
+
+    # reduce channel count until integer relationship is met
+    while (toa_nchan > 1) and not (ar_nchan % int(toa_nchan) == 0):
+        toa_nchan -= 1
+
+    logger.info("Constructing full time-scrunched DM archive with nchan={0} - storing in {1}".format(toa_nchan, toa_archive_path))
+    comm = "pam -Tp --setnchn={0} -e {3} -u {1} {2}".format(toa_nchan, toa_archive_path, clean_file, toa_archive_ext)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    toa_archive_temp = proc.stdout.read().decode("utf-8").rstrip().split()[0]
+
+    # rename the file to desired name
+    logger.info("Renaming the archive to {0}".format(toa_archive_file))
+    comm = "mv -f {0} {1}".format(toa_archive_temp, toa_archive_file)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+
+    # correct the delays
+    logger.info("Applying delay corrections via {0}".format(dlyfix_script))
+    comm = "{0} -u {1} {2}".format(dlyfix_script, toa_archive_path, toa_archive_file)
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+
+    # check if file creation was successful and return
+    return os.path.exists(toa_archive_file)
 
 # builds the toas used for the production of TOA image specific to this observation
 def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path, cparams, psrname, logger):
@@ -2905,6 +3086,53 @@ def build_image_toas(output_dir, clean_file, toa_archive_name, toa_archive_path,
     # check if file creation was successful and return
     return os.path.exists(toa_archive_file)
 
+# create dm toas and return DM measurement
+def measure_dm(toa_archive, image_path, parfile, template, selfile, logger):
+
+    logger.info("Beginning DM measurement function...")
+
+    # set up paths, filenames and required parameters
+    timfile = os.path.join(image_path, "dm_toas.tim")
+    retval = None
+
+    # delete file if it already exists
+    if (os.path.exists(timfile)):
+        os.remove(timfile)
+
+    if not (template == None) and (os.path.exists(template)):
+
+        comm = "vap -c nchan {0}".format(toa_archive)
+        args = shlex.split(comm)
+        proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+        proc.wait()
+        info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+        toa_nchan = int(info[1].split()[1])
+
+        # check PORTRAIT toggle
+        portrait_str = get_portrait_toggle(template, toa_nchan, logger)
+
+        # create TOAs
+        comm = 'pat -jp {2} -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s {0} -A FDM {1}'.format(template, toa_archive, portrait_str)
+        args = shlex.split(comm)
+        f = open(timfile, "w")
+        subprocess.call(args, stdout=f)
+        f.close()
+        logger.info("DM TOA data generated and stored in {0}".format(timfile))
+
+        if not (parfile == None) and (os.path.exists(parfile)):
+
+            logger.info("Calling meerwatch_tools utility for measuring DM...")
+            retval = get_dm_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
+
+    if (retval == None):
+        logger.info("Unable to successfully measure DM with provided configuration.")
+
+    # cleanup
+    if (os.path.exists(timfile)):
+        os.remove(timfile)
+
+    return retval
+
 # produce residual image for a single observation
 def generate_singleres_image(output_dir, toa_archive, image_name, image_path, parfile, template, selfile, cparams, psrname, logger):
 
@@ -2963,7 +3191,7 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
         else:
             logger.error("No parfile provided! - Skipping single-obs TOA image generation...")
             result = False
-    
+
         # package the timfile for storage
         if (os.path.exists(timfile)):
             timzip = "{}.gz".format(timfile)
@@ -3111,7 +3339,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                             # step 4 - check for embargo
                             logger.info("Checking embargo dates for processing {0}".format(toa_proc_id))
                             embargo_date = get_proc_embargo(toa_proc_id, db_client, cparams["db_url"], cparams["db_token"])
-                            todays_date = datetime.datetime.utcnow()
+                            todays_date = datetime.datetime.now(datetime.timezone.utc)
 
                             if ((todays_date - embargo_date).total_seconds() > 0):
                                 logger.info("TOA is not embargoed.")
@@ -3135,13 +3363,12 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
                         unembargoed_toa_list = "{0} {1}".format(unembargoed_toa_list, toa_archives[x])
                     else:
                         logger.info("{0} excluded from unembargoed TOA list".format(toa_archives[x]))
-                    
+
                 else:
                     # no match
                     logger.info("{0} excluded from global TOA list".format(toa_archives[x]))
 
             except:
-
                 logger.error("Encountered problem trying to query {0} - trying again (Attempt #{1})".format(toa_archives[x], attempt_counter))
                 attempt_counter += 1
 
@@ -3156,7 +3383,7 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
         {'tim': timfile, 'toas': toa_list, 'image': image_file, 'embargo': False, 'type': 'global'},
         {'tim': public_timfile, 'toas': unembargoed_toa_list, 'image': None, 'embargo': True, 'type': 'global-pub'}
     ]
-    
+
     if not (template == None) and (os.path.exists(template)):
 
         for x in range (0, len(command_list)):
@@ -3236,28 +3463,114 @@ def generate_globalres_image(output_dir, local_toa_archive, image_name, image_pa
 # echos back a folding entry to PSRDB so as to trigger a resync of the online DB instance
 def folding_resync(cparams,logger):
 
-    logger.info("Echoing an update of folding ID {0} to initiate PSRDB online synchronisation...".format(cparams['db_fold_id']))
+    # check for PSRDB toggle
+    if (cparams["db_flag"]):
 
-    # create client
-    db_client = GraphQLClient(cparams["db_url"], False)
+        logger.info("Echoing an update of folding ID {0} to initiate PSRDB online synchronisation...".format(cparams['db_fold_id']))
 
-    update_id = update_folding(
-        cparams['db_fold_id'],
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        db_client,
-        cparams["db_url"],
-        cparams["db_token"]
-    )
+        # create client
+        db_client = GraphQLClient(cparams["db_url"], False)
 
-    if (update_id != cparams["db_fold_id"]) or (update_id == None):
-        logger.error("Failure to update 'foldings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_fold_id"]))
+        update_id = update_folding(
+            cparams['db_fold_id'],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            db_client,
+            cparams["db_url"],
+            cparams["db_token"]
+        )
+
+        if (update_id != cparams["db_fold_id"]) or (update_id == None):
+            logger.error("Failure to update 'foldings' entry ID {0} - PSRDB cleanup may be required.".format(cparams["db_fold_id"]))
+        else:
+            logger.info("Updated PSRDB entry in 'foldings' table, ID = {0}".format(cparams["db_fold_id"]))
+
     else:
-        logger.info("Updated PSRDB entry in 'foldings' table, ID = {0}".format(cparams["db_fold_id"]))
+        logger.info("PSRDB functionality not active - exiting folding_resync function.")
+
+    return
+
+# function to upload specified pulsar archive data products to PSRDB
+# WIP
+def upload_data_archives(output_dir, cparams, psrname, logger):
+
+    # Note - the functionality of this code is based on the renaming scheme performed by cleanup()
+    # Should these expected outputs change, the conditions of this code should be re-assessed
+
+    logger.info("Uploading decimated data products - Pipeline PID = {0}".format(cparams["pid"]))
+    # update - pid now to be included in the naming structure (type)
+    local_pid = cparams["pid"].lower()
+    files_to_store = []
+    files_to_delete = []
+
+    # identify the decimated path
+    output_dir = str(output_dir)
+    decimated_path = os.path.join(output_dir,"decimated")
+
+    # select the required decimated products and structure for upload
+    decimated_archives = sorted(glob.glob(os.path.join(decimated_path, "*")))
+
+    # isolate a single FTS archive in case of multiples
+    # choice is currently arbitrary
+    FTS_archives = []
+
+    for arch in decimated_archives:
+
+        if "FTS" in arch:
+            FTS_archives.append(arch)
+
+    if (len(FTS_archives) > 0):
+
+        # select first file for upload
+        # produce renamed copy of the file in PSRDB friendly format
+        FTS_selectfile = FTS_archives[0]
+        FTS_time = datetime.datetime.strptime(os.path.basename(FTS_selectfile).split("_")[1], '%Y-%m-%d-%H:%M:%S')
+        FTS_uploadfile = os.path.join(decimated_path, "{0}_{1}_{2}.ar".format(psrname, FTS_time.strftime('%y%m%d_%H%M%S'), "FTS"))
+        copyfile(FTS_selectfile, FTS_uploadfile)
+        logger.info("Copied {} to {} for upload.".format(FTS_selectfile, FTS_uploadfile))
+
+        # prepare file type
+        file_type = "{0}.archive.{1}".format(local_pid, "FTS")
+
+        # document file to be uploaded
+        files_to_store.append({'filename': FTS_uploadfile, 'type': file_type})
+        files_to_delete.append(FTS_uploadfile)
+        logger.info("Identified {} for FTS upload.".format(FTS_archives[0]))
+
+    else:
+        logger.info("No FTS file identified for upload.")
+
+    # write all files to PSRDB
+    if (cparams["db_flag"]):
+
+        logger.info("PSRDB functionality activated - uploading specified data products to PSRDB")
+
+        # set up PSRDB functionality
+        db_client = GraphQLClient(cparams["db_url"], False)
+
+        # loop through the listed files and store
+        for entry in files_to_store:
+
+            if (os.path.exists(entry['filename'])):
+                logger.info("File {0} identified (type {1}) - recording to PSRDB.".format(entry['filename'], entry['type']))
+                create_pipelinefile(entry['filename'], entry['type'], cparams, db_client, logger)
+            else:
+                logger.error("File {0} not located (type {1}) - no output recorded to PSRDB.".format(entry['filename'], entry['type']))
+
+        logger.info("PSRDB file upload complete.")
+
+    else:
+
+        logger.info("PSRDB functionality not actived - not uploading specified data products.")
+
+    # cleanup
+    for f in files_to_delete:
+        os.remove(f)
+        logger.info("Deleted {}.".format(f))
 
     return

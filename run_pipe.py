@@ -14,7 +14,7 @@ __status__ = "Development"
 """
 
 """
-Top-level code to execute the pipeline. 
+Top-level code to execute the pipeline.
 """
 
 #Basic imports
@@ -26,20 +26,16 @@ import argparse
 from argparse import RawTextHelpFormatter
 import os.path
 import numpy as np
-import logging
-import glob
 import time
-import pandas as pd
 import pickle
 import json
-from datetime import timedelta
 
 #Importing pipeline utilities
 from initialize import (parse_config, create_structure, get_outputinfo, setup_logging)
 
 from archive_utils import (decimate_data, mitigate_rfi, generate_toas, add_archives,
                            calibrate_data, fluxcalibrate, dynamic_spectra, cleanup, generate_summary,
-                           check_summary, generate_images, secondary_cleanup, folding_resync)
+                           check_summary, generate_images, secondary_cleanup, folding_resync, upload_data_archives)
 
 # PSRDB imports
 from tables import *
@@ -85,21 +81,20 @@ if not os.path.exists(config_params["input_path"]):
 if not os.path.exists(config_params["output_path"]):
     print ("Output path not valid. Quitting.")
     sys.exit()
-    
+
 #setting up the logger for this instance of the pipeline run
-if not args.slurm:
-    if args.dirname:
-        logger = setup_logging(os.path.join(config_params["output_path"],str(args.dirname)),args.verbose,False)
-    else:
-        logger = setup_logging(config_params["output_path"],args.verbose,False)
-
+if args.dirname:
+    logdir = os.path.join(config_params["output_path"],str(args.dirname))
 else:
-    logger = setup_logging(config_params["output_path"],args.verbose,False)
-
+    logdir = config_params["output_path"]
+logger = setup_logging(
+    filedir=logdir,
+    console=args.verbose,
+)
 
 ############ Analysis ##############
 logger.info("Logger setup")
-logger.info ("User:{0}".format(config_params["user"]))
+logger.info("User:{0}".format(config_params["user"]))
 
 #Adding filename as config_param if specified
 if args.dirname:
@@ -119,8 +114,8 @@ if args.dirname:
         else:
             config_params["utc"] = "none"
             logger.info("Processing {0}".format(config_params["dirname"]))
-        
-        toggle = True 
+
+        toggle = True
 
 elif args.batch:
     logger.info("Batch processing enabled")
@@ -372,7 +367,7 @@ if toggle:
             job_name = "{0}_{1}.bash".format(psrnames[obs_num],obs_num)
 
             #mysoft_path = "/fred/oz005/meerpipe" - TEMP SWITCH FOR LOCAL TESTING - ADC
-            mysoft_path = "/fred/oz005/users/acameron/pipeline_stuff/andrew_meerpipe_dev/meerpipe"
+            mysoft_path = config_params["soft_dir"]
 
             if 'email' in config_params:
                 user_email = config_params['email']
@@ -383,7 +378,7 @@ if toggle:
             mm,ss = divmod(required_time, 60)
             hh,mm = divmod(mm, 60)
             timestring = "%02d:%02d:%02d" % (hh, mm, ss)
-            
+
             with open(os.path.join(output_dir,str(job_name)),'w') as job_file:
                 job_file.write("#!/bin/bash \n")
                 job_file.write("#SBATCH --job-name={0}_{1} \n".format(psrnames[obs_num],obs_num))
@@ -407,12 +402,12 @@ if toggle:
                 #if (args.db_flag):
                 #    job_file.write("export PSRDB_TOKEN={0} \n".format(db_token))
                 #job_file.write("source /home/acameron/virtual-envs/meerpipe_db/bin/activate\n")
-                job_file.write("source /fred/oz005/pipelines/meerpipe/virtual-envs/meerpipe_db/bin/activate\n")
+                job_file.write(f"source {config_params['venv']}\n")
                 job_file.write("export PSRDB_TOKEN=`get_ingest_token.sh`\n")
                 job_file.write("python slurm_pipe.py -obsname {0}archivelist.npy -outputdir {0}output.npy -psrname {0}psrname.npy".format(output_dir))
-                                                 
+
             logger.info("Slurm job - {0} created".format(job_name))
-                                               
+
             logger.info("Deploying {0}".format(job_name))
             com_sbatch = 'sbatch {0}'.format(os.path.join(output_dir,str(job_name)))
             args_sbatch = shlex.split(com_sbatch)
@@ -454,9 +449,9 @@ if toggle:
                 time.sleep(1)
 
             logger.info("{0} deployed.".format(job_name))
-                                                 
-            """                                  
-            logger.info("Cleaning up")           
+
+            """
+            logger.info("Cleaning up")
             os.remove(os.path.join(output_dir,"archivelist.npy"))
             os.remove(os.path.join(output_dir,"output.npy"))
             os.remove(os.path.join(output_dir,"psrname.npy"))
@@ -514,12 +509,12 @@ if toggle:
                     #Add the archive files per observation directory into a single file
                     added_archives = add_archives(archive_list[obs_num],output_dir,config_params,psrnames[obs_num],logger)
                     logger.info("PIPE - Added archive: {0}".format(added_archives))
- 
+
                     if not config_params["fluxcal"]:
                         #Calibration
                         calibrated_archives = calibrate_data(added_archives,output_dir,config_params,logger)
                         logger.info("PIPE - Calibrated archives: {0}".format(calibrated_archives))
-          
+
                     if not config_params["fluxcal"]:
                         #RFI zapping using coastguard on the calibrated archives
                         cleaned_archives = mitigate_rfi(calibrated_archives,output_dir,config_params,psrnames[obs_num],logger)
@@ -564,6 +559,10 @@ if toggle:
                     # Secondary cleanup
                     secondary_cleanup(output_dir,config_params,psrnames[obs_num],logger)
                     logger.info("PIPE - Second-stage cleanup complete.")
+
+                    # Upload data products after all renaming is complete
+                    upload_data_archives(output_dir,config_params,psrnames[obs_num],logger)
+                    logger.info("PIPE - Data product upload complete.")
 
                     # Trigger PSRDB resync
                     folding_resync(config_params,logger)

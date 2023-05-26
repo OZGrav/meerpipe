@@ -14,14 +14,12 @@ __status__ = "Development"
 """
 
 """
-Contains routines that help initialize the pipeline. 
+Contains routines that help initialize the pipeline.
 """
 
 import os
-import sys
 import shlex
 import subprocess
-import argparse
 import os.path
 import numpy as np
 import logging
@@ -71,7 +69,7 @@ def parse_config(path_cfile):
     """
     INPUT: Path to the configuration file
     """
-    
+
     config_params = {}
     with open (str(path_cfile)) as cfile:
         for line in cfile.readlines():
@@ -117,79 +115,83 @@ def parse_config(path_cfile):
                 config_params["global_toa_path"] = sline[1].rstrip().lstrip()
             if attr == "redundant_products":
                 config_params["red_prod"] = sline[1].rstrip().lstrip(' ').split(',')
+            if attr == "venv":
+                config_params["venv"] = sline[1].rstrip().lstrip()
+            if attr == "soft_dir":
+                config_params["soft_dir"] = sline[1].rstrip().lstrip()
 
     cfile.close()
-    
+
     return config_params
 
 
-def setup_logging(path,verbose,file_log):
+def setup_logging(
+        console=True,
+        logfile=False,
+        filedir=None,
+        filename='meerpipe.log',
+        level=logging.INFO,
+    ):
     """
     Setup log handler - this logs in the terminal (if not run with --slurm).
     For slurm based runs - the logging is done by the job queue system
 
-    """
-    log_toggle=False
-     
-    # create formatter
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    if file_log == True:
-        logfile = "meerpipe.log"
-        logger = logging.getLogger(logfile)
-        logger.setLevel(logging.INFO)
+    Parameters
+    ----------
+    console : `boolean`
+        Output logging to the command line
+    logfile : `boolean`
+        Output logging to the log file
+    filedir : `str`
+        Directory to output logger file to
+    filename : `str`
+        Name of the output logger file
 
-        if not os.path.exists(path):
-            os.makedirs(path)
-        #Create file logging only if logging file path is specified
-        fh = logging.FileHandler(os.path.join(path,logfile))
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
+    Returns
+    -------
+    logger : logger object
+        The modified logger object
+    """
+    # create formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(lineno)-4d - %(levelname)-9s :: %(message)s')
+    # Create a logger and set the logging level
+    logger = logging.getLogger()
+    logger.setLevel(level)
+
+    # Create a console handler and set the logging level if console is True
+    if console:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(level)
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+        logger.info("Console logger enabled")
+
+    # Create a file handler and set the logging level if logfile is True
+    if logfile:
+        if not filedir:
+            raise ValueError("Filedir must be specified when enabling logfile output.")
+        if not os.path.exists(filedir):
+            os.makedirs(filedir)
+        file_handler = logging.FileHandler(os.path.join(filedir, filename))
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        logger.info("File logging enabled")
+
         #Check if file already exists, if so, add a demarcator to differentiate among runs
-        if os.path.exists(os.path.join(path, logfile)):
-            with open(os.path.join(path,logfile), 'a') as f:
+        if os.path.exists(os.path.join(filedir, filename)):
+            with open(os.path.join(filedir, filename), 'a') as f:
                 f.write(20*"#")
                 f.write("\n")
-        logger.info("File handler created")
-        log_toggle=True
 
-    if verbose:
-        #Create console handler with a lower log level (INFO)
-        logfile = "meerpipe.log"
-        logger = logging.getLogger(logfile)
-        logger.setLevel(logging.INFO)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        ch.setFormatter(formatter)
-        # add the handlers to the logger
-        logger.addHandler(ch)
-        logger.info("Verbose mode enabled")
-        log_toggle=True
-        
-    """
-    #Create console handler with a lower log level (INFO)
-    logfile = "meerpipe.log"
-    logger = logging.getLogger(logfile)
-    logger.setLevel(logging.INFO)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(formatter)
-    # add the handlers to the logger
-    logger.addHandler(ch)
-    logger.info("Verbose mode enabled")
-    """
-
-    if log_toggle:
-        return logger
-    else:
-        return none
+    return logger
 
 
 def get_outputinfo(cparams,logger):
     """
     Routine to gather information about the directory structure from the input data
-    The input path is assumed to have directories that are pulsarname/UTCs/beamnumber/freq/*ar 
+    The input path is assumed to have directories that are pulsarname/UTCs/beamnumber/freq/*ar
     Returns a list of output paths that needs to exist for the data products to be stored
     """
     input_path = cparams["input_path"]
@@ -235,7 +237,7 @@ def get_outputinfo(cparams,logger):
                 print ("Skipping CAL observations : {0}".format(psr_name))
 
     elif cparams["type"] == "ppta_zap":
-        #For PPTA zapping 
+        #For PPTA zapping
         for pulsar in pulsar_dirs:
             psr_path,psr_name = os.path.split(pulsar)
             psrnames.append(psr_name)
@@ -271,7 +273,7 @@ def get_outputinfo(cparams,logger):
 
             psr_path,psr_name = os.path.split(pulsar)
             psr_name_split = psr_name.split("_")
-            
+
             if psr_name_split[-1] == "R" or psr_name_split[-1] == "N" or psr_name_split[-1] == "O" or psr_name_split[-1] == "S":
                 cparams["fluxcal"] = True
                 logger.info("This is a fluxcal observation")
@@ -367,7 +369,7 @@ def get_outputinfo(cparams,logger):
                             reqram = ram_min
                         elif reqram > ram_max:
                             reqram = ram_max
-                        
+
                         # report result in MB
                         reqram_str = "{0}m".format(int(np.ceil(reqram*1024)))
 
@@ -403,7 +405,7 @@ def get_outputinfo(cparams,logger):
 
                         required_time_list.append(int(reqtime))
 
-         
+
     return results_path,all_archives,psrnames,proposal_ids,required_ram_list,obs_time_list,required_time_list
 
 
@@ -412,7 +414,7 @@ def create_structure(output_dir,cparams,psrname,logger):
     Routine to create an output directory structure as decided by get_directoryinfo.
     Creates a "cleaned", "calibrated" and a "timing" directory in each output path.
 
-    Now includes a "scintillation" directory. 
+    Now includes a "scintillation" directory.
     """
     output_path = cparams["output_path"]
     flags = cparams["flags"]
@@ -425,7 +427,7 @@ def create_structure(output_dir,cparams,psrname,logger):
     logger.info("Creating the directory structure for {0}".format(psrname))
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    
+
     cleaned_dir = os.path.join(output_dir,"cleaned")
     calibrated_dir = os.path.join(output_dir,"calibrated")
     timing_dir = os.path.join(output_dir,"timing")
@@ -444,7 +446,7 @@ def create_structure(output_dir,cparams,psrname,logger):
     elif cparams["type"] == "ppta_zap":
         pulsar_dir = output_dir
         project_dir = output_dir
-        
+
     #Head pulsar directory
     if not os.path.exists(pulsar_dir):
         logger.info("Pulsar directory created")
@@ -504,10 +506,10 @@ def create_structure(output_dir,cparams,psrname,logger):
         #else:
         #    logger.info("Project directory exists")
 
-    
+
     # this part shouldn't need to run if we're just rebuilding the images
     if (not cparams["fluxcal"]) and (not cparams["image_flag"]):
-    
+
         #Pull/Update repositories
         #TODO: for now just creating directories. Have to manage_repos eventually!
         logger.info("Checking if the ephemerides and templates directory exists")
@@ -584,7 +586,7 @@ def create_structure(output_dir,cparams,psrname,logger):
                 copyfile(os.path.join(template_dir,psrname+"_p3.std"),os.path.join(pulsar_dir,psrname+"_p3.std"))
             else:
                 copyfile(os.path.join(template_dir,psrname+".std"),os.path.join(pulsar_dir,psrname+".std"))
-        
+
         elif psrname in notemplate_list:
             logger.info("{0} in notemplate list. Using a Gaussian template instead.".format(psrname))
             copyfile(os.path.join(template_dir,"Gaussian.std"),os.path.join(pulsar_dir,"Gaussian.std"))
