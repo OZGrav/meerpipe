@@ -122,18 +122,22 @@ process obs_list{
                 template = "${params.template}"
 
             # Set job as running
-            proc_id = create_processing(
-                obs_id,
-                4, # TODO NOT HARDCODE THIS
-                # f"${params.output_path}/{pulsar_obs}/{utc_obs}",
-                "/fred/oz005/timing_processed/PTA/J1811-2405/2021-11-05-13:22:56/4/1284",
-                client,
-                "${params.psrdb_url}",
-                "${params.psrdb_token}",
-            )
+            if "${params.upload}" == "true":
+                proc_id = create_processing(
+                    obs_id,
+                    13, # TODO NOT HARDCODE THIS
+                    f"${params.output_path}/{pulsar_obs}/{utc_obs}",
+                    # "/fred/oz005/timing_processed/PTA/J1811-2405/2021-11-05-13:22:56/4/1284",
+                    client,
+                    "${params.psrdb_url}",
+                    "${params.psrdb_token}",
+                )
+            else:
+                # No uploading so don't make a processing item
+                proc_id = None
 
             # Write out results
-            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{band},{int(nfiles*8)},{proc_id},{ephemeris},{template}")
+            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{band},{int(nfiles*8)},{proc_id},{ephemeris},{template}\\n")
     """
 }
 
@@ -188,7 +192,7 @@ process meergaurd {
 
     publishDir "${params.output_path}/${pulsar}/${utc}/cleaned", mode: 'copy', pattern: "*_zap.ar"
     time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+    memory { "${task.attempt * Integer.valueOf(dur) * 10} MB"}
 
     input:
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(archive)
@@ -218,7 +222,7 @@ process decimate {
 
     """
     for nsub in ${params.time_subs.join(' ')}; do
-        input_nsub=\$(vap -c nsub J1811-2405_2021-11-05-13:22:56.fluxcal | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+        input_nsub=\$(vap -c nsub ${cleaned_archive} | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
         if [ \$nsub -gt \$input_nsub ]; then
             # Skip if obs not long enough
             continue
@@ -293,7 +297,13 @@ process generate_toas {
         pat -jp \$port  -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${template} -A FDM \$ar  > \${ar}.tim
 
         echo "Generating residuals\n----------------------------------"
-        tempo2 -nofit -set START 40000 -set FINISH 99999 -output general2 -s "{bat} {post} {err} {freq} BLAH\n" -nobs 1000000 -npsr 1 -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select -f ${ephemeris} \${ar}.tim > \${ar}.tempo2out
+        tempo2 -nofit -set START 40000 -set FINISH 99999 -output general2 -s "{bat} {post} {err} {freq} BLAH\n" -nobs 1000000 -npsr 1 -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select -f ${ephemeris} \${ar}.tim > \${ar}.tempo2out && returncode=\$? || returncode=\$?
+        if [[ \$returncode -ne 134 && \$returncode -ne 0 ]]; then
+            echo "Errorcode: \$returncode. Tempo error other than lack of high S/N data error."
+            exit returncode
+        elif [[ \$returncode == 134 ]]; then
+            echo "Errorcode: \$returncode. No input data due to the logic in /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select"
+        fi
         cat \${ar}.tempo2out | grep BLAH | awk '{print \$1,\$2,\$3*1e-6,\$4}' > \${ar}.residual
     done
     """
@@ -402,7 +412,6 @@ workflow {
         )
         obs_data = obs_list.out.splitCsv()
     }
-    obs_data.view()
 
     // Combine archives and flux calibrate
     psradd_calibrate( obs_data )
@@ -423,7 +432,9 @@ workflow {
     generate_images( generate_toas.out )
 
     // Upload images and results
-    upload_results( generate_images.out )
+    if ( params.upload ) {
+        upload_results( generate_images.out )
+    }
 }
 
 

@@ -232,6 +232,8 @@ def generate_images(
 
         if nchan == 1 and nsub == 1:
             logger.info(f"Not processing {residual} because nchan == 1 and nsub == 1")
+        elif os.path.getsize(residual) == 0:
+            logger.warning(f"Not processsing {residual} as the file is empry")
         else:
             logger.info(f"Processing {residual}")
             plot_toas_fromarr(residual, pid=pid, sequential=True, verb=True, rcvr=rcvr, nchan=nchan, out_file=f"toas_{archive_extension}.png")
