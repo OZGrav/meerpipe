@@ -147,8 +147,8 @@ process psradd_calibrate {
     label 'meerpipe'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/calibrated", mode: 'copy', pattern: "*.ar"
-    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 5} MB"}
 
     input:
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template)
@@ -191,7 +191,7 @@ process meergaurd {
     label 'coast_guard'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/cleaned", mode: 'copy', pattern: "*_zap.ar"
-    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
     memory { "${task.attempt * Integer.valueOf(dur) * 10} MB"}
 
     input:
@@ -211,7 +211,7 @@ process decimate {
     label 'psrchive'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy', pattern: "${pulsar}_${utc}_zap.*.ar"
-    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
@@ -248,8 +248,8 @@ process fluxcal {
     label 'meerpipe'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/fluxcal", mode: 'copy', pattern: "*fluxcal"
-    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 10} MB"}
 
     input:
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
@@ -268,8 +268,8 @@ process generate_toas {
     label 'psrchive'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/timing", mode: 'copy', pattern: "*.{residual,tim,par,std}"
-    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+    time   { "${task.attempt * Integer.valueOf(dur) * 1} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 0.3} MB"}
 
     input:
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives)
@@ -316,7 +316,7 @@ process generate_images {
 
     publishDir "${params.output_path}/${pulsar}/${utc}/images", mode: 'copy', pattern: "{c,t,r}*png"
     publishDir "${params.output_path}/${pulsar}/${utc}/scintillation", mode: 'copy', pattern: "*dynspec*"
-    time   { "${task.attempt * Integer.valueOf(dur) * 10} s" }
+    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
