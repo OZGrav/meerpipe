@@ -226,8 +226,8 @@ def generate_images(
     # logger.info("Producing single-obs image from modified MeerWatch residuals...")
     for residual in residuals:
         # get parameters from file name
-        nchan = int(residual.split('ch')[0].split('t')[1])
-        nsub  = int(residual.split('zap.')[1].split('t')[0])
+        nchan = int(residual.split('zap.')[1].split('ch')[0])
+        nsub  = int(residual.split('p')[-1].split('t')[0])
         archive_extension = residual.split('.')[1]
 
         if nchan == 1 and nsub == 1:
