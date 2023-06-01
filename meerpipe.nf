@@ -142,19 +142,19 @@ process obs_list{
 }
 
 
-process psradd_calibrate {
+process psradd_calibrate_clean {
     label 'cpu'
     label 'meerpipe'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/calibrated", mode: 'copy', pattern: "*.ar"
     time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 5} MB"}
+    memory { "${task.attempt * Integer.valueOf(dur) * 10} MB"}
 
     input:
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path("${pulsar}_${utc}.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path("${pulsar}_${utc}.ar"), path("${pulsar}_${utc}_zap.ar"), env(SNR)
 
     """
     if ${params.use_edge_subints}; then
@@ -182,26 +182,12 @@ process psradd_calibrate {
     fi
     echo \${rm}
     pam --RM \${rm} -m ${pulsar}_${utc}.ar
-    """
-}
 
+    # Clean the archive
+    clean_archive.py -a ${pulsar}_${utc}.ar -T ${template} -o ${pulsar}_${utc}_zap.ar
 
-process meergaurd {
-    label 'cpu'
-    label 'coast_guard'
-
-    publishDir "${params.output_path}/${pulsar}/${utc}/cleaned", mode: 'copy', pattern: "*_zap.ar"
-    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 10} MB"}
-
-    input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(archive)
-
-    output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(archive), path("${pulsar}_${utc}_zap.ar")
-
-    """
-    clean_archive.py -a ${archive} -T ${template} -o ${pulsar}_${utc}_zap.ar
+    # Get the signal to noise ratio of the cleaned archive
+    SNR=\$(psrstat -j FTp -c snr=pdmp -c snr ${pulsar}_${utc}_zap.ar | cut -d '=' -f 2)
     """
 }
 
@@ -215,10 +201,10 @@ process decimate {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path("${pulsar}_${utc}_zap.*.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path("${pulsar}_${utc}_zap.*.ar")
 
     """
     for nsub in ${params.time_subs.join(' ')}; do
@@ -252,10 +238,10 @@ process fluxcal {
     memory { "${task.attempt * Integer.valueOf(dur) * 10} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path("${pulsar}_${utc}.fluxcal"), path("${pulsar}_${utc}_zap.fluxcal") // Replace the archives with flux calced ones
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path("${pulsar}_${utc}.fluxcal"), path("${pulsar}_${utc}_zap.fluxcal"), val(snr) // Replace the archives with flux calced ones
 
     """
     fluxcal -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris}
@@ -272,10 +258,10 @@ process generate_toas {
     memory { "${task.attempt * Integer.valueOf(dur) * 0.3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path("*.tim"), path("*.residual")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path("*.tim"), path("*.residual")
 
     """
     # Loop over each decimated archive
@@ -320,7 +306,7 @@ process generate_images {
     memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(decimated_archives), path(toas), path(residuals)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(toas), path(residuals)
 
     output:
     tuple val(obs_pid), val(proc_id), path("*.png"), path("*.dat"), path("*dynspec")
@@ -413,14 +399,11 @@ workflow {
         obs_data = obs_list.out.splitCsv()
     }
 
-    // Combine archives and flux calibrate
-    psradd_calibrate( obs_data )
-
-    // Clean of RFI with MeerGaurd
-    meergaurd( psradd_calibrate.out )
+    // Combine archives,flux calibrate Clean of RFI with MeerGaurd
+    psradd_calibrate_clean( obs_data )
 
     // Flux calibrate
-    fluxcal( meergaurd.out )
+    fluxcal( psradd_calibrate_clean.out )
 
     // Decimate into different time and freq chunnks using pam
     decimate( fluxcal.out )
