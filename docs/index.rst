@@ -8,4 +8,5 @@ Welcome to MeerPipe's documentation!
 
    installation
    running_pipeline
+   logic
 

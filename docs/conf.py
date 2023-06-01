@@ -40,6 +40,7 @@ extensions = [
     'numpydoc',
     'sphinx_automodapi.automodapi',
     'sphinxcontrib.mermaid',
+    'myst_parser',
 ]
 numpydoc_show_class_members = False
 
