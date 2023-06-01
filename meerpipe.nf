@@ -26,6 +26,10 @@ if ( params.help ) {
              |              [default: ${params.use_edge_subints}]
              |  --fluxcal   Calibrate flux densities. Should only be done for calibrator observations
              |              [default: ${params.fluxcal}]
+             |  --tos_sn    Desired TOA S/N ratio, used to calculate the nsub to use
+             |              [default: ${params.tos_sn}]
+             |  --nchans    List of nchans to frequency scrunch the data into
+             |              [default: ${params.nchans}]
              |Ephemerides and template options:
              |  --ephemerides_dir
              |              Base directory of the ephermerides. Will be used to find a default ephemeris:
@@ -194,7 +198,7 @@ process psradd_calibrate_clean {
 
 process decimate {
     label 'cpu'
-    label 'psrchive'
+    label 'meerpipe'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy', pattern: "${pulsar}_${utc}_zap.*.ar"
     time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
@@ -207,22 +211,38 @@ process decimate {
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path("${pulsar}_${utc}_zap.*.ar")
 
     """
-    for nsub in ${params.time_subs.join(' ')}; do
-        input_nsub=\$(vap -c nsub ${cleaned_archive} | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
-        if [ \$nsub -gt \$input_nsub ]; then
-            # Skip if obs not long enough
-            continue
-        fi
-        for nchan in ${params.freq_subs.join(' ')}; do
-            echo "Decimate nsub=\${nsub}  nchan=\${nchan} stokes=1"
-            pam --setnsub \${nsub} --setnchn \${nchan} -S -p -e \${nsub}t\${nchan}ch1p.temp ${cleaned_archive}
-            echo "Delay correct"
-            /fred/oz005/users/mkeith/dlyfix/dlyfix -e \${nsub}t\${nchan}ch1p.ar *\${nsub}t\${nchan}ch1p.temp
+    for nchan in ${params.nchans.join(' ')}; do
+        # Calculate nsub to get desired TOA S/N
+        max_nsub=\$(python -c "import math; print(math.floor(1/\$nchan * (${snr}/${params.tos_sn}) ** 2))")
 
-            echo "Decimate nsub=\${nsub}  nchan=\${nchan} stokes=4"
-            pam --setnsub \${nsub} --setnchn \${nchan} -S    -e \${nsub}t\${nchan}ch4p.temp ${cleaned_archive}
-            echo "Delay correct"
-            /fred/oz005/users/mkeith/dlyfix/dlyfix -e \${nsub}t\${nchan}ch4p.ar *\${nsub}t\${nchan}ch4p.temp
+        input_nsub=\$(vap -c nsub ${cleaned_archive} | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+        if [ \$max_nsub -gt \$input_nsub ]; then
+            # Greater than input nsub so set input as max
+            max_nsub=\$input_nsub
+        fi
+        if [ \$max_nsub -eq 0 ]; then
+            # Not enough SN so only make a fully time scrunched
+            nsubs="1"
+        else
+            nsubs="1 \$max_nsub"
+        fi
+
+        # Make a max_nsub decimation and a time scrunched decimation
+        for nsub in \$nsubs; do
+            # Make full stokes and polarisation scrunched
+            for stokes in 1 4; do
+                if [ \${stokes} -eq 1 ]; then
+                    # Polarisation scrunch option
+                    stokes_op="-p"
+                else
+                    stokes_op=""
+                fi
+
+                echo "Decimate nsub=\${nsub}  nchan=\${nchan} stokes=\${stokes}"
+                pam --setnsub \${nsub} --setnchn \${nchan} -S \${stokes_op} -e \${nchan}ch\${stokes}p\${nsub}t.temp ${cleaned_archive}
+                echo "Delay correct"
+                /fred/oz005/users/mkeith/dlyfix/dlyfix -e \${nchan}ch1p\${nsub}t.ar *\${nchan}ch\${stokes}p\${nsub}t.temp
+            done
         done
     done
     """
@@ -284,10 +304,10 @@ process generate_toas {
 
         echo "Generating residuals\n----------------------------------"
         tempo2 -nofit -set START 40000 -set FINISH 99999 -output general2 -s "{bat} {post} {err} {freq} BLAH\n" -nobs 1000000 -npsr 1 -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select -f ${ephemeris} \${ar}.tim > \${ar}.tempo2out && returncode=\$? || returncode=\$?
-        if [[ \$returncode -ne 134 && \$returncode -ne 0 ]]; then
+        if [[ \$returncode -ne 134 && \$returncode -ne 137 && \$returncode -ne 0 ]]; then
             echo "Errorcode: \$returncode. Tempo error other than lack of high S/N data error."
             exit returncode
-        elif [[ \$returncode == 134 ]]; then
+        elif [[ \$returncode == 134 || \$returncode == 137 ]]; then
             echo "Errorcode: \$returncode. No input data due to the logic in /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select"
         fi
         cat \${ar}.tempo2out | grep BLAH | awk '{print \$1,\$2,\$3*1e-6,\$4}' > \${ar}.residual
