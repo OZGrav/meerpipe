@@ -30,6 +30,9 @@ if ( params.help ) {
              |              [default: ${params.tos_sn}]
              |  --nchans    List of nchans to frequency scrunch the data into
              |              [default: ${params.nchans}]
+             |  --npols     List of number of polarisations to scrunch the data into.
+             |              To not polarisation scrunch use [4] and to do both use [1, 4]
+             |              [default: ${params.npols}]
              |Ephemerides and template options:
              |  --ephemerides_dir
              |              Base directory of the ephermerides. Will be used to find a default ephemeris:
@@ -230,7 +233,7 @@ process decimate {
         # Make a max_nsub decimation and a time scrunched decimation
         for nsub in \$nsubs; do
             # Make full stokes and polarisation scrunched
-            for stokes in 1 4; do
+            for stokes in ${params.npols.join(' ')}; do
                 if [ \${stokes} -eq 1 ]; then
                     # Polarisation scrunch option
                     stokes_op="-p"
