@@ -36,7 +36,7 @@ So if we use the default desired value of SNR ({math}`SNR_D`) of 12 (can be chan
 we can estimate the time sub intervals ({math`nsub`}) with:
 
 ```{math}
-nsub = \left ( \frac{SNR_{nchan}}{SNR_D} \right ) ^2
+nsub = \left ( \frac{SNR_{nchan}}{SNR_D} \right ) ^2 = \frac{1}{nchan} \left ( \frac{SNR_{O}}{SNR_D} \right ) ^2
 ```
 
 And since we want to
