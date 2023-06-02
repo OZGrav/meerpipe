@@ -232,7 +232,7 @@ process decimate {
 
         # Make a max_nsub decimation and a time scrunched decimation
         for nsub in \$nsubs; do
-            # Make full stokes and polarisation scrunched
+            # Make full stokes and/or polarisation scrunched
             for stokes in ${params.npols.join(' ')}; do
                 if [ \${stokes} -eq 1 ]; then
                     # Polarisation scrunch option
@@ -249,6 +249,54 @@ process decimate {
         done
     done
     """
+}
+
+process dm_calc {
+    label 'cpu'
+    label 'meerpipe'
+
+    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
+    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+
+    when:
+    Float.valueOf(snr) > 12.0 // If not enough signal to noise causes tempo2 to core dump
+
+    input:
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives)
+
+    """
+    echo "First try tempo2"
+    echo "${snr}"
+    # Grab archive and template nchan
+    nchan=\$(vap -c nchan ${pulsar}_${utc}_zap.${params.nchans.max()}ch1p1t.ar | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+    tnchan=\$(vap -c nchan ${template} | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+    # Use portrait mode if template has more frequency channels
+    if [ "\$tnchan" -gt "\$nchan" ]; then
+        port="-P"
+    else
+        port=""
+    fi
+    # Create TOAs with highest chan archive
+    pat -jp \$port -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${template} -A FDM ${pulsar}_${utc}_zap.${params.nchans.max()}ch1p1t.ar  > dm.tim
+    # Remove dm derivatives
+    sed '/^DM[1-9]/d' ${ephemeris} > ${ephemeris}.dm
+    # Fit for DM
+    tempo2 -nofit -fit DM -set START 40000 -set FINISH 99999 -f ${ephemeris}.dm -outpar ${ephemeris}.dmfit -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select dm.tim
+
+    # Grab the outputs and write it to a file
+    DM=\$(grep "^DM " ${ephemeris}.dmfit | awk '{print \$2}')
+    ERR=\$(grep "^DM " ${ephemeris}.dmfit | awk '{print \$4}')
+    EPOCH=\$(grep "^DMEPOCH " ${ephemeris}.dmfit | awk '{print \$2}')
+    CHI2R=\$(grep "^CHI2R " ${ephemeris}.dmfit | awk '{print \$2}')
+    TRES=\$(grep "^TRES " ${ephemeris}.dmfit | awk '{print \$2}')
+
+    echo "DM: \${DM}"       >> ${pulsar}_${utc}_dm_fit.txt
+    echo "ERR: \${ERR}"     >> ${pulsar}_${utc}_dm_fit.txt
+    echo "EPOCH: \${EPOCH}" >> ${pulsar}_${utc}_dm_fit.txt
+    echo "CHI2R: \${CHI2R}" >> ${pulsar}_${utc}_dm_fit.txt
+    echo "TRES: \${TRES}"   >> ${pulsar}_${utc}_dm_fit.txt
+    """
+    // TODO also do pdmp
 }
 
 
@@ -430,6 +478,9 @@ workflow {
 
     // Decimate into different time and freq chunnks using pam
     decimate( fluxcal.out )
+
+    // Calculate the DM with tempo2 or pdmp
+    dm_calc( decimate.out )
 
     // Generate TOAs
     generate_toas( decimate.out )
