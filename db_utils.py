@@ -21,6 +21,7 @@ import pandas as pd
 from util import time as util_time
 import getpass
 from astropy.time import Time as astrotime
+import pytz
 
 from tables import *
 from joins import *
@@ -600,7 +601,7 @@ def get_proc_embargo(proc_id, client, url, token):
     # Check for valid processing ID
     if not (proc_data == None):
         embargoEnd = proc_data['embargoEnd']
-        return pd.to_datetime(embargoEnd)
+        return pytz.utc.localize(pd.to_datetime(embargoEnd).to_pydatetime())
     else:
         return
 
