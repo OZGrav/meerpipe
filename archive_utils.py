@@ -3168,12 +3168,12 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
 
             # use meerwatch functions to produce residual images for this observation
             logger.info("Calling modified MeerWatch residual generation...")
-            residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True)
+            residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True, align=True)
             # check for valid output
             if (len(residuals) > 0):
                 logger.info("Producing single-obs image from modified MeerWatch residuals...")
                 logger.info("{0} {1} {2}".format(obs_bw, obs_freq, toa_nchan))
-                plot_toas_fromarr(residuals, pid=cparams["pid"], out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan)
+                plot_toas_fromarr(residuals, pid=cparams["pid"], out_file=image_file, sequential=True, verb=True, bw=obs_bw, cfrq=obs_freq, nchn=toa_nchan, rebase=True)
 
                 # check if file creation was successful and return
                 result = os.path.exists(image_file)
