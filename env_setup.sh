@@ -19,7 +19,7 @@ if [ ${SYS_ARCH} == "milan" ]; then
     # Using new Ngarrgu Tindebeek (NT) cluster
     # module load psrdb/fdb4d06
     module load psrdb/3f70bad
-    module load scintools/a169c4c
+    module load scintools/ba68b84
     module load pandas/1.4.2-scipy-bundle-2022.05
     module load matplotlib/3.5.2
     module load nextflow/23.04.1
