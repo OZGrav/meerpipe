@@ -44,7 +44,7 @@ import requests
 from meerpipe.meerwatch_tools import get_res_fromtim, plot_toas_fromarr, get_dm_fromtim
 
 # PSRDB imports - assumes psrdb/latest module
-from psrdb.util import ephemeris
+from psrdb.utils import ephemeris
 from psrdb.tables import *
 from psrdb.graphql_client import GraphQLClient
 from meerpipe.db_utils import (create_pipelinefile, create_ephemeris, create_template, create_toa_record, create_pipelineimages,

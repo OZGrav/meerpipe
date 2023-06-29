@@ -54,8 +54,56 @@ if ( params.help ) {
 }
 
 
+process manifest_config_dump {
+    // Create a json of all the parameters used in this run
+    label 'meerpipe'
 
-process obs_list{
+    output:
+    path "manifest.json"
+
+    """
+    #!/usr/bin/env python
+
+    import json
+
+    manifest = {
+        "pipeline_name": "${params.manifest.name}",
+        "pipeline_description": "${params.manifest.description}",
+        "pipeline_version": "${params.manifest.version}",
+        "created_by": "${workflow.userName}",
+        "configuration": {
+            "utcs": "${params.utcs}",
+            "utce": "${params.utce}",
+            "obs_pid": "${params.obs_pid}",
+            "pulsar": "${params.pulsar}",
+            "use_edge_subints": "${params.use_edge_subints}",
+            "tos_sn": "${params.tos_sn}",
+            "nchans": "${params.nchans}",
+            "npols": "${params.npols}",
+            "upload": "${params.upload}",
+            "psrdb_url": "${params.psrdb_url}",
+            "input_path": "${params.input_path}",
+            "output_path": "${params.output_path}",
+            "email": "${params.email}",
+            "type": "${params.type}",
+            "overwrite": "${params.overwrite}",
+            "rm_cat": "${params.rm_cat}",
+            "dm_cat": "${params.dm_cat}",
+            "ephemerides_dir": "${params.ephemerides_dir}",
+            "templates_dir": "${params.templates_dir}",
+            "ephemeris": "${params.ephemeris}",
+            "template": "${params.template}",
+        },
+    }
+
+    with open("manifest.json", "w") as out_file:
+        json.dump(manifest, out_file, indent=4)
+
+    """
+}
+
+
+process obs_list {
     label 'meerpipe'
     publishDir "./", mode: 'copy', enabled: params.list_out
 
@@ -64,6 +112,7 @@ process obs_list{
     val utce
     val pulsar
     val obs_pid
+    path manifest
 
     output:
     path "processing_jobs.csv"
@@ -71,78 +120,99 @@ process obs_list{
     """
     #!/usr/bin/env python
 
-    from glob import glob
+    import json
     import base64
+    import logging
     from datetime import datetime
-    from psrdb.tables.observations import Observations
+    from psrdb.tables.observation import Observation
+    from psrdb.tables.pipeline_run import PipelineRun
+    from psrdb.tables.template import Template
+    from psrdb.tables.ephemeris import Ephemeris
     from psrdb.graphql_client import GraphQLClient
-    from meerpipe.db_utils import get_pulsarname, utc_psrdb2normal, pid_getshort, create_processing
-    from meerpipe.archive_utils import get_obsheadinfo, get_rcvr
+    from psrdb.utils.other import setup_logging, get_rest_api_id, get_graphql_id
 
     # PSRDB setup
-    client = GraphQLClient("${params.psrdb_url}", False)
-    obs = Observations(client, "${params.psrdb_url}", "${params.psrdb_token}")
-    obs.get_dicts = True
-    obs.set_use_pagination(True)
+    client = GraphQLClient("${params.psrdb_url}", False, logger=setup_logging(level=logging.DEBUG))
+    obs_client       = Observation(client, "${params.psrdb_token}")
+    pipe_run_client  = PipelineRun(client, "${params.psrdb_token}")
+    template_client  = Template(   client, "${params.psrdb_token}")
+    ephemeris_client = Ephemeris(  client, "${params.psrdb_token}")
+    obs_client.get_dicts = True
+    obs_client.set_use_pagination(True)
 
     # Query based on provided parameters
-    obs_data = obs.list(
-        None,
-        None,
-        "${pulsar}",
-        None,
-        None,
-        None,
-        "${obs_pid}",
-        None,
-        None,
-        "${utcs}",
-        "${utce}",
+    obs_data = obs_client.list(
+        pulsar_name="${pulsar}",
+        project_short="${obs_pid}",
+        utcs="${utcs}",
+        utce="${utce}",
     )
 
     # Output file
     with open("processing_jobs.csv", "w") as out_file:
         for ob in obs_data:
             # Extract data from obs_data
-            pulsar_obs = ob['node']['target']['name']
-            obs_id = int(base64.b64decode(ob['node']['id']).decode("utf-8").split(":")[1])
-            utc_obs = utc_psrdb2normal(ob['node']['utcStart'])
-            pid_obs = pid_getshort(ob['node']['project']['code'])
-
-            # Extra data from obs header
-            header_data = get_obsheadinfo(glob(f"${params.input_path}/{pulsar_obs}/{utc_obs}/*/*/obs.header")[0])
-            band = get_rcvr(header_data)
-
-            # Estimate intergration from number of archives
-            nfiles = len(glob(f"${params.input_path}/{pulsar_obs}/{utc_obs}/*/*/*.ar"))
+            pulsar   = ob['node']['pulsar']['name']
+            obs_id   = int(base64.b64decode(ob['node']['id']).decode("utf-8").split(":")[1])
+            utc_obs  = datetime.strptime(ob['node']['utcStart'], '%Y-%m-%dT%H:%M:%S+00:00')
+            utc_obs  = "%s-%s" % (utc_obs.date(), utc_obs.time())
+            pid_obs  = ob['node']['project']['short']
+            pid_code = ob['node']['project']['code']
+            band     = ob['node']['band']
+            duration = ob['node']['duration']
 
             # Grab ephermis and templates
             if "${params.ephemeris}" == "null":
-                ephemeris = f"${params.ephemerides_dir}/{pid_obs}/{pulsar_obs}.par"
+                ephemeris = f"${params.ephemerides_dir}/{pid_obs}/{pulsar}.par"
             else:
                 ephemeris = "${params.ephemeris}"
             if "${params.template}" == "null":
-                template = f"${params.templates_dir}/{pid_obs}/{band}/{pulsar_obs}.std"
+                template = f"${params.templates_dir}/{pid_obs}/{band}/{pulsar}.std"
             else:
                 template = "${params.template}"
 
             # Set job as running
             if "${params.upload}" == "true":
-                proc_id = create_processing(
-                    obs_id,
-                    13, # TODO NOT HARDCODE THIS
-                    f"${params.output_path}/{pulsar_obs}/{utc_obs}",
-                    # "/fred/oz005/timing_processed/PTA/J1811-2405/2021-11-05-13:22:56/4/1284",
-                    client,
-                    "${params.psrdb_url}",
-                    "${params.psrdb_token}",
+                # Get or create template
+                template_response = template_client.create(
+                    pulsar,
+                    pid_code,
+                    band,
+                    template,
                 )
+                template_id = get_rest_api_id(template_response, logging.getLogger(__name__))
+                # Get or create ephemeris
+                ephemeris_response = ephemeris_client.create(
+                    pulsar,
+                    ephemeris,
+                    pid_code,
+                    "",
+                )
+                print(ephemeris_response)
+                ephemeris_id = get_graphql_id(ephemeris_response, "ephemeris", logging.getLogger(__name__))
+
+                with open("${manifest}", 'r') as file:
+                    # Load the JSON data
+                    pipeline_config = json.load(file)
+
+                pipe_run_data = pipe_run_client.create(
+                    obs_id,
+                    ephemeris_id,
+                    template_id,
+                    "${params.manifest.name}",
+                    "${params.manifest.description}",
+                    "${params.manifest.version}",
+                    "running",
+                    "${params.output_path}",
+                    pipeline_config,
+                )
+                pipe_id = get_graphql_id(pipe_run_data, "pipelineRun", logging.getLogger(__name__))
             else:
                 # No uploading so don't make a processing item
-                proc_id = None
+                pipe_id = None
 
             # Write out results
-            out_file.write(f"{pulsar_obs},{utc_obs},{pid_obs},{band},{int(nfiles*8)},{proc_id},{ephemeris},{template}\\n")
+            out_file.write(f"{pulsar},{utc_obs},{pid_obs},{band},{duration},{pipe_id},{ephemeris},{template}\\n")
     """
 }
 
@@ -152,14 +222,14 @@ process psradd_calibrate_clean {
     label 'meerpipe'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/calibrated", mode: 'copy', pattern: "*.ar"
-    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 10} MB"}
+    time   { "${task.attempt * dur.toFloat() * 0.5} s" }
+    memory { "${task.attempt * dur.toFloat() * 10} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path("${pulsar}_${utc}.ar"), path("${pulsar}_${utc}_zap.ar"), env(SNR)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path("${pulsar}_${utc}.ar"), path("${pulsar}_${utc}_zap.ar"), env(SNR)
 
     """
     if ${params.use_edge_subints}; then
@@ -202,14 +272,14 @@ process fluxcal {
     label 'meerpipe'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/fluxcal", mode: 'copy', pattern: "*fluxcal"
-    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 10} MB"}
+    time   { "${task.attempt * dur.toFloat() * 0.5} s" }
+    memory { "${task.attempt * dur.toFloat() * 10} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path("${pulsar}_${utc}.fluxcal"), path("${pulsar}_${utc}_zap.fluxcal"), val(snr) // Replace the archives with flux calced ones
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path("${pulsar}_${utc}.fluxcal"), path("${pulsar}_${utc}_zap.fluxcal"), val(snr) // Replace the archives with flux calced ones
 
     """
     fluxcal -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris}
@@ -222,14 +292,14 @@ process decimate {
     label 'meerpipe'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy', pattern: "${pulsar}_${utc}_zap.*.ar"
-    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+    time   { "${task.attempt * dur.toFloat() * 0.5} s" }
+    memory { "${task.attempt * dur.toFloat() * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path("${pulsar}_${utc}_zap.*.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path("${pulsar}_${utc}_zap.*.ar")
 
     """
     for nchan in ${params.nchans.join(' ')}; do
@@ -273,14 +343,14 @@ process dm_calc {
     label 'cpu'
     label 'meerpipe'
 
-    time   { "${task.attempt * Integer.valueOf(dur) * 5} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 3} MB"}
+    time   { "${task.attempt * dur.toFloat() * 5} s" }
+    memory { "${task.attempt * dur.toFloat() * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path("${pulsar}_${utc}_dm_fit.txt")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path("${pulsar}_${utc}_dm_fit.txt")
 
 
     // when:
@@ -344,14 +414,14 @@ process generate_toas {
     label 'psrchive'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/timing", mode: 'copy', pattern: "*.{residual,tim,par,std}"
-    time   { "${task.attempt * Integer.valueOf(dur) * 1} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 0.3} MB"}
+    time   { "${task.attempt * dur.toFloat() * 1} s" }
+    memory { "${task.attempt * dur.toFloat() * 0.3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results)
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results), path("*.tim"), path("*.residual")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results), path("*.tim"), path("*.residual")
 
     """
     # Loop over each decimated archive
@@ -392,14 +462,15 @@ process generate_images_results {
 
     publishDir "${params.output_path}/${pulsar}/${utc}/images", mode: 'copy', pattern: "{c,t,r}*png"
     publishDir "${params.output_path}/${pulsar}/${utc}/scintillation", mode: 'copy', pattern: "*dynspec*"
-    time   { "${task.attempt * Integer.valueOf(dur) * 0.5} s" }
-    memory { "${task.attempt * Integer.valueOf(dur) * 5} MB"}
+    publishDir "${params.output_path}/${pulsar}/${utc}", mode: 'copy', pattern: "results.json"
+    time   { "${task.attempt * dur.toFloat() * 0.5} s" }
+    memory { "${task.attempt * dur.toFloat() * 5} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(proc_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results), path(toas), path(residuals), path("results.json")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results), path(toas), path(residuals)
 
     output:
-    tuple val(obs_pid), val(proc_id), path("*.png"), path("*.dat"), path("*dynspec"), path("results.json")
+    tuple val(obs_pid), val(pipe_id), path("*.png"), path("*.dat"), path("*dynspec"), path("results.json")
 
 
     """
@@ -429,51 +500,82 @@ process upload_results {
     maxForks 1
 
     input:
-    tuple val(obs_pid), val(proc_id), path(dat_files), path(png_files), path(dynspec_files), path(results_json)
+    tuple val(obs_pid), val(pipe_id), path(dat_files), path(png_files), path(dynspec_files), path(results_json)
 
 
     """
     #!/usr/bin/env python
 
+    import json
+    import logging
     from glob import glob
     from psrdb.graphql_client import GraphQLClient
-    from meerpipe.db_utils import create_pipelineimages
-    from meerpipe.initialize import setup_logging
+    from psrdb.utils.other import setup_logging
+    from psrdb.tables.pipeline_image import PipelineImage
+    from psrdb.tables.pipeline_run import PipelineRun
 
-    logger = setup_logging(console=True)
-    client = GraphQLClient("${params.psrdb_url}", False)
+
+    logger = setup_logging(console=True, level=logging.DEBUG)
+    client = GraphQLClient("${params.psrdb_url}", False, logger)
+    pipeline_image_client = PipelineImage(client, "${params.psrdb_token}")
+    pipeline_run_client   = PipelineRun(client,   "${params.psrdb_token}")
+    pipeline_run_client.set_field_names(True, False)
     pid = '${obs_pid.toLowerCase()}'
 
     image_data = []
     # grab toa files
     for toa_file in glob("toa*png"):
         # file_loc, file_type, file_rank
-        image_data.append( (1, toa_file, f'{pid}.toa-single.hi') )
+        image_data.append( (toa_file, f'toa-single', 'high', True) )
 
     # file_rank, file_loc, file_type
-    image_data.append( (2,     "raw_profile_ftp.png",       'raw.profile.hi') )
-    image_data.append( (2, "cleaned_profile_ftp.png",    f'{pid}.profile-int.hi') )
-    image_data.append( (3,     "raw_profile_fts.png",       'raw.profile-pol.hi') )
-    image_data.append( (3, "cleaned_profile_fts.png",    f'{pid}.profile-pol.hi') )
-    image_data.append( (4,     "raw_phase_time.png",        'raw.phase-time.hi' ) )
-    image_data.append( (4, "cleaned_phase_time.png",     f'{pid}.phase-time.hi' ) )
-    image_data.append( (5,     "raw_phase_freq.png",        'raw.phase-freq.hi' ) )
-    image_data.append( (5, "cleaned_phase_freq.png",     f'{pid}.phase-freq.hi' ) )
-    image_data.append( (6,     "raw_bandpass.png",          'raw.bandpass.hi'   ) )
-    image_data.append( (6, "cleaned_bandpass.png",       f'{pid}.bandpass.hi'   ) )
-    image_data.append( (7,     "raw_SNR_cumulative.png",    'raw.snr-cumul.hi'  ) )
-    image_data.append( (7, "cleaned_SNR_cumulative.png", f'{pid}.snr-cumul.hi'  ) )
-    image_data.append( (8,     "raw_SNR_single.png",        'raw.snr-single.hi' ) )
-    image_data.append( (8, "cleaned_SNR_single.png",     f'{pid}.snr-single.hi' ) )
+    image_data.append( (    "raw_profile_ftp.png",    'profile',     'high', False) )
+    image_data.append( ("cleaned_profile_ftp.png",    'profile',     'high', True ) )
+    image_data.append( (    "raw_profile_fts.png",    'profile-pol', 'high', False) )
+    image_data.append( ("cleaned_profile_fts.png",    'profile-pol', 'high', True ) )
+    image_data.append( (    "raw_phase_time.png",     'phase-time',  'high', False) )
+    image_data.append( ("cleaned_phase_time.png",     'phase-time',  'high', True ) )
+    image_data.append( (    "raw_phase_freq.png",     'phase-freq',  'high', False) )
+    image_data.append( ("cleaned_phase_freq.png",     'phase-freq',  'high', True ) )
+    image_data.append( (    "raw_bandpass.png",       'bandpass',    'high', False) )
+    image_data.append( ("cleaned_bandpass.png",       'bandpass',    'high', True ) )
+    image_data.append( (    "raw_SNR_cumulative.png", 'snr-cumul',   'high', False) )
+    image_data.append( ("cleaned_SNR_cumulative.png", 'snr-cumul',   'high', True ) )
+    image_data.append( (    "raw_SNR_single.png",     'snr-single',  'high', False) )
+    image_data.append( ("cleaned_SNR_single.png",     'snr-single',  'high', True ) )
 
     # Upload
     # for file_rank, file_loc, file_type in image_data:
-    create_pipelineimages(image_data, "${proc_id}", client, "${params.psrdb_url}", "${params.psrdb_token}", logger)
+    for image_path, image_type, resolution, cleaned in image_data:
+        image_response = pipeline_image_client.create(
+            ${pipe_id},
+            image_path,
+            image_type,
+            resolution,
+            cleaned,
+        )
+        content = json.loads(image_response.content)
+        logger.info(content["text"])
+        if image_response.status_code not in (200, 201):
+            logger.error("Failed to upload image")
+            exit(1)
+
+    # Read in results JSON
+    with open("results.json", "r") as f:
+        results_dict = json.load(f)
+    # Update pipeline run
+    pipeline_run_response = pipeline_run_client.update(
+        ${pipe_id},
+        "Completed",
+        results_dict=results_dict,
+    )
     """
 }
 
 
 workflow {
+    manifest_config_dump()
+
     // Use PSRDB to work out which obs to process
     if ( params.list_in ) {
         // Check contents of list_in
@@ -485,6 +587,7 @@ workflow {
             params.utce,
             params.pulsar,
             params.obs_pid,
+            manifest_config_dump.out,
         )
         obs_data = obs_list.out.splitCsv()
     }

@@ -23,10 +23,8 @@ import base64
 from astropy.time import Time as astrotime
 
 from meerpipe.initialize import setup_logging
+#from psrdb.tables import Processings, Pipelines, Foldings, Targets, Pulsars, Launches, Projects, Observations, Toas, Ephemerides, Templates, Pipelineimages, Pipelinefiles, Pulsartargets
 
-from psrdb.util import time as util_time
-from psrdb.tables import Processings, Pipelines, Foldings, Targets, Pulsars, Launches, Projects, Observations, Toas, Ephemerides, Templates, Pipelineimages, Pipelinefiles, Pulsartargets
-from psrdb.joins import FoldedObservations
 
 # Important paths
 PSRDB = "psrdb.py"
@@ -1041,7 +1039,7 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
             logger.info("Match found, ephemeris ID = {0}".format(retval))
         else:
             # Get required parameters
-            created_at = util_time.get_current_time()
+            created_at = datetime.today().strftime("%Y-%m-%dT%H:%M:%S")
             created_by = getpass.getuser()
             comment = "Entry created as part of MeerPIPE - Pipeline ID {0} (Project {1})".format(cparams["db_pipe_id"], cparams["pid"])
 
@@ -1056,8 +1054,8 @@ def create_ephemeris(psrname, eph, dm, rm, cparams, client, logger):
                 valid_from = utc_date2psrdb(start)
                 valid_to = utc_date2psrdb(finish)
             else:
-                valid_from = util_time.get_time(0)
-                valid_to = util_time.get_time(4294967295)
+                valid_from = datetime.fromtimestamp(0).strftime("%Y-%m-%dT%H:%M:%S")
+                valid_to = datetime.fromtimestamp(4294967295).strftime("%Y-%m-%dT%H:%M:%S")
 
             # Double check for simultaneous writes
             prev_len = len(eph_data)
@@ -1262,7 +1260,7 @@ def create_template(psrname, template, cparams, client, logger):
             logger.info("Match found, template ID = {0}".format(retval))
         else:
             # Gather required parameters
-            created_at = util_time.get_current_time()
+            created_at = datetime.today().strftime("%Y-%m-%dT%H:%M:%S")
             created_by = getpass.getuser()
             temp_method = "Unknown" # (?)
             # Extra template info
