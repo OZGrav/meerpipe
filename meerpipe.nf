@@ -54,6 +54,13 @@ if ( params.help ) {
 }
 
 
+// Parse inputs
+
+// Convert nchan and npols to lists
+nchans = params.nchans.split(',').collect { it.toInteger() }
+npols  = params.npols.split(',').collect { it.toInteger() }
+
+
 process manifest_config_dump {
     // Create a json of all the parameters used in this run
     label 'meerpipe'
@@ -302,7 +309,7 @@ process decimate {
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path("${pulsar}_${utc}_zap.*.ar")
 
     """
-    for nchan in ${params.nchans.join(' ')}; do
+    for nchan in ${nchans.join(' ')}; do
         # Calculate nsub to get desired TOA S/N
         max_nsub=\$(python -c "import math; print(math.floor(1/\$nchan * (${snr}/${params.tos_sn}) ** 2))")
 
@@ -321,7 +328,7 @@ process decimate {
         # Make a max_nsub decimation and a time scrunched decimation
         for nsub in \$nsubs; do
             # Make full stokes and/or polarisation scrunched
-            for stokes in ${params.npols.join(' ')}; do
+            for stokes in ${npols.join(' ')}; do
                 if [ \${stokes} -eq 1 ]; then
                     # Polarisation scrunch option
                     stokes_op="-p"
@@ -332,14 +339,14 @@ process decimate {
                 echo "Decimate nsub=\${nsub}  nchan=\${nchan} stokes=\${stokes}"
                 pam --setnsub \${nsub} --setnchn \${nchan} -S \${stokes_op} -e \${nchan}ch\${stokes}p\${nsub}t.temp ${cleaned_archive}
                 echo "Delay correct"
-                /fred/oz005/users/mkeith/dlyfix/dlyfix -e \${nchan}ch1p\${nsub}t.ar *\${nchan}ch\${stokes}p\${nsub}t.temp
+                /fred/oz005/users/mkeith/dlyfix/dlyfix -e \${nchan}ch\${stokes}p\${nsub}t.ar *\${nchan}ch\${stokes}p\${nsub}t.temp
             done
         done
     done
     """
 }
 
-process dm_calc {
+process dm_rm_calc {
     label 'cpu'
     label 'meerpipe'
 
@@ -350,7 +357,7 @@ process dm_calc {
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path("${pulsar}_${utc}_dm_fit.txt")
+    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path("${pulsar}_${utc}_dm_rm_fit.txt")
 
 
     // when:
@@ -361,7 +368,7 @@ process dm_calc {
         """
         echo "Calc DM with tempo2"
         # Grab archive and template nchan
-        nchan=\$(vap -c nchan ${pulsar}_${utc}_zap.${params.nchans.max()}ch1p1t.ar | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+        nchan=\$(vap -c nchan ${pulsar}_${utc}_zap.${nchans.max()}ch1p1t.ar | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
         tnchan=\$(vap -c nchan ${template} | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
         # Use portrait mode if template has more frequency channels
         if [ "\$tnchan" -gt "\$nchan" ]; then
@@ -370,11 +377,15 @@ process dm_calc {
             port=""
         fi
         # Create TOAs with highest chan archive
-        pat -jp \$port -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${template} -A FDM ${pulsar}_${utc}_zap.${params.nchans.max()}ch1p1t.ar  > dm.tim
+        pat -jp \$port -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${template} -A FDM ${pulsar}_${utc}_zap.${nchans.max()}ch1p1t.ar  > dm.tim
         # Remove dm derivatives
         sed '/^DM[1-9]/d' ${ephemeris} > ${ephemeris}.dm
         # Fit for DM
         tempo2 -nofit -fit DM -set START 40000 -set FINISH 99999 -f ${ephemeris}.dm -outpar ${ephemeris}.dmfit -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select dm.tim
+
+        # Fit for RM
+        input_rm=\$(vap -c rm ${pulsar}_${utc}_zap.${nchans.max()}ch4p1t.ar | tail -n 1| tr -s ' ' | cut -d ' ' -f 2)
+        rmfit -D -R \$input_rm -m -100,100,2000 ${pulsar}_${utc}_zap.${nchans.max()}ch4p1t.ar -K /PNG > rmfit_output.txt
 
         # Grab the outputs and write it to a file
         DM=\$(grep "^DM " ${ephemeris}.dmfit | awk '{print \$2}')
@@ -382,12 +393,17 @@ process dm_calc {
         EPOCH=\$(grep "^DMEPOCH " ${ephemeris}.dmfit | awk '{print \$2}')
         CHI2R=\$(grep "^CHI2R " ${ephemeris}.dmfit | awk '{print \$2}')
         TRES=\$(grep "^TRES " ${ephemeris}.dmfit | awk '{print \$2}')
+        rm_results=\$(grep "Best RM is" rmfit_output.txt | cut -d ':' -f 2)
+        RM=\$(echo \$rm_results | cut -d '/' -f 1 | cut -d ' ' -f 1)
+        RM_ERR=\$(echo \$rm_results | cut -d '/' -f 2 | cut -d ' ' -f 2)
 
-        echo "DM: \${DM}"       >> ${pulsar}_${utc}_dm_fit.txt
-        echo "ERR: \${ERR}"     >> ${pulsar}_${utc}_dm_fit.txt
-        echo "EPOCH: \${EPOCH}" >> ${pulsar}_${utc}_dm_fit.txt
-        echo "CHI2R: \${CHI2R}" >> ${pulsar}_${utc}_dm_fit.txt
-        echo "TRES: \${TRES}"   >> ${pulsar}_${utc}_dm_fit.txt
+        echo "DM: \${DM}"         >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "ERR: \${ERR}"       >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "EPOCH: \${EPOCH}"   >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "CHI2R: \${CHI2R}"   >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "TRES: \${TRES}"     >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "RM: \${RM}"         >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "RM_ERR: \${RM_ERR}" >> ${pulsar}_${utc}_dm_rm_fit.txt
         """
     else
         """
@@ -400,11 +416,13 @@ process dm_calc {
         CHI2R=None
         TRES=None
 
-        echo "DM: \${DM}"       >> ${pulsar}_${utc}_dm_fit.txt
-        echo "ERR: \${ERR}"     >> ${pulsar}_${utc}_dm_fit.txt
-        echo "EPOCH: \${EPOCH}" >> ${pulsar}_${utc}_dm_fit.txt
-        echo "CHI2R: \${CHI2R}" >> ${pulsar}_${utc}_dm_fit.txt
-        echo "TRES: \${TRES}"   >> ${pulsar}_${utc}_dm_fit.txt
+        echo "DM: \${DM}"       >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "ERR: \${ERR}"     >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "EPOCH: \${EPOCH}" >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "CHI2R: \${CHI2R}" >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "TRES: \${TRES}"   >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "RM: None"         >> ${pulsar}_${utc}_dm_rm_fit.txt
+        echo "RM_ERR: None"     >> ${pulsar}_${utc}_dm_rm_fit.txt
         """
 }
 
@@ -442,16 +460,19 @@ process generate_toas {
         echo "Generating TOAs\n----------------------------------"
         pat -jp \$port  -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${template} -A FDM \$ar  > \${ar}.tim
 
-        echo "Generating residuals\n----------------------------------"
-        tempo2 -nofit -set START 40000 -set FINISH 99999 -output general2 -s "{bat} {post} {err} {freq} BLAH\n" -nobs 1000000 -npsr 1 -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select -f ${ephemeris} \${ar}.tim > \${ar}.tempo2out && returncode=\$? || returncode=\$?
-        if [[ \$returncode -ne 134 && \$returncode -ne 137 && \$returncode -ne 0 ]]; then
-            echo "Errorcode: \$returncode. Tempo error other than lack of high S/N data error."
-            exit returncode
-        elif [[ \$returncode == 134 || \$returncode == 137 ]]; then
-            echo "Errorcode: \$returncode. No input data due to the logic in /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select"
-        fi
-        cat \${ar}.tempo2out | grep BLAH | awk '{print \$1,\$2,\$3*1e-6,\$4}' > \${ar}.residual
+        echo "Correct for DM\n----------------------------------"
+        dm=\$(grep DM ${dm_results} | cut -d ' ' -f 2)
+        pam -D \$dm -e ar.dm_corrected \$ar
+
+        echo "Generating TOAs for DM corrected archive\n----------------------------------"
+        pat -jp \$port  -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${template} -A FDM \$ar.dm_corrected  > \${ar}.dm_corrected.tim
     done
+
+    # Create residuals for time largest archive
+    largest_archive=\$(ls ${pulsar}_${utc}_zap.${nchans.max()}ch1p*t.ar | tail -n 1)
+    bash /fred/oz005/users/nswainst/code/meerpipe/tempo2_wrapper.sh \${largest_archive} ${ephemeris}
+    # And largest DM corrected archive
+    bash /fred/oz005/users/nswainst/code/meerpipe/tempo2_wrapper.sh \${largest_archive}.dm_corrected ${ephemeris}
     """
 }
 
@@ -525,10 +546,10 @@ process upload_results {
     image_data = []
     # grab toa files
     for toa_file in glob("toa*png"):
-        # file_loc, file_type, file_rank
-        image_data.append( (toa_file, f'toa-single', 'high', True) )
+        # file_loc, file_type, file_res, cleaned
+        image_data.append( (toa_file, 'toa-single', 'high', True) )
 
-    # file_rank, file_loc, file_type
+    # file_loc, file_type, file_res, cleaned
     image_data.append( (    "raw_profile_ftp.png",    'profile',     'high', False) )
     image_data.append( ("cleaned_profile_ftp.png",    'profile',     'high', True ) )
     image_data.append( (    "raw_profile_fts.png",    'profile-pol', 'high', False) )
@@ -544,8 +565,7 @@ process upload_results {
     image_data.append( (    "raw_SNR_single.png",     'snr-single',  'high', False) )
     image_data.append( ("cleaned_SNR_single.png",     'snr-single',  'high', True ) )
 
-    # Upload
-    # for file_rank, file_loc, file_type in image_data:
+    # Upload images
     for image_path, image_type, resolution, cleaned in image_data:
         image_response = pipeline_image_client.create(
             ${pipe_id},
@@ -563,12 +583,37 @@ process upload_results {
     # Read in results JSON
     with open("results.json", "r") as f:
         results_dict = json.load(f)
-    # Update pipeline run
+    # Update pipeline run as completed
     pipeline_run_response = pipeline_run_client.update(
         ${pipe_id},
         "Completed",
         results_dict=results_dict,
     )
+    """
+}
+
+
+process generate_residuals {
+    debug true
+    label 'meerpipe'
+
+    maxForks 1
+
+    input:
+    tuple val(obs_pid), val(pipe_id), path(dat_files), path(png_files), path(dynspec_files), path(results_json)
+
+    """
+
+
+        echo "Generating residuals\n----------------------------------"
+        tempo2 -nofit -set START 40000 -set FINISH 99999 -output general2 -s "{bat} {post} {err} {freq} BLAH\n" -nobs 1000000 -npsr 1 -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select -f ${ephemeris} \${ar}.tim > \${ar}.tempo2out && returncode=\$? || returncode=\$?
+        if [[ \$returncode -ne 134 && \$returncode -ne 137 && \$returncode -ne 0 ]]; then
+            echo "Errorcode: \$returncode. Tempo error other than lack of high S/N data error."
+            exit returncode
+        elif [[ \$returncode == 134 || \$returncode == 137 ]]; then
+            echo "Errorcode: \$returncode. No input data due to the logic in /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select"
+        fi
+        cat \${ar}.tempo2out | grep BLAH | awk '{print \$1,\$2,\$3*1e-6,\$4}' > \${ar}.residual
     """
 }
 
@@ -602,10 +647,10 @@ workflow {
     decimate( fluxcal.out )
 
     // Calculate the DM with tempo2 or pdmp
-    dm_calc( decimate.out )
+    dm_rm_calc( decimate.out )
 
     // Generate TOAs
-    generate_toas( dm_calc.out )
+    generate_toas( dm_rm_calc.out )
 
     // Other images using matplotlib and psrplot and make a results.json
     generate_images_results( generate_toas.out )

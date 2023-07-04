@@ -272,6 +272,16 @@ def generate_results(
             results["dm_tres"] = None
         else:
             results["dm_tres"] = float(dm_chi2r)
+        rm = lines[5].split()[-1]
+        if rm == "None":
+            results["rm"] = None
+        else:
+            results["rm"] = float(rm)
+        rm_err = lines[6].split()[-1]
+        if rm_err == "None":
+            results["rm_err"] = None
+        else:
+            results["rm_err"] = float(rm_err)
 
     # Add input SNR value
     results["sn"] = float(snr)
