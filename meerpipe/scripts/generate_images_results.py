@@ -217,13 +217,18 @@ def generate_images(
         nsub  = int(residual.split('p')[-1].split('t')[0])
         archive_extension = residual.split('.')[1]
 
+        if "dm_corrected" in residual:
+            dm_corrected = "dmcorrected_"
+        else:
+            dm_corrected = ""
+
         if nchan == 1 and nsub == 1:
             logger.info(f"Not processing {residual} because nchan == 1 and nsub == 1")
         elif os.path.getsize(residual) == 0:
             logger.warning(f"Not processsing {residual} as the file is empry")
         else:
             logger.info(f"Processing {residual}")
-            plot_toas_fromarr(residual, pid=pid, sequential=True, verb=True, rcvr=rcvr, nchan=nchan, out_file=f"toas_{archive_extension}.png")
+            plot_toas_fromarr(residual, pid=pid, sequential=True, verb=True, rcvr=rcvr, nchan=nchan, out_file=f"toas_{dm_corrected}{archive_extension}.png")
 
 
 

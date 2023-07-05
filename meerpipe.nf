@@ -444,6 +444,11 @@ process generate_toas {
     """
     # Loop over each decimated archive
     for ar in ${decimated_archives.join(' ')}; do
+        if [[ \$ar == *"ch4p"* ]]; then
+            # Skip if it is a full Stokes archive
+            continue
+        fi
+
         # Grab archive nchan and nsub
         nchan=\$(vap -c nchan \$ar | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
         nsub=\$( vap -c nsub  \$ar | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
@@ -491,7 +496,7 @@ process generate_images_results {
     tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results), path(toas), path(residuals)
 
     output:
-    tuple val(obs_pid), val(pipe_id), path("*.png"), path("*.dat"), path("*dynspec"), path("results.json")
+    tuple val(obs_pid), val(pipe_id), path(toas), path("*.png"), path("*.dat"), path("*dynspec"), path("results.json")
 
 
     """
@@ -508,20 +513,19 @@ process generate_images_results {
         psrplot -p b -x -jT -lpol=0,1 -O -c log=1 -g 1024x768 -c above:l= -c above:c="Cleaned bandpass (\${type})"     -D \${type}_bandpass.png/png    \$file
     done
 
-    # Matplotlib images and results calculations into a results.json file
+    # Create matplotlib images and dump the results calculations into a results.json file
     generate_images_results -pid ${obs_pid} -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris} -template ${template} -residuals ${residuals} -rcvr ${band} -snr ${snr} -dmfile ${dm_results}
     """
 }
 
 
 process upload_results {
-    debug true
     label 'meerpipe'
 
     maxForks 1
 
     input:
-    tuple val(obs_pid), val(pipe_id), path(dat_files), path(png_files), path(dynspec_files), path(results_json)
+    tuple val(obs_pid), val(pipe_id), path(toas), path(dat_files), path(png_files), path(dynspec_files), path(results_json)
 
 
     """
@@ -531,23 +535,29 @@ process upload_results {
     import logging
     from glob import glob
     from psrdb.graphql_client import GraphQLClient
-    from psrdb.utils.other import setup_logging
+    from psrdb.utils.other import setup_logging, decode_id
     from psrdb.tables.pipeline_image import PipelineImage
     from psrdb.tables.pipeline_run import PipelineRun
-
+    from psrdb.tables.toa import Toa
 
     logger = setup_logging(console=True, level=logging.DEBUG)
     client = GraphQLClient("${params.psrdb_url}", False, logger)
     pipeline_image_client = PipelineImage(client, "${params.psrdb_token}")
+    toa_client            = Toa(client,   "${params.psrdb_token}")
     pipeline_run_client   = PipelineRun(client,   "${params.psrdb_token}")
     pipeline_run_client.set_field_names(True, False)
+    pipeline_run_client.get_dicts = True
     pid = '${obs_pid.toLowerCase()}'
 
     image_data = []
     # grab toa files
     for toa_file in glob("toa*png"):
+        if "dmcorrected" in toa_file:
+            type = "toa-dm-corrected"
+        else:
+            type = "toa-single"
         # file_loc, file_type, file_res, cleaned
-        image_data.append( (toa_file, 'toa-single', 'high', True) )
+        image_data.append( (toa_file, type, 'high', True) )
 
     # file_loc, file_type, file_res, cleaned
     image_data.append( (    "raw_profile_ftp.png",    'profile',     'high', False) )
@@ -575,10 +585,33 @@ process upload_results {
             cleaned,
         )
         content = json.loads(image_response.content)
-        logger.info(content["text"])
         if image_response.status_code not in (200, 201):
             logger.error("Failed to upload image")
             exit(1)
+
+    # Upload TOAs
+    # Grab ephemeris and template ids
+    pipeline_run_data = pipeline_run_client.list(
+        id=${pipe_id},
+    )
+    print(pipeline_run_data)
+    ephemeris_id = decode_id(pipeline_run_data[0]["ephemeris"]["id"])
+    template_id  = decode_id(pipeline_run_data[0]["template"]["id"])
+
+    for toa_file in ["${toas.join('","')}"]:
+        with open(toa_file, "r") as f:
+            toa_text = f.read()
+            toa_response = toa_client.create(
+                ${pipe_id},
+                ephemeris_id,
+                template_id,
+                toa_text,
+            )
+            content = json.loads(toa_response.content)
+            logger.info(content)
+            if toa_response.status_code not in (200, 201):
+                logger.error("Failed to upload TOA")
+                exit(1)
 
     # Read in results JSON
     with open("results.json", "r") as f:
@@ -603,17 +636,7 @@ process generate_residuals {
     tuple val(obs_pid), val(pipe_id), path(dat_files), path(png_files), path(dynspec_files), path(results_json)
 
     """
-
-
-        echo "Generating residuals\n----------------------------------"
-        tempo2 -nofit -set START 40000 -set FINISH 99999 -output general2 -s "{bat} {post} {err} {freq} BLAH\n" -nobs 1000000 -npsr 1 -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select -f ${ephemeris} \${ar}.tim > \${ar}.tempo2out && returncode=\$? || returncode=\$?
-        if [[ \$returncode -ne 134 && \$returncode -ne 137 && \$returncode -ne 0 ]]; then
-            echo "Errorcode: \$returncode. Tempo error other than lack of high S/N data error."
-            exit returncode
-        elif [[ \$returncode == 134 || \$returncode == 137 ]]; then
-            echo "Errorcode: \$returncode. No input data due to the logic in /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select"
-        fi
-        cat \${ar}.tempo2out | grep BLAH | awk '{print \$1,\$2,\$3*1e-6,\$4}' > \${ar}.residual
+    bash /fred/oz005/users/nswainst/code/meerpipe/tempo2_wrapper.sh \${largest_archive}.dm_corrected ${ephemeris}
     """
 }
 
