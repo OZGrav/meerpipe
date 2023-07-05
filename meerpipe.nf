@@ -599,13 +599,37 @@ process upload_results {
     template_id  = decode_id(pipeline_run_data[0]["template"]["id"])
 
     for toa_file in ["${toas.join('","')}"]:
+        if "dmcorrected" in toa_file:
+            dmcorrected = True
+        else:
+            dmcorrected = False
+
+        # Work out if this is the minimum or maximum number of subints
+        nchan = toa_file.split("_zap.")[-1].split("ch")[0]
+        nsub = toa_file.split("_zap."+nchan+"ch1p")[-1].split("t.ar")[0]
+        toas_same_nchan = glob("*_zap." + nchan + "ch*" + toa_file.split(".ar.")[1])
+        print(nchan, nsub)
+        nsubs_list = []
+        for toa in toas_same_nchan:
+            print(toa)
+            nsubs_list.append(int(toa.split("_zap."+nchan+"ch1p")[-1].split("t.ar")[0]))
+        minimum_nsubs = False
+        maximum_nsubs = False
+        if max(nsubs_list) == int(nsub):
+            maximum_nsubs = True
+        if min(nsubs_list) == int(nsub):
+            minimum_nsubs = True
+
         with open(toa_file, "r") as f:
-            toa_text = f.read()
+            toa_lines = f.readlines()
             toa_response = toa_client.create(
                 ${pipe_id},
                 ephemeris_id,
                 template_id,
-                toa_text,
+                toa_lines,
+                dmcorrected,
+                maximum_nsubs,
+                minimum_nsubs,
             )
             content = json.loads(toa_response.content)
             logger.info(content)
