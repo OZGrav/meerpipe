@@ -3168,7 +3168,7 @@ def generate_singleres_image(output_dir, toa_archive, image_name, image_path, pa
 
             # use meerwatch functions to produce residual images for this observation
             logger.info("Calling modified MeerWatch residual generation...")
-            residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True, align=True)
+            residuals = get_res_fromtim(timfile, parfile, sel_file=selfile, out_dir=image_path, verb=True, align=False) # align flag deactivated
             # check for valid output
             if (len(residuals) > 0):
                 logger.info("Producing single-obs image from modified MeerWatch residuals...")
