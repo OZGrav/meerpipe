@@ -155,7 +155,7 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     snr_f = ('snr', 'f4')
 
     # load in the toa residuals and cleanup
-    toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3, 4), dtype=[mjd_f, res_f, err_f, freq_f, res_phase_f])
+    toas = np.loadtxt(temp_file, usecols=(0, 1, 2, 3, 4), dtype=[mjd_f, res_f, err_f, freq_f, res_phase_f], ndmin=1)
     os.remove(temp_file)
     if verb:
         print ("Loaded ToAs from file")
@@ -166,8 +166,12 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
     if verb:
         print ("DOY conversion complete.")
 
+    # pars now required for phase conversion
+    pars = read_par(par_file)
+
     phase_errors = np.zeros(toas.size, dtype=[err_phase_f])
-    phase_errors[err_phase_f[0]] = calc_err_phase(toas[res_f[0]], toas[err_f[0]], toas[res_phase_f[0]])
+    #phase_errors[err_phase_f[0]] = calc_err_phase(toas[res_f[0]], toas[err_f[0]], toas[res_phase_f[0]])
+    phase_errors[err_phase_f[0]] = calc_err_phase_new(toas[res_f[0]], toas[err_f[0]], toas[res_phase_f[0]], pars)
     if verb:
         print ("Phase conversion complete.")
 
@@ -185,23 +189,19 @@ def get_res_fromtim(tim_file, par_file, sel_file=None, out_dir="./", verb=False,
 
     # prepare binary phase if required
     bflag = False
-    try:
-        pars = read_par(par_file)
-    except:
-        print ("Unable to parse parfile ({})".format(par_file))
-    else:
-        if (is_binary(pars)):
-            if verb:
-                print ("Binary pulsar detected - calculating binary phases...")
-            bflag = True
-            binphases = np.zeros(toas.size, dtype=[binphase_f])
-            binphases[binphase_f[0]] = get_binphase(toas[mjd_f[0]],pars)
+    if (is_binary(pars)):
+        if verb:
+            print ("Binary pulsar detected - calculating binary phases...")
+        bflag = True
+        binphases = np.zeros(toas.size, dtype=[binphase_f])
+        temp_binphases = get_binphase(toas[mjd_f[0]],pars)
+        binphases[binphase_f[0]] = temp_binphases
 
-            if verb:
-                print ("Binary phase calculation complete.")
-        else:
-            if verb:
-                print ("No binary parameters detected - skipping binary phase calculation.")
+        if verb:
+            print ("Binary phase calculation complete.")
+    else:
+        if verb:
+            print ("No binary parameters detected - skipping binary phase calculation.")
 
     # concatenate data in the correct order
     dtype_list = [mjd_f, doy_f, res_f, res_phase_f, err_f, err_phase_f, freq_f, snr_f]
@@ -286,10 +286,22 @@ def calc_doy(mjd):
     # return 365.2425 * (yrs % 1)
     return DAYPERYEAR * (yrs % 1) # J2000.0 in astropy.time built of year = 365.25
 
-# calculate phase error
+# calculate phase error - HAS A DIV0 BUG
 def calc_err_phase(res, err, res_phase):
 
     return (res_phase / res) * err
+
+# calculate phase error - NOW CONTAINS BACKUP AGAINST DIV0
+def calc_err_phase_new(res, err, res_phase, pars):
+
+    if 'P0' in pars.keys():
+        err_phase = err / pars['P0']
+    elif 'F0' in pars.keys():
+        err_phase = err * pars['F0']
+    else:
+        err_phase = (res_phase / res) * err
+
+    return err_phase
 
 # new - rotate contents of an array per the specified phase offset
 # modifies the copy of the toas provided - no need to return
