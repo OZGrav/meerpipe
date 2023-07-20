@@ -273,7 +273,7 @@ def get_true_anomaly(mjds, pars):
 
     if hasattr(U,  "__len__"):
         U[np.argwhere(U < 0)] = U[np.argwhere(U < 0)] + 2*np.pi
-        U = U.squeeze()
+        #U = U.squeeze()
     elif U < 0:
         U += 2*np.pi
 
