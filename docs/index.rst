@@ -8,5 +8,7 @@ Welcome to MeerPipe's documentation!
 
    installation
    running_pipeline
-   logic
+   pipeline_workflow
+.. Removed logic as it is a feature in the new_models version
+.. logic
 
