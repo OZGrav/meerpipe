@@ -82,3 +82,10 @@ The code has been stripped for only RFI excision, and modified for use on wide-b
 The surgical cleaner can now read in a template, which it subtracts from the data to form profile residuals. The template can be frequency-dependent if required (e.g. if there is substantial profile evolution) and is used to identify an off-pulse region. The statistics used by the surgical cleaner are calculated only using this off-pulse region.
 
 It can be downloaded from https://github.com/danielreardon/MeerGuard and installed with `pip install .`
+
+
+### dlyfix
+
+Corrects the psrfits header start time using the latest correction files
+
+It can be downloaded from https://bitbucket.org/psrsoft/dlyfix/src/master/
