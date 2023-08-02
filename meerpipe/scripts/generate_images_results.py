@@ -23,7 +23,7 @@ from meerpipe.archive_utils import template_adjuster, calc_dynspec_zap_fraction
 
 
 def generate_SNR_images(
-        archive_file,
+        scrunched_file,
         label,
         logger=None,
     ):
@@ -34,14 +34,6 @@ def generate_SNR_images(
     logger.info("----------------------------------------------")
     logger.info(f"Creating {label} S/N images...")
     logger.info("----------------------------------------------")
-
-    # make scrunched file for analysis
-    comm = f"pam -Fp -e Fp.temp {archive_file}"
-    args = shlex.split(comm)
-    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-    proc.wait()
-    info = proc.stdout.read().decode("utf-8").rstrip().split()
-    scrunched_file = info[0]
 
     # new - psrchive side functionality
     scrunched_arch = ps.Archive_load(scrunched_file)
@@ -183,6 +175,8 @@ def generate_images(
         pid,
         raw_file,
         clean_file,
+        raw_scrunched,
+        clean_scrunched,
         residuals,
         template,
         ephemeris,
@@ -200,8 +194,8 @@ def generate_images(
     image_data = []
 
     # Generate SNR images for raw then cleaned file
-    image_data.append(generate_SNR_images(raw_file,   'raw',     logger=logger))
-    image_data.append(generate_SNR_images(clean_file, 'cleaned', logger=logger))
+    image_data.append(generate_SNR_images(raw_scrunched,   'raw',     logger=logger))
+    image_data.append(generate_SNR_images(clean_scrunched, 'cleaned', logger=logger))
 
 
 
@@ -228,7 +222,7 @@ def generate_images(
             logger.warning(f"Not processsing {residual} as the file is empry")
         else:
             logger.info(f"Processing {residual}")
-            plot_toas_fromarr(residual, pid=pid, sequential=True, verb=True, rcvr=rcvr, nchan=nchan, out_file=f"toas_{dm_corrected}{archive_extension}.png")
+            plot_toas_fromarr(residual, pid=pid, sequential=False, verb=True, rcvr=rcvr, nchan=nchan, out_file=f"toas_{dm_corrected}{archive_extension}.png")
 
 
 
@@ -258,10 +252,12 @@ def generate_results(
     results = {}
 
     # Calculate the RFI fraction
+    logger.info("Calculating RFI fraction")
     rfi_frac = float(calc_dynspec_zap_fraction(dynspec_file))
     results["percent_rfi_zapped"] = rfi_frac
 
     # Read in DM values
+    logger.info("Reading in DM values")
     with open(dm_file, "r") as f:
         lines = f.readlines()
         results["dm"] = float(lines[0].split()[-1])
@@ -278,12 +274,13 @@ def generate_results(
         else:
             results["dm_tres"] = float(dm_chi2r)
         rm = lines[5].split()[-1]
-        if rm == "None":
+        if rm == "None" or rm == "RM:":
             results["rm"] = None
         else:
+            print(rm)
             results["rm"] = float(rm)
         rm_err = lines[6].split()[-1]
-        if rm_err == "None":
+        if rm_err == "None" or rm_err == "RM_ERR:":
             results["rm_err"] = None
         else:
             results["rm_err"] = float(rm_err)
@@ -293,6 +290,8 @@ def generate_results(
 
     # Calculate flux
     comm = f"pdv -FTp -f {cleaned_file}"
+    logger.info("Running flux calc command:")
+    logger.info(comm)
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
@@ -314,6 +313,8 @@ def main():
     parser.add_argument("-pid", dest="pid", help="Project id (e.g. PTA)", required=True)
     parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
     parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive", required=True)
+    parser.add_argument("-cleanFp", dest="cleanFp", help="Frequency and polarisation scrunched cleaned archive", required=True)
+    parser.add_argument("-rawFp", dest="rawFp", help="Frequency and polarisation scrunched raw archive", required=True)
     parser.add_argument("-residuals", dest="residuals", help="TOA residuals file", required=True, nargs='*')
     parser.add_argument("-template", dest="template", help="Path to par file for pulsar", required=True)
     parser.add_argument("-parfile", dest="parfile", help="Path to par file for pulsar", required=True)
@@ -328,6 +329,8 @@ def main():
         args.pid,
         args.rawfile,
         args.cleanedfile,
+        args.rawFp,
+        args.cleanFp,
         args.residuals,
         args.template,
         args.parfile,

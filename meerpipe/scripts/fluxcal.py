@@ -11,6 +11,7 @@ from astropy.io import fits
 from astropy.coordinates import (SkyCoord, Longitude, Latitude)
 
 from meerpipe.data_load import UHF_TSKY_FILE, CHIPASS_EQU_CSV
+from meerpipe.archive_utils import get_rcvr
 
 #=============================================================================
 
@@ -39,23 +40,6 @@ def get_info(archive):
     proc = subprocess.Popen(arg,stdout=subprocess.PIPE)
     info = str(proc.stdout.readline().decode("utf-8")).split()
     return info
-
-def get_rcvr(params):
-    """
-    Determine which receiver is in use
-    External conditions may be required for this function, depending on use
-    """
-    bw = params["BW"]
-    freq = float(params["FREQ"])
-
-    if (bw == "544.0") and (freq < 816) and (freq > 815):
-        rcvr = "UHF"
-    elif (freq < 1284) and (freq > 1283):
-        rcvr = "LBAND"
-    else:
-        raise RuntimeError("Header parameters do not map to any known receiver.")
-
-    return rcvr
 
 
 def get_freqlist(archive):
@@ -362,7 +346,7 @@ def fluxcalibrate(archive,multiplier):
 
 
     print ("Flux calibrating {0}".format(os.path.split(archive)[-1]))
-    info = "pam --mult {0} {1} -e fluxcal".format(multiplier,archive)
+    info = "pam --mult {0} {1} -m".format(multiplier,archive)
     arg = shlex.split(info)
     proc = subprocess.call(arg)
 
@@ -376,6 +360,7 @@ def main():
     parser.add_argument("-obsheader", dest="obsheader", help="obsheader", required=True)
     parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive", required=True)
     parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
+    parser.add_argument("-tpfile", dest="tpfile", help="Time and polariation scruched clenaed archive", required=True)
     parser.add_argument("-parfile", dest="parfile", help="Path to par file for pulsar", required=True)
     args = parser.parse_args()
 
@@ -385,12 +370,6 @@ def main():
     obsheader_path = str(args.obsheader)
     raw_file = str(args.rawfile)
     clean_file = str(args.cleanedfile)
-
-    # P and T scrunch the cleaned file
-    commmand = f"pam -Tp -e tp {clean_file}"
-    proc = subprocess.Popen(shlex.split(commmand),stdout=subprocess.PIPE)
-    proc.wait()
-    TP_file = proc.stdout.read().decode("utf-8").rstrip().split()[0]
 
     # extract the header parameters
     params = get_listinfo(obsheader_path)
@@ -411,35 +390,38 @@ def main():
     if str(args.parfile) == "None" or rajd is None:
         rajd, decjd = get_radec(psr_name)
 
-    # get receiver dependent tsky
-    tsky_jy = get_tsky_updated(rajd, decjd, psr_name, rcvr)
+    if rcvr.startswith("SBAND"):
+        multiplier = 1.0
+    else:
+        # get receiver dependent tsky
+        tsky_jy = get_tsky_updated(rajd, decjd, psr_name, rcvr)
 
-    #Get receiver dependent ssys (LBAND -> 1390 MHz, UHF -> 800 MHz)
-    nant = len(params["ANTENNAE"].split(","))
-    ssys = get_Ssys(tsky_jy, nant, rcvr)
+        #Get receiver dependent ssys (LBAND -> 1390 MHz, UHF -> 800 MHz)
+        nant = len(params["ANTENNAE"].split(","))
+        ssys = get_Ssys(tsky_jy, nant, rcvr)
 
-    #Get expected RMS in a single channel at 1390 MHz / 800 MHz
-    info_TP = get_info(TP_file)
-    expected_rms = get_expectedRMS(info_TP, ssys)
+        #Get expected RMS in a single channel at 1390 MHz / 800 MHz
+        info_TP = get_info(args.tpfile)
+        expected_rms = get_expectedRMS(info_TP, ssys)
+
+        print ("============")
+        #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
+        freqinfo = get_freqlist(raw_file)
+        freq_list = freqinfo[-2].split(",")
+        offrms_list = get_offrms(raw_file)
+        #offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
+        offrms_freq = dict(list(zip(freq_list, offrms_list)))
+
+        #Getting median rms of off-pulse rms values for ~20 channels centered at 1390 MHz
+        observed_rms = get_median_offrms(offrms_freq, rcvr)
+
+        #Multiplier
+        multiplier = expected_rms/observed_rms
 
     print ("============")
-    #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
-    freqinfo = get_freqlist(raw_file)
-    freq_list = freqinfo[-2].split(",")
-    offrms_list = get_offrms(raw_file)
-    #offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
-    offrms_freq = dict(list(zip(freq_list, offrms_list)))
-
-    #Getting median rms of off-pulse rms values for ~20 channels centered at 1390 MHz
-    observed_rms = get_median_offrms(offrms_freq, rcvr)
-
-    print ("============")
-    #Multiplier
-    multiplier = expected_rms/observed_rms
-
     print ("Multiplier is: {0}".format(multiplier))
-
     print ("============")
+
     #Flux calibrate all the raw and cleaned file
     fluxcalibrate(raw_file, multiplier)
     fluxcalibrate(clean_file, multiplier)
