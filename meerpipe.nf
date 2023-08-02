@@ -127,6 +127,7 @@ process obs_list {
     """
     #!/usr/bin/env python
 
+    import os
     import json
     import base64
     import logging
@@ -139,7 +140,8 @@ process obs_list {
     from psrdb.utils.other import setup_logging, get_rest_api_id, get_graphql_id
 
     # PSRDB setup
-    client = GraphQLClient("${params.psrdb_url}", False, logger=setup_logging(level=logging.DEBUG))
+    logger = setup_logging(level=logging.DEBUG)
+    client = GraphQLClient("${params.psrdb_url}", False, logger=logger)
     obs_client       = Observation(client, "${params.psrdb_token}")
     pipe_run_client  = PipelineRun(client, "${params.psrdb_token}")
     template_client  = Template(   client, "${params.psrdb_token}")
@@ -158,44 +160,65 @@ process obs_list {
     # Output file
     with open("processing_jobs.csv", "w") as out_file:
         for ob in obs_data:
+            print(ob)
             # Extract data from obs_data
-            pulsar   = ob['node']['pulsar']['name']
-            obs_id   = int(base64.b64decode(ob['node']['id']).decode("utf-8").split(":")[1])
-            utc_obs  = datetime.strptime(ob['node']['utcStart'], '%Y-%m-%dT%H:%M:%S+00:00')
+            pulsar   = ob['pulsar']['name']
+            obs_id   = int(base64.b64decode(ob['id']).decode("utf-8").split(":")[1])
+            utc_obs  = datetime.strptime(ob['utcStart'], '%Y-%m-%dT%H:%M:%S+00:00')
             utc_obs  = "%s-%s" % (utc_obs.date(), utc_obs.time())
-            pid_obs  = ob['node']['project']['short']
-            pid_code = ob['node']['project']['code']
-            band     = ob['node']['band']
-            duration = ob['node']['duration']
+            pid_obs  = ob['project']['short']
+            pid_code = ob['project']['code']
+            beam     = ob['beam']
+            band     = ob['band']
+            duration = ob['duration']
+            cal_loc  = ob['calibration']['location']
 
             # Grab ephermis and templates
             if "${params.ephemeris}" == "null":
                 ephemeris = f"${params.ephemerides_dir}/{pid_obs}/{pulsar}.par"
+                if not os.path.exists(ephemeris):
+                    # Default to using PTA ephemeris if one does not exist
+                    ephemeris = f"${params.ephemerides_dir}/PTA/{pulsar}.par"
             else:
                 ephemeris = "${params.ephemeris}"
             if "${params.template}" == "null":
                 template = f"${params.templates_dir}/{pid_obs}/{band}/{pulsar}.std"
+                if not os.path.exists(template):
+                    # Try LBAND template
+                    template = f"${params.templates_dir}/{pid_obs}/LBAND/{pulsar}.std"
+                if not os.path.exists(template):
+                    # Default to using PTA template if one does not exist
+                    template = f"${params.templates_dir}/PTA/{band}/{pulsar}.std"
+                if not os.path.exists(template):
+                    # Final attempt is PTA LBAND template
+                    template = f"${params.templates_dir}/PTA/LBAND/{pulsar}.std"
             else:
                 template = "${params.template}"
+
+            logger.info(f"Setting up ID: {obs_id} pulsar: {pulsar} band: {band} template: {template} ephemeris: {ephemeris}")
 
             # Set job as running
             if "${params.upload}" == "true":
                 # Get or create template
+                template_project = template.split("/")[-3]
+                template_band = template.split("/")[-2]
                 template_response = template_client.create(
                     pulsar,
-                    pid_code,
-                    band,
+                    template_band,
                     template,
+                    project_short=template_project,
                 )
+                logger.debug(template_response)
                 template_id = get_rest_api_id(template_response, logging.getLogger(__name__))
                 # Get or create ephemeris
+                ephemeris_project = ephemeris.split("/")[-2]
                 ephemeris_response = ephemeris_client.create(
                     pulsar,
                     ephemeris,
-                    pid_code,
-                    "",
+                    project_short=ephemeris_project,
+                    comment="",
                 )
-                print(ephemeris_response)
+                logger.debug(ephemeris_response)
                 ephemeris_id = get_graphql_id(ephemeris_response, "ephemeris", logging.getLogger(__name__))
 
                 with open("${manifest}", 'r') as file:
@@ -209,17 +232,17 @@ process obs_list {
                     "${params.manifest.name}",
                     "${params.manifest.description}",
                     "${params.manifest.version}",
-                    "running",
+                    "Running",
                     "${params.output_path}",
                     pipeline_config,
                 )
-                pipe_id = get_graphql_id(pipe_run_data, "pipelineRun", logging.getLogger(__name__))
+                pipe_id = get_graphql_id(pipe_run_data, "pipeline_run", logging.getLogger(__name__))
             else:
                 # No uploading so don't make a processing item
                 pipe_id = None
 
             # Write out results
-            out_file.write(f"{pulsar},{utc_obs},{pid_obs},{band},{duration},{pipe_id},{ephemeris},{template}\\n")
+            out_file.write(f"{pulsar},{utc_obs},{pid_obs},{beam},{band},{duration},{cal_loc},{pipe_id},{ephemeris},{template}\\n")
     """
 }
 
@@ -229,44 +252,62 @@ process psradd_calibrate_clean {
     label 'meerpipe'
 
     publishDir "${params.output_path}/${pulsar}/${utc}/calibrated", mode: 'copy', pattern: "*.ar"
+    scratch '$JOBFS'
+    clusterOptions  { "--tmp=${(task.attempt * dur.toFloat() * 12).toInteger()}MB" }
     time   { "${task.attempt * dur.toFloat() * 0.5} s" }
-    memory { "${task.attempt * dur.toFloat() * 10} MB"}
+    memory { "${task.attempt**2 * dur.toFloat() * 60} MB"}
+
+    // when:
+    // utc != "2020-03-07-16:35:57" && utc != "2022-09-18-07:10:50" && utc != "2022-05-22-14:35:24" && utc != "2022-05-22-16:35:28"// TODO REMOVE THIS QUICK FIX
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template)
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path("${pulsar}_${utc}.ar"), path("${pulsar}_${utc}_zap.ar"), env(SNR)
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path("${pulsar}_${utc}_raw.ar"), path("${pulsar}_${utc}_zap.ar"), env(SNR)
 
     """
     if ${params.use_edge_subints}; then
         # Grab all archives
-        archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar)
+        archives=\$(ls ${params.input_path}/${pulsar}/${utc}/${beam}/*/*.ar)
     else
-        # Grab all archives except for the first and last one
-        archives=\$(ls ${params.input_path}/${pulsar}/${utc}/*/*/*.ar | head -n-1 | tail -n+2)
+        if [ -z \$(ls ${params.input_path}/${pulsar}/${utc}/${beam}/*/*.ar | head -n-1 | tail -n+2) ]; then
+            # Grab all archives anyway because there are only two
+            archives=\$(ls ${params.input_path}/${pulsar}/${utc}/${beam}/*/*.ar)
+        else
+            # Grab all archives except for the first and last one
+            archives=\$(ls ${params.input_path}/${pulsar}/${utc}/${beam}/*/*.ar | head -n-1 | tail -n+2)
+        fi
     fi
 
-    # Calibrate the subint archives
-    for ar in \$archives; do
-        pac -XP -O ./ -e calib  \$ar
-    done
+    echo "Combine the archives"
+    psradd -E ${ephemeris} -o ${pulsar}_${utc}_raw.raw \${archives}
 
-    # Combine the calibrate archives
-    psradd -E ${ephemeris} -o ${pulsar}_${utc}.ar *calib
+    echo "Calibrate the polarisation of the archive"
+    if [ "${cal_loc}" == "None" ]; then
+        # The archives have already be calibrated so just update the headers
+        pac -XP -O ./ -e scalP ${pulsar}_${utc}_raw.raw
+    else
+        # Use the Stokes paramaters files to calibrate the archive
+        pac -Q ${cal_loc} -O ./ -e scal ${pulsar}_${utc}_raw.raw
+    fi
 
-    # Update the RM value if available
+    echo "Delay correct"
+    /fred/oz005/users/mkeith/dlyfix/dlyfix -e ar ${pulsar}_${utc}_raw.scalP
+
+    echo "Update the RM value if available"
     rm_cat=\$(python -c "from meerpipe.data_load import RM_CAT;print(RM_CAT)")
     if grep -q "${pulsar}" \${rm_cat}; then
         rm=\$(grep ${pulsar} \${rm_cat} | tr -s ' ' | cut -d ' ' -f 2)
+        echo "Found RM of \${rm} in the private RM catalogue"
     else
         rm=\$(psrcat -c RM ${pulsar} -X -all | tr -s ' ' | cut -d ' ' -f 1)
+        echo "Found RM of \${rm} in the ATNF catalogue"
     fi
-    echo \${rm}
-    pam --RM \${rm} -m ${pulsar}_${utc}.ar
+    pam --RM \${rm} -m ${pulsar}_${utc}_raw.ar
 
-    # Clean the archive
-    clean_archive.py -a ${pulsar}_${utc}.ar -T ${template} -o ${pulsar}_${utc}_zap.ar
+    echo "Clean the archive"
+    clean_archive.py -a ${pulsar}_${utc}_raw.ar -T ${template} -o ${pulsar}_${utc}_zap.ar
 
     # Get the signal to noise ratio of the cleaned archive
     SNR=\$(psrstat -j FTp -c snr=pdmp -c snr ${pulsar}_${utc}_zap.ar | cut -d '=' -f 2)
@@ -280,16 +321,19 @@ process fluxcal {
 
     publishDir "${params.output_path}/${pulsar}/${utc}/fluxcal", mode: 'copy', pattern: "*fluxcal"
     time   { "${task.attempt * dur.toFloat() * 0.5} s" }
-    memory { "${task.attempt * dur.toFloat() * 10} MB"}
+    memory { "${task.attempt * dur.toFloat() * 30} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path("${pulsar}_${utc}.fluxcal"), path("${pulsar}_${utc}_zap.fluxcal"), val(snr) // Replace the archives with flux calced ones
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path("${pulsar}_${utc}_raw.ar"), path("${pulsar}_${utc}_zap.ar"), val(snr) // Replace the archives with flux calced ones
 
     """
-    fluxcal -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/*/*/obs.header -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris}
+    # Create a time and polarisation scruchned profile
+    pam -Tp -e tp ${cleaned_archive}
+
+    fluxcal -psrname ${pulsar} -obsname ${utc} -obsheader ${params.input_path}/${pulsar}/${utc}/${beam}/*/obs.header -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -tpfile *tp -parfile ${ephemeris}
     """
 }
 
@@ -300,13 +344,13 @@ process decimate {
 
     publishDir "${params.output_path}/${pulsar}/${utc}/decimated", mode: 'copy', pattern: "${pulsar}_${utc}_zap.*.ar"
     time   { "${task.attempt * dur.toFloat() * 0.5} s" }
-    memory { "${task.attempt * dur.toFloat() * 3} MB"}
+    memory { "${task.attempt * dur.toFloat() * 30} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path("${pulsar}_${utc}_zap.*.ar")
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path("${pulsar}_${utc}_zap.*.ar")
 
     """
     for nchan in ${nchans.join(' ')}; do
@@ -337,9 +381,7 @@ process decimate {
                 fi
 
                 echo "Decimate nsub=\${nsub}  nchan=\${nchan} stokes=\${stokes}"
-                pam --setnsub \${nsub} --setnchn \${nchan} -S \${stokes_op} -e \${nchan}ch\${stokes}p\${nsub}t.temp ${cleaned_archive}
-                echo "Delay correct"
-                /fred/oz005/users/mkeith/dlyfix/dlyfix -e \${nchan}ch\${stokes}p\${nsub}t.ar *\${nchan}ch\${stokes}p\${nsub}t.temp
+                pam --setnsub \${nsub} --setnchn \${nchan} -S \${stokes_op} -e \${nchan}ch\${stokes}p\${nsub}t.ar ${cleaned_archive}
             done
         done
     done
@@ -351,20 +393,20 @@ process dm_rm_calc {
     label 'meerpipe'
 
     time   { "${task.attempt * dur.toFloat() * 5} s" }
-    memory { "${task.attempt * dur.toFloat() * 3} MB"}
+    memory { "${task.attempt**2 * dur.toFloat() * 60} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives)
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path("${pulsar}_${utc}_dm_rm_fit.txt")
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path("${pulsar}_${utc}_dm_rm_fit.txt")
 
 
     // when:
     // Float.valueOf(snr) > 12.0 // If not enough signal to noise causes tempo2 to core dump
 
     script:
-    if ( Float.valueOf(snr) > 12.0 )
+    if ( Float.valueOf(snr) > 15.0 )
         """
         echo "Calc DM with tempo2"
         # Grab archive and template nchan
@@ -381,7 +423,7 @@ process dm_rm_calc {
         # Remove dm derivatives
         sed '/^DM[1-9]/d' ${ephemeris} > ${ephemeris}.dm
         # Fit for DM
-        tempo2 -nofit -fit DM -set START 40000 -set FINISH 99999 -f ${ephemeris}.dm -outpar ${ephemeris}.dmfit -select /fred/oz005/users/nswainst/code/meerpipe/default_toa_logic.select dm.tim
+        tempo2 -nofit -fit DM -set START 40000 -set FINISH 99999 -f ${ephemeris}.dm -outpar ${ephemeris}.dmfit dm.tim
 
         # Fit for RM
         input_rm=\$(vap -c rm ${pulsar}_${utc}_zap.${nchans.max()}ch4p1t.ar | tail -n 1| tr -s ' ' | cut -d ' ' -f 2)
@@ -433,13 +475,13 @@ process generate_toas {
 
     publishDir "${params.output_path}/${pulsar}/${utc}/timing", mode: 'copy', pattern: "*.{residual,tim,par,std}"
     time   { "${task.attempt * dur.toFloat() * 1} s" }
-    memory { "${task.attempt * dur.toFloat() * 0.3} MB"}
+    memory { "${task.attempt * dur.toFloat() * 3} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results)
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results)
 
     output:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results), path("*.tim"), path("*.residual")
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results), path("*.tim"), path("*.residual")
 
     """
     # Loop over each decimated archive
@@ -462,7 +504,7 @@ process generate_toas {
             port=""
         fi
 
-        echo "Generating TOAs\n----------------------------------"
+        echo "Generating TOAs for \${ar}.tim\n----------------------------------"
         pat -jp \$port  -f "tempo2 IPTA" -C "chan rcvr snr length subint" -s ${template} -A FDM \$ar  > \${ar}.tim
 
         echo "Correct for DM\n----------------------------------"
@@ -490,13 +532,13 @@ process generate_images_results {
     publishDir "${params.output_path}/${pulsar}/${utc}/scintillation", mode: 'copy', pattern: "*dynspec*"
     publishDir "${params.output_path}/${pulsar}/${utc}", mode: 'copy', pattern: "results.json"
     time   { "${task.attempt * dur.toFloat() * 0.5} s" }
-    memory { "${task.attempt * dur.toFloat() * 5} MB"}
+    memory { "${task.attempt**2 * dur.toFloat() * 60} MB"}
 
     input:
-    tuple val(pulsar), val(utc), val(obs_pid), val(band), val(dur), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results), path(toas), path(residuals)
+    tuple val(pulsar), val(utc), val(obs_pid), val(beam), val(band), val(dur), val(cal_loc), val(pipe_id), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), val(snr), path(decimated_archives), path(dm_results), path(toas), path(residuals)
 
     output:
-    tuple val(obs_pid), val(pipe_id), path(toas), path("*.png"), path("*.dat"), path("*dynspec"), path("results.json")
+    tuple val(pulsar), val(obs_pid), val(pipe_id), path(ephemeris), path(toas), path("*.png"), path("*.dat"), path("*dynspec"), path("results.json")
 
 
     """
@@ -513,8 +555,12 @@ process generate_images_results {
         psrplot -p b -x -jT -lpol=0,1 -O -c log=1 -g 1024x768 -c above:l= -c above:c="Cleaned bandpass (\${type})"     -D \${type}_bandpass.png/png    \$file
     done
 
+    # Created flux and polarisation scrunched archive for SNR images
+    pam -Fp -e cleanFp ${cleaned_archive}
+    pam -Fp -e rawFp ${raw_archive}
+
     # Create matplotlib images and dump the results calculations into a results.json file
-    generate_images_results -pid ${obs_pid} -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -parfile ${ephemeris} -template ${template} -residuals ${residuals} -rcvr ${band} -snr ${snr} -dmfile ${dm_results}
+    generate_images_results -pid ${obs_pid} -cleanedfile ${cleaned_archive} -rawfile ${raw_archive} -cleanFp *cleanFp -rawFp *rawFp -parfile ${ephemeris} -template ${template} -residuals ${residuals} -rcvr ${band} -snr ${snr} -dmfile ${dm_results}
     """
 }
 
@@ -525,7 +571,10 @@ process upload_results {
     maxForks 1
 
     input:
-    tuple val(obs_pid), val(pipe_id), path(toas), path(dat_files), path(png_files), path(dynspec_files), path(results_json)
+    tuple val(pulsar), val(obs_pid), val(pipe_id), path(ephemeris), path(toas), path(dat_files), path(png_files), path(dynspec_files), path(results_json)
+
+    output:
+    tuple val(pulsar), val(obs_pid), val(pipe_id), path(ephemeris)
 
 
     """
@@ -598,45 +647,6 @@ process upload_results {
     ephemeris_id = decode_id(pipeline_run_data[0]["ephemeris"]["id"])
     template_id  = decode_id(pipeline_run_data[0]["template"]["id"])
 
-    for toa_file in ["${toas.join('","')}"]:
-        if "dmcorrected" in toa_file:
-            dmcorrected = True
-        else:
-            dmcorrected = False
-
-        # Work out if this is the minimum or maximum number of subints
-        nchan = toa_file.split("_zap.")[-1].split("ch")[0]
-        nsub = toa_file.split("_zap."+nchan+"ch1p")[-1].split("t.ar")[0]
-        toas_same_nchan = glob("*_zap." + nchan + "ch*" + toa_file.split(".ar.")[1])
-        print(nchan, nsub)
-        nsubs_list = []
-        for toa in toas_same_nchan:
-            print(toa)
-            nsubs_list.append(int(toa.split("_zap."+nchan+"ch1p")[-1].split("t.ar")[0]))
-        minimum_nsubs = False
-        maximum_nsubs = False
-        if max(nsubs_list) == int(nsub):
-            maximum_nsubs = True
-        if min(nsubs_list) == int(nsub):
-            minimum_nsubs = True
-
-        with open(toa_file, "r") as f:
-            toa_lines = f.readlines()
-            toa_response = toa_client.create(
-                ${pipe_id},
-                ephemeris_id,
-                template_id,
-                toa_lines,
-                dmcorrected,
-                maximum_nsubs,
-                minimum_nsubs,
-            )
-            content = json.loads(toa_response.content)
-            logger.info(content)
-            if toa_response.status_code not in (200, 201):
-                logger.error("Failed to upload TOA")
-                exit(1)
-
     # Read in results JSON
     with open("results.json", "r") as f:
         results_dict = json.load(f)
@@ -649,18 +659,68 @@ process upload_results {
     """
 }
 
+    // for toa_file in ["${toas.join('","')}"]:
+    //     if "dm_corrected" in toa_file:
+    //         dmcorrected = True
+    //     else:
+    //         dmcorrected = False
+
+    //     # Work out if this is the minimum or maximum number of subints
+    //     nchan = toa_file.split("_zap.")[-1].split("ch")[0]
+    //     nsub = toa_file.split("_zap."+nchan+"ch1p")[-1].split("t.ar")[0]
+    //     toas_same_nchan = glob("*_zap." + nchan + "ch*" + toa_file.split(".ar.")[1])
+    //     print(nchan, nsub)
+    //     nsubs_list = []
+    //     for toa in toas_same_nchan:
+    //         print(toa)
+    //         nsubs_list.append(int(toa.split("_zap."+nchan+"ch1p")[-1].split("t.ar")[0]))
+    //     minimum_nsubs = False
+    //     maximum_nsubs = False
+    //     if max(nsubs_list) == int(nsub):
+    //         maximum_nsubs = True
+    //     if min(nsubs_list) == int(nsub):
+    //         minimum_nsubs = True
+
+    //     with open(toa_file, "r") as f:
+    //         toa_lines = f.readlines()
+    //         toa_response = toa_client.create(
+    //             ${pipe_id},
+    //             ephemeris_id,
+    //             template_id,
+    //             toa_lines,
+    //             dmcorrected,
+    //             minimum_nsubs,
+    //             maximum_nsubs,
+    //         )
+    //         content = json.loads(toa_response.content)
+    //         logger.info(content)
+    //         if toa_response.status_code not in (200, 201):
+    //             logger.error("Failed to upload TOA")
+    //             exit(1)
+
 
 process generate_residuals {
-    debug true
     label 'meerpipe'
 
     maxForks 1
 
     input:
-    tuple val(obs_pid), val(pipe_id), path(dat_files), path(png_files), path(dynspec_files), path(results_json)
+    tuple val(pulsar), val(obs_pid), val(pipe_id), path(ephemeris)
 
     """
-    bash /fred/oz005/users/nswainst/code/meerpipe/tempo2_wrapper.sh \${largest_archive}.dm_corrected ${ephemeris}
+    # Loop over each of the TOA filters
+    # for dmc in "--dm_corrected" ""; do
+    # Don't do dm correct for now
+    for dmc in ""; do
+        for min_or_max_sub in "--minimum_nsubs" "--maximum_nsubs"; do
+            for nchan in 1 4 16; do
+                # Download the toa file and fit the residuals
+                psrdb toa download J1705-1903 \$dmc \$min_or_max_sub --nchan \$nchan
+                bash /fred/oz005/users/nswainst/code/meerpipe/tempo2_wrapper.sh *tim ${ephemeris}
+                rm *tim
+            done
+        done
+    done
     """
 }
 
@@ -705,6 +765,9 @@ workflow {
     // Upload images and results
     if ( params.upload ) {
         upload_results( generate_images_results.out )
+
+        // For each pulsar (not each obs), download all toas and fit residuals
+        // generate_residuals( upload_results.out.groupTuple().map { pulsar, obs_pid, pipe_id, ephemeris -> [ pulsar, obs_pid, pipe_id, ephemeris.first() ] } )
     }
 }
 

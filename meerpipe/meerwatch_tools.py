@@ -18,7 +18,11 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 import json
+import pandas as pd
 
+
+
+from psrdb.utils.residual import residual_line_to_dict
 
 
 def get_bw_freq(rcvr):
@@ -128,7 +132,7 @@ def plot_toas_fromarr(
         fs=14,
         out_file="toas.png",
         out_dir=None,
-        sequential=True,
+        sequential=False,
         title=None,
         verb=False,
         rcvr="LBAND",
@@ -138,13 +142,28 @@ def plot_toas_fromarr(
     bw, cfrq = get_bw_freq(rcvr)
 
     # load in the toa residuals
-    residuals = np.loadtxt(residuals_file, usecols=(0, 1, 2, 3), dtype=[('mjd', 'f8'), ('res', 'f4'), ('err', 'f4'), ('freq', 'f4')])
+    residuals = pd.DataFrame(columns=["mjd", "res", "err", "freq"])
+    with open(residuals_file, "r") as f:
+        residual_lines = f.readlines()
+        for residual_line in residual_lines:
+            residual_dict = residual_line_to_dict(residual_line)
+            mjd  = residual_dict["mjd"]
+            res  = residual_dict["residual"]
+            err  = residual_dict["residual_error"]
+            freq = residual_dict["freq_MHz"]
+            temp_df = pd.DataFrame({'mjd': [float(mjd)], 'res': [res], 'err': [err*1e-6], 'freq': [freq]})
+            residuals = pd.concat([residuals, temp_df], ignore_index=True)
 
-    if outlier_factor is not None:
-        residuals = clean_toas(residuals, outlier_factor=outlier_factor)
-        weighted_mean_toa = weighted_mean(residuals)
-        for k in range (0, len(residuals)):
-            residuals['res'][k]-=weighted_mean_toa
+    # if outlier_factor is not None:
+    #     residuals = clean_toas(residuals, outlier_factor=outlier_factor)
+    #     weighted_mean_toa = weighted_mean(residuals)
+    #     for k in range (0, len(residuals)):
+    #         residuals['res'][k]-=weighted_mean_toa
+
+    # Check for missing values
+    residuals.isna()
+    # Convert non-numeric values to NaN
+    residuals['freq'] = pd.to_numeric(residuals['freq'], errors='coerce')
 
     if nchan is None:
         # get parameters from file name
@@ -158,7 +177,7 @@ def plot_toas_fromarr(
     f_max = cfrq+bw/2.0
     norm = Normalize(vmin=f_min, vmax=f_max)
     # Make tupes of RGBA values for some manual error bar fixing
-    y_norm = (residuals['freq'] - f_min) / (f_max - f_min)
+    y_norm = (np.array(residuals['freq']) - f_min) / (f_max - f_min)
     cmap = cm.get_cmap('viridis')
     rgba_values = cmap(y_norm)
     rgba_tuples = [tuple(rgba) for rgba in rgba_values]
