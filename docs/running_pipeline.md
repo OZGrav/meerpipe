@@ -56,6 +56,13 @@ python db_specified_launcher.py -utc1 2023-04-01-00:00:00 -utc2 2023-05-01-00:00
 This command tells MeerPipe to launch jobs for all observations of J1811-2405 between April 1st and May 1st, 2023.
 Jobs should be processed under the PTA project specification, and should run on the SLURM queue (allowing for multiple parallel jobs to run) rather than on the host node (for which each job would complete sequentially).
 
+The `--help` argument can be used to show more options for running `db_specified_launcher.py`.
+One such option is `-runas` which can be used to run the pipeline in the following ways:
+- `-runas PIPE`: Queries PSRDB for all pipelines associated with a given `-psr` in the launches table, runs one job for each pipeline
+- `-runas OBS`: Runs the default pipeline matching the project code of the observation
+- `-runas <int`>: Runs the pipeline with matching index from the pipelines table
+- `-runas [PTA / RelBin / TPA / GC]`: Runs the default pipeline for that project code as determined via the lookup functions in `db_utils.py`
+
 The steps that the launched pipeline will take are described in [pipeline workflow](pipeline_workflow.md#pipeline-workflow)
 
 ## Inspecting the pipeline

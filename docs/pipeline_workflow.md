@@ -20,15 +20,17 @@ The delays are corrected with the `dlyfix` command (from the  `dylfix` repo).
 Depending on the date of the observations, the polarisation is either already applied before being transferred to OzSTAR, or must be applied using a Jones matrix.
 The jones matrix must be applied using the `pac -Q` command (a `psrchive` script) for UHF band observations prior to approximately 18/08/2021 and L-band observations prior to approximately 10/04/2020.
 Observations after these dates only need to have their polarisation headers updated with the `pac -XP` command.
-The data is also corrected for the Faraday rotation using the rotation measure (RM) if known, from a RM list provided from the project configuration or the [ATNF Pulsar Catalogue](http://www.atnf.csiro.au/research/pulsar/psrcat/).
+
+The data is also corrected for the Faraday rotation using the rotation measure (RM) and their dispersion measure (DM) if known, from a RM and DM list provided from the project configuration or the [ATNF Pulsar Catalogue](http://www.atnf.csiro.au/research/pulsar/psrcat/).
 
 ## Clean
 
 The archives are cleaned of RFI using the command `clean_archive.py` (a `MeerGuard` script).
-The cleaning is described as:
-The surgical cleaner reads in a template, which is subtracted from the data to form profile residuals.
-The template can be frequency-dependent if required (e.g. if there is substantial profile evolution) and is used to identify an off-pulse region.
-The statistics used by the surgical cleaner are calculated only using this off-pulse region.
+The cleaning is done by applying the following three "cleaners":
+
+- `rcvrstd`: zaps out specified channels / subints / band edges, etc. Doesn't do any thinking of its own, just zaps according to a fixed set of input parameters
+- `surgical`: uses the template to assess off-pulse windows and statistics to identify parts of the data which deviate due to RFI
+- `bandwagon`: zaps out the remaining portion of a channel / subint if the fraction of that subint/channel that has already been zapped is above a certain fraction
 
 ## Decimation
 
@@ -38,6 +40,7 @@ This is done with the following `psrchive` command
 pam --setnsub <nsub> --setnchn <nchan> -S <stokes_op>
 ```
 
+The decimation products are specified via the config file, and that the products can be tuned specific to each pulsar.
 Common values for `nsub` are 1, 32 and 450.
 Common values for `nchan` are 1, 16 and 32.
 
