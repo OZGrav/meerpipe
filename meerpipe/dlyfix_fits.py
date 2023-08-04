@@ -1,5 +1,6 @@
-#!/usr/bin/python
-import struct,sys
+
+import sys
+import struct
 
 class fitsline:
     def __init__(self):
@@ -7,25 +8,25 @@ class fitsline:
         self.key=None
         self.comment=None
     def output(self):
-        if self.key==None:
+        if self.key is None:
             return " ".ljust(80)
         if self.key=="END":
             return "END".ljust(80)
         if self.key=="COMMENT":
-            return ("COMMENT%s"%self.val).ljust(80)
+            return f"COMMENT{self.val}".ljust(80)
         if self.key=="HISTORY":
-            return ("HISTORY%s"%self.val).ljust(80)
+            return f"HISTORY{self.val}".ljust(80)
         x= "%s=% 22s"%(self.key.ljust(8),self.val)
         if self.comment!=None:
-            x=x+"/ "+self.comment
+            x = f"{x}/ {self.comment}"
         return x.ljust(80)
 
     def isend(self):
         return self.key=="END"
     def isblank(self):
-        return self.key==None
+        return self.key is None
     def isvalid(self):
-        return self.key!=None and self.key!="END"
+        return self.key not in [None, "END"]
     def blank(self):
         self.key=None
     def comment(self,comment):
@@ -35,8 +36,8 @@ class fitsline:
 class fitsheader:
 
     def __init__(self,fields):
-        self.ordered=list()
-        self.indexed=dict()
+        self.ordered = []
+        self.indexed = {}
         for field in fields:
             self.addfield(field)
 
@@ -46,10 +47,7 @@ class fitsheader:
             self.indexed[field.key]=field
 
     def get(self,key):
-        if key in list(self.indexed.keys()):
-            return self.indexed[key]
-        else:
-            return None
+        return self.indexed[key] if key in list(self.indexed.keys()) else None
 
     def output(self):
         out=""
@@ -75,7 +73,7 @@ class fitsheader:
 
 
 def readfitsheader(file):
-    hdr=list()
+    hdr = []
     idata=file.read(2880)
     if len(idata) < 2880:
         return None
@@ -92,7 +90,7 @@ def parsefitshdr(hdr):
     if len(hdr) != 2880:
         print("ERROR header length not 2880 (%d)"%len(hdr))
         return 0
-    ret=list()
+    ret = []
     ended=0
     for i in range(0,2880,80):
         line = hdr[i:i+80].decode("UTF-8")
@@ -102,7 +100,7 @@ def parsefitshdr(hdr):
             ret.append(fl)
             continue
         if line[:3]=="END":
-            ended=1;
+            ended=1
             fl.key="END"
             ret.append(fl)
             continue
@@ -117,7 +115,7 @@ def parsefitshdr(hdr):
         else:
             elems=line.split("=",1)
             if len(elems) < 2:
-                print("BAD LINE with key '%s'"%elems[0])
+                print(f"BAD LINE with key '{elems[0]}'")
                 continue
             key=elems[0].strip()
             elems=elems[1].split("/",1)
@@ -134,8 +132,8 @@ def parsefitshdr(hdr):
 
 class binarytable:
     def __init__(self, header):
-        self.sorted=list()
-        self.indexed=dict()
+        self.sorted = []
+        self.indexed = {}
         self.rowsize=int(header.get("NAXIS1").val)
         self.nrow=int(header.get("NAXIS2").val)
         self.extver=int(header.get("EXTVER").val)
@@ -143,11 +141,11 @@ class binarytable:
         i=1
         while 1:
             line = header.get("TTYPE%d"%i)
-            if line == None:
+            if line is None:
                 break;
-            type = line.val.strip()[1:-1].strip()
+            table_type = line.val.strip()[1:-1].strip()
             line = header.get("TFORM%d"%i)
-            if line == None:
+            if line is None:
                 break;
             fitsformat=line.val.strip()[1:-1].strip()
             n=fitsformat[:-1]
@@ -155,60 +153,39 @@ class binarytable:
             pyformat=None
             if F == "A":
                 # string type
-                pyformat="%ss"%n
-            elif F == "E":
-                # 32-bit precision floating point...
-                if n == "1":
-                    pyformat="f"
-                else:
-                    pyformat="%sf"%n
-            elif F == "D":
-                # 64-bit precision floating point
-                if n == "1":
-                    pyformat="d"
-                else:
-                    pyformat="%sd"%n
+                pyformat = f"{n}s"
             elif F == "B":
                 # 8-bit unsigned integer
-                if n == "1":
-                    pyformat="B"
-                else:
-                    pyformat="%sB"%n
+                pyformat = "B" if n == "1" else f"{n}B"
+            elif F == "D":
+                # 64-bit precision floating point
+                pyformat = "d" if n == "1" else f"{n}d"
+            elif F == "E":
+                # 32-bit precision floating point...
+                pyformat = "f" if n == "1" else f"{n}f"
             elif F == "I":
                 # 16-bit signed integer
-                if n == "1":
-                    pyformat="h"
-                else:
-                    pyformat="%sh"%n
+                pyformat = "h" if n == "1" else f"{n}h"
             elif F == "J":
                 # 32-bit signed integer
-                if n == "1":
-                    pyformat="i"
-                else:
-                    pyformat="%si"%n
+                pyformat = "i" if n == "1" else f"{n}i"
             elif F == "K":
                 # 64-bit signed integer
-                if n == "1":
-                    pyformat="q"
-                else:
-                    pyformat="%sq"%n
+                pyformat = "q" if n == "1" else f"{n}q"
             elif F == "X":
                 # 1-bit value
                 # For sanity, we read as n/8 bytes
-                if n == "1":
-                    pyformat="B"
-                else:
-                    pyformat="%dB"%(int(n)/8.0)
-            if pyformat == None:
-                print("ERROR: FITS format '%s' not understood"%fitsformat)
+                pyformat = "B" if n == "1" else "%dB"%(int(n)/8.0)
+            if pyformat is None:
+                print(f"ERROR: FITS format '{fitsformat}' not understood")
                 sys.exit(1)
 
-            elem = (type,fitsformat,pyformat)
+            elem = (table_type,fitsformat,pyformat)
             self.sorted.append(elem)
-            self.indexed[type] = elem
+            self.indexed[table_type] = elem
             i+=1
         self.parsestring=">"
-        for type,ffmt,pyfmt in self.sorted:
+        for table_type,ffmt,pyfmt in self.sorted:
             self.parsestring+=pyfmt
 
 
@@ -218,37 +195,72 @@ class binarytable:
     def parserow(self,bytes):
         if len(bytes) != self.rowsize:
             return None
-        ret=dict()
+        ret = {}
         i=0
         elems=struct.unpack(self.parsestring,bytes)
-        for type,ffmt,pyfmt in self.sorted:
+        for row_type,ffmt,pyfmt in self.sorted:
             if pyfmt[-1] == "s":
-                ret[type] = elems[i].decode("UTF-8")
+                ret[row_type] = elems[i].decode("UTF-8")
                 i+=1
             elif len(pyfmt) == 1:
-                ret[type] = elems[i]
+                ret[row_type] = elems[i]
                 i+=1
             else:
                 # we have an array to read!
-                ret[type]=list()
+                ret[row_type] = []
                 size = int(pyfmt[:-1])
-                ret[type].extend(elems[i:i+size])
+                ret[row_type].extend(elems[i:i+size])
                 i+=size
         return ret
 
     def writerow(self,row):
-        bytes="".encode("UTF-8")
-        for type,ffmt,pyfmt in self.sorted:
-            val=row[type]
+        bytes_row="".encode("UTF-8")
+        for row_type,ffmt,pyfmt in self.sorted:
+            val=row[row_type]
             if pyfmt[-1] == "s":
-                str=struct.pack(">"+pyfmt,val.encode("UTF-8"))
+                row_str = struct.pack(f">{pyfmt}", val.encode("UTF-8"))
             elif len(pyfmt) == 1:
-                str=struct.pack(">"+pyfmt,val)
+                row_str = struct.pack(f">{pyfmt}", val)
             else:
-                str=""
+                row_str=""
                 j=0
                 while j < len(val):
-                    str+=struct.pack(">"+pyfmt[-1],val[j])
+                    row_str += struct.pack(f">{pyfmt[-1]}", val[j])
                     j+=1
-            bytes+=str
-        return bytes
+            bytes_row+=row_str
+        return bytes_row
+
+
+
+
+class history_class:
+    def __init__(self,hdr,instream):
+        self.read(hdr,instream)
+        self.hdr=hdr
+
+    def read(self,hdr,instream):
+        self.entries = []
+        sz=hdr.getextsize()
+        self.bintab = binarytable(hdr)
+        bytesread=0
+        for _ in range(self.bintab.nrow):
+            raw=instream.read(self.bintab.rowsize)
+            line = self.bintab.parserow(raw)
+            self.entries.append(line)
+            bytesread += self.bintab.rowsize
+
+        skip=(2880-bytesread%2880)
+        instream.seek(skip,1)
+
+    def appendrow(self,row):
+        self.entries.append(row)
+        nrow = int(self.hdr.get("NAXIS2").val) + 1
+        self.hdr.get("NAXIS2").val = f"{nrow} ".rjust(18)
+        row=int(self.hdr.get("NAXIS2").val)
+
+    def output(self):
+        out=self.hdr.output()
+        for x in self.entries:
+            out += self.bintab.writerow(x)
+        size=len(out) + (2880-len(out)%2880)
+        return out.ljust(size)
