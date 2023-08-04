@@ -16,3 +16,6 @@ CHIPASS_EQU_CSV = os.path.join(datadir, 'CHIPASS_Equ.fits')
 
 # Rotation measure values for MSPs
 RM_CAT = os.path.join(datadir, 'meerpipe_rms_msps.txt')
+
+# Delay config file for the PTUSE originally obtained from the dlyfix repo
+DELAY_CONFIG = os.path.join(datadir, 'ptuse.dlycfg')
