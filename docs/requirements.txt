@@ -1,0 +1,6 @@
+numpydoc
+sphinx-rtd-theme
+sphinx_automodapi
+sphinxcontrib-mermaid
+python-markdown-math
+myst-parser
