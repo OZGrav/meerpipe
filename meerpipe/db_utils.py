@@ -21,6 +21,7 @@ import pandas as pd
 import getpass
 import base64
 from astropy.time import Time as astrotime
+import pytz
 
 from meerpipe.initialize import setup_logging
 #from psrdb.tables import Processings, Pipelines, Foldings, Targets, Pulsars, Launches, Projects, Observations, Toas, Ephemerides, Templates, Pipelineimages, Pipelinefiles, Pulsartargets
@@ -601,7 +602,7 @@ def get_proc_embargo(proc_id, client, url, token):
     # Check for valid processing ID
     if not (proc_data == None):
         embargoEnd = proc_data['embargoEnd']
-        return pd.to_datetime(embargoEnd)
+        return pytz.utc.localize(pd.to_datetime(embargoEnd).to_pydatetime())
     else:
         return
 
