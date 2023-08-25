@@ -177,7 +177,6 @@ def generate_images(
         clean_file,
         raw_scrunched,
         clean_scrunched,
-        residuals,
         template,
         ephemeris,
         rcvr="LBAND",
@@ -191,38 +190,8 @@ def generate_images(
     # Should these expected outputs change, the conditions of this code should be re-assessed
 
     logger.info("Generating pipeline images")
-    image_data = []
-
-    # Generate SNR images for raw then cleaned file
-    image_data.append(generate_SNR_images(raw_scrunched,   'raw',     logger=logger))
-    image_data.append(generate_SNR_images(clean_scrunched, 'cleaned', logger=logger))
-
-
-
-    logger.info("----------------------------------------------")
-    logger.info("Generating TOA-based images")
-    logger.info("----------------------------------------------")
-
-
-    # logger.info("Producing single-obs image from modified MeerWatch residuals...")
-    for residual in residuals:
-        # get parameters from file name
-        nchan = int(residual.split('zap.')[1].split('ch')[0])
-        nsub  = int(residual.split('p')[-1].split('t')[0])
-        archive_extension = residual.split('.')[1]
-
-        if "dm_corrected" in residual:
-            dm_corrected = "dmcorrected_"
-        else:
-            dm_corrected = ""
-
-        if nchan == 1 and nsub == 1:
-            logger.info(f"Not processing {residual} because nchan == 1 and nsub == 1")
-        elif os.path.getsize(residual) == 0:
-            logger.warning(f"Not processsing {residual} as the file is empry")
-        else:
-            logger.info(f"Processing {residual}")
-            plot_toas_fromarr(residual, pid=pid, sequential=False, verb=True, rcvr=rcvr, nchan=nchan, out_file=f"toas_{dm_corrected}{archive_extension}.png")
+    generate_SNR_images(raw_scrunched,   'raw',     logger=logger)
+    generate_SNR_images(clean_scrunched, 'cleaned', logger=logger)
 
 
 
@@ -260,25 +229,42 @@ def generate_results(
     logger.info("Reading in DM values")
     with open(dm_file, "r") as f:
         lines = f.readlines()
-        results["dm"] = float(lines[0].split()[-1])
-        results["dm_err"] = float(lines[1].split()[-1])
-        results["dm_epoch"] = float(lines[2].split()[-1])
+        dm = lines[0].split()[-1]
+        if dm == "None":
+            results["dm"] = None
+        else:
+            results["dm"] = float(dm)
+
+        dm_err = lines[1].split()[-1]
+        if dm_err == "None":
+            results["dm_err"] = None
+        else:
+            results["dm_err"] = float(dm_err)
+
+        dm_epoch = lines[2].split()[-1]
+        if dm_epoch == "None":
+            results["dm_epoch"] = None
+        else:
+            results["dm_epoch"] = float(dm_epoch)
+
         dm_chi2r = lines[3].split()[-1]
         if dm_chi2r == "None":
             results["dm_chi2r"] = None
         else:
             results["dm_chi2r"] = float(dm_chi2r)
+
         dm_tres = lines[4].split()[-1]
         if dm_tres == "None":
             results["dm_tres"] = None
         else:
             results["dm_tres"] = float(dm_chi2r)
+
         rm = lines[5].split()[-1]
         if rm == "None" or rm == "RM:":
             results["rm"] = None
         else:
-            print(rm)
             results["rm"] = float(rm)
+
         rm_err = lines[6].split()[-1]
         if rm_err == "None" or rm_err == "RM_ERR:":
             results["rm_err"] = None
@@ -315,7 +301,6 @@ def main():
     parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive", required=True)
     parser.add_argument("-cleanFp", dest="cleanFp", help="Frequency and polarisation scrunched cleaned archive", required=True)
     parser.add_argument("-rawFp", dest="rawFp", help="Frequency and polarisation scrunched raw archive", required=True)
-    parser.add_argument("-residuals", dest="residuals", help="TOA residuals file", required=True, nargs='*')
     parser.add_argument("-template", dest="template", help="Path to par file for pulsar", required=True)
     parser.add_argument("-parfile", dest="parfile", help="Path to par file for pulsar", required=True)
     parser.add_argument("-rcvr", dest="rcvr", help="Bandwidth label of the receiver (LBAND, UHF)", required=True)
@@ -331,7 +316,6 @@ def main():
         args.cleanedfile,
         args.rawFp,
         args.cleanFp,
-        args.residuals,
         args.template,
         args.parfile,
         rcvr="LBAND",
