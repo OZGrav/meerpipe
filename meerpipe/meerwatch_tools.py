@@ -23,7 +23,7 @@ import pandas as pd
 from astropy.time import Time
 
 # Custom imports
-from binary_tools import is_binary, get_binphase, read_par
+from meerpipe.binary_tools import is_binary, get_binphase, read_par
 
 # Constants
 DAYPERYEAR = 365.25
