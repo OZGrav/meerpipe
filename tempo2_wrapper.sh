@@ -36,7 +36,7 @@ echo "----------------------------------"
 tempo2 -nofit -output general2 -s "{bat} {post} {err} {freq} {post_phase} {flags}\n" -outfile ${archive}.residual -set START 40000 -set FINISH 99999  -nobs 1000000 -npsr 1 ${select_command} -f ${ephemeris} ${archive%%.tim}.tim  && returncode=$? || returncode=$?
 if [[ ${returncode} -ne 134 && ${returncode} -ne 137 && ${returncode} -ne 0 ]]; then
     echo "Errorcode: ${returncode}. Tempo error other than lack of high S/N data error."
-    exit returncode
+    exit $returncode
 elif [[ ${returncode} == 134 || ${returncode} == 137 ]]; then
     echo "Errorcode: ${returncode}. No input data due to the logic ${select_logic}"
 fi
