@@ -30,16 +30,28 @@ def normalise_profile(profile):
 
 
 def make_profile_plot(profile_data):
-    fig, ax = plt.subplots(figsize=(10,6))
+    fig, (ax, axt, axl, axc) = plt.subplots(
+        4, 1,
+        gridspec_kw={'height_ratios': [6, 1, 1, 1]},
+        figsize=(10,12),
+        sharex=True,
+    )
+    plt.subplots_adjust(wspace=0, hspace=0)
     totals  = []
     linears = []
     circles = []
+    total_profiles  = []
+    linear_profiles = []
+    circle_profiles = []
     for profile in profile_data:
         phase = list(range(profile.shape[3]))
         noramlise_by = max(profile[0][0][0][:])
         total_profile    = profile[0][0][0][:] / noramlise_by
         linear_profile   = np.sqrt(profile[0][1][0][:]**2 + profile[0][2][0][:]**2) / noramlise_by
         circular_profile = profile[0][3][0][:] / noramlise_by
+        total_profiles.append(total_profile)
+        linear_profiles.append(linear_profile)
+        circle_profiles.append(circular_profile)
         totals.append( ax.plot(phase, total_profile,    alpha=0.2, label='Total',    c="black")[0])
         linears.append(ax.plot(phase, linear_profile,   alpha=0.2, label='Linear',   c="red")[0])
         circles.append(ax.plot(phase, circular_profile, alpha=0.2, label='Circular', c="blue")[0])
@@ -47,7 +59,19 @@ def make_profile_plot(profile_data):
     # Only plot the unique labels https://stackoverflow.com/questions/13588920/stop-matplotlib-repeating-labels-in-legend
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
-    plt.legend(by_label.values(), by_label.keys())
+    ax.legend(by_label.values(), by_label.keys())
+
+    axt.set_ylim([-0.5, 0.5])
+    axl.set_ylim([-0.5, 0.5])
+    axc.set_ylim([-0.5, 0.5])
+
+    total_mean  = np.mean(np.array(total_profiles),  axis=0)
+    linear_mean = np.mean(np.array(linear_profiles), axis=0)
+    circle_mean = np.mean(np.array(circle_profiles), axis=0)
+    total_residual  = axt.plot(phase, np.zeros(len(total_mean)), label='Total',    c="black")[0]
+    linear_residual = axl.plot(phase, np.zeros(len(total_mean)), label='Linear',   c="red")[0]
+    circle_residual = axc.plot(phase, np.zeros(len(total_mean)), label='Circular', c="blue")[0]
+
 
     plt.savefig("profile.png")
 
@@ -64,7 +88,12 @@ def make_profile_plot(profile_data):
         linears[frame].set_alpha(1)
         circles[frame].set_alpha(1)
 
-        return tuple(totals + linears + circles)
+        # Update the residuals
+        total_residual.set_ydata(np.array(total_profiles)[frame]   - total_mean)
+        linear_residual.set_ydata(np.array(linear_profiles)[frame] - linear_mean)
+        circle_residual.set_ydata(np.array(circle_profiles)[frame] - circle_mean)
+
+        return tuple(totals + linears + circles + [total_residual, linear_residual, circle_residual])
     ani = animation.FuncAnimation(fig=fig, func=update_profile_alpha, frames=len(profile_data), interval=500)
     ani.save(filename="profile.apng", writer="pillow")
 
