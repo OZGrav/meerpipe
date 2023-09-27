@@ -205,7 +205,7 @@ def generate_images(
 def generate_results(
         snr,
         dm_file,
-        cleaned_file,
+        cleaned_FTp_file,
         dynspec_file,
         logger=None,
     ):
@@ -275,7 +275,7 @@ def generate_results(
     results["sn"] = float(snr)
 
     # Calculate flux
-    comm = f"pdv -FTp -f {cleaned_file}"
+    comm = f"pdv -f {cleaned_FTp_file}"
     logger.info("Running flux calc command:")
     logger.info(comm)
     args = shlex.split(comm)
@@ -299,8 +299,9 @@ def main():
     parser.add_argument("-pid", dest="pid", help="Project id (e.g. PTA)", required=True)
     parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
     parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive", required=True)
+    parser.add_argument("-rawFp", dest="rawFp", help="Frequency, time  and polarisation scrunched raw archive", required=True)
     parser.add_argument("-cleanFp", dest="cleanFp", help="Frequency and polarisation scrunched cleaned archive", required=True)
-    parser.add_argument("-rawFp", dest="rawFp", help="Frequency and polarisation scrunched raw archive", required=True)
+    parser.add_argument("-cleanFTp", dest="cleanFTp", help="Frequency, time and polarisation scrunched cleaned archive", required=True)
     parser.add_argument("-template", dest="template", help="Path to par file for pulsar", required=True)
     parser.add_argument("-parfile", dest="parfile", help="Path to par file for pulsar", required=True)
     parser.add_argument("-rcvr", dest="rcvr", help="Bandwidth label of the receiver (LBAND, UHF)", required=True)
@@ -328,7 +329,7 @@ def main():
     generate_results(
         args.snr,
         args.dmfile,
-        args.cleanedfile,
+        args.cleanFTp,
         dynspec_file,
         logger=logger,
     )
