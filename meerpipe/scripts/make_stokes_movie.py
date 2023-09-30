@@ -6,9 +6,9 @@ from collections import OrderedDict
 
 import psrchive as ps
 
-
 def grab_profile_data(archives, sn_min=20):
     profiles = []
+    utcs = []
     for archive in archives:
         arch = ps.Archive_load(archive)
         arch.remove_baseline()
@@ -21,7 +21,8 @@ def grab_profile_data(archives, sn_min=20):
             rotate_by = prof.find_max_phase() - 0.5
             arch.rotate_phase(rotate_by)
             profiles.append(arch.get_data())
-    return profiles
+            utcs.append(archive.split("/")[-1].split("_")[1])
+    return profiles, utcs
 
 
 def normalise_profile(profile):
@@ -29,7 +30,7 @@ def normalise_profile(profile):
     return profile / max(profile)
 
 
-def make_profile_plot(profile_data):
+def make_profile_plot(profile_data, utcs):
     fig, (ax, axt, axl, axc) = plt.subplots(
         4, 1,
         gridspec_kw={'height_ratios': [6, 1, 1, 1]},
@@ -93,9 +94,12 @@ def make_profile_plot(profile_data):
         linear_residual.set_ydata(np.array(linear_profiles)[frame] - linear_mean)
         circle_residual.set_ydata(np.array(circle_profiles)[frame] - circle_mean)
 
+        # Update title
+        ax.set_title(utcs[frame])
+
         return tuple(totals + linears + circles + [total_residual, linear_residual, circle_residual])
     ani = animation.FuncAnimation(fig=fig, func=update_profile_alpha, frames=len(profile_data), interval=500)
-    ani.save(filename="profile.apng", writer="pillow")
+    ani.save(filename="profile.gif", writer="pillow")
 
 
 
@@ -105,5 +109,5 @@ def main():
     parser.add_argument("-s", "--sn_min", help="Minium signal to noise ratio of archive to include in the movie.", default=20)
     args = parser.parse_args()
 
-    profile_data = grab_profile_data(args.archives, sn_min=args.sn_min)
-    make_profile_plot(profile_data)
+    profile_data, utcs = grab_profile_data(args.archives, sn_min=args.sn_min)
+    make_profile_plot(profile_data, utcs)
