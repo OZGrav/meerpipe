@@ -11,7 +11,7 @@ from astropy.io import fits
 from astropy.coordinates import (SkyCoord, Longitude, Latitude)
 
 from meerpipe.data_load import UHF_TSKY_FILE, CHIPASS_EQU_CSV
-from meerpipe.archive_utils import get_rcvr
+from meerpipe.archive_utils import get_band
 
 #=============================================================================
 
@@ -142,13 +142,13 @@ def get_radec_new(parfile):
     return(rajd, decjd)
 
 
-def get_tsky_updated(rajd, decjd, psr, rcvr):
+def get_tsky_updated(rajd, decjd, psr, band):
 
     # some constants
     G = 19 #K
 
     # Calculate Tsky as a function of the chosen receiver
-    if (rcvr == "LBAND"):
+    if (band == "LBAND"):
 
         # Get Tsky from Simon's code. Input arguments are RAJD and DECJD
         # Convert Tsky to Jy and subtact 3372mK as per SARAO specs
@@ -226,7 +226,7 @@ def get_tsky_updated(rajd, decjd, psr, rcvr):
         tsky_jy = (new_scaling_factor*(tsky-3372)) * (G / 1000)
         print ("Tsky (new) in Jy: {0}".format(tsky_jy))
 
-    elif (rcvr == "UHF"):
+    elif (band == "UHF"):
 
         # Implement Simon's new code for UHF Tsky calculation
 
@@ -254,15 +254,15 @@ def get_tsky_updated(rajd, decjd, psr, rcvr):
 #=============================================================================
 
 #Compute observed RMS, multiplier and flux calibrate the data
-def get_Ssys(tsky_jy,Nant,rcvr):
+def get_Ssys(tsky_jy,Nant,band):
     "Return Ssys at 1390 MHz / 800 MHz"
 
     G = 19.0 #K
 
-    if (rcvr == "LBAND"):
+    if (band == "LBAND"):
         SEFD = 390.0 #SEFD at 1390 MHz = 390 Jy (one dish)
         freq = 1390
-    elif (rcvr == "UHF"):
+    elif (band == "UHF"):
         Tsys = 18.5 # K (one dish)
         SEFD = Tsys * G
         freq = 800
@@ -308,22 +308,22 @@ def get_offrms(archive):
     return offpulse_rms_list
 
 
-def get_median_offrms(offrms_freq_dictionary, rcvr):
+def get_median_offrms(offrms_freq_dictionary, band):
     "Select channels centered at 1390 MHz and compute the median of their off-pulse rms values"
 
     # make distinctions based on receiver
-    if (rcvr == "LBAND"):
+    if (band == "LBAND"):
         ref_freq = 1390
         hi_freq = 1400
         lo_freq = 1383
-    elif (rcvr == "UHF"):
+    elif (band == "UHF"):
         ref_freq = 800
         hi_freq = 805
         lo_freq = 795
         #hi_freq = 810
         #lo_freq = 790
 
-    print ("Computing median of off-pulse rms values of channels centered at {0} MHz.. ({1})".format(ref_freq, rcvr))
+    print ("Computing median of off-pulse rms values of channels centered at {0} MHz.. ({1})".format(ref_freq, band))
     selected_offrms = []
     selected_freqs = []
     #for item in offrms_freq_dictionary.keys(): - 2TO3
@@ -375,12 +375,12 @@ def main():
     params = get_listinfo(obsheader_path)
 
     # determine the receiver in use
-    rcvr = get_rcvr(params)
+    band = get_band(params["BW"], float(params["FREQ"]))
 
     print ("Processing {0}:{1}".format(psr_name, obs_name))
     print ("============================================")
     print ("Reference par file = {0}".format(str(args.parfile)))
-    print ("Receiver = {0}".format(str(rcvr)))
+    print ("Receiver = {0}".format(str(band)))
 
     # Get the RA and Dec from the par file if possible
     print (args.parfile)
@@ -390,15 +390,15 @@ def main():
     if str(args.parfile) == "None" or rajd is None:
         rajd, decjd = get_radec(psr_name)
 
-    if rcvr.startswith("SBAND"):
+    if band.startswith("SBAND"):
         multiplier = 1.0
     else:
         # get receiver dependent tsky
-        tsky_jy = get_tsky_updated(rajd, decjd, psr_name, rcvr)
+        tsky_jy = get_tsky_updated(rajd, decjd, psr_name, band)
 
         #Get receiver dependent ssys (LBAND -> 1390 MHz, UHF -> 800 MHz)
         nant = len(params["ANTENNAE"].split(","))
-        ssys = get_Ssys(tsky_jy, nant, rcvr)
+        ssys = get_Ssys(tsky_jy, nant, band)
 
         #Get expected RMS in a single channel at 1390 MHz / 800 MHz
         info_TP = get_info(args.tpfile)
@@ -413,7 +413,7 @@ def main():
         offrms_freq = dict(list(zip(freq_list, offrms_list)))
 
         #Getting median rms of off-pulse rms values for ~20 channels centered at 1390 MHz
-        observed_rms = get_median_offrms(offrms_freq, rcvr)
+        observed_rms = get_median_offrms(offrms_freq, band)
 
         #Multiplier
         multiplier = expected_rms/observed_rms

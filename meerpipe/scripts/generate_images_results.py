@@ -17,8 +17,7 @@ from coast_guard import clean_utils
 #Importing scintools (@dreardon)
 from scintools.dynspec import Dynspec
 
-from meerpipe.initialize import setup_logging
-from meerpipe.meerwatch_tools import plot_toas_fromarr
+from meerpipe.utils import setup_logging
 from meerpipe.archive_utils import template_adjuster, calc_dynspec_zap_fraction
 
 
