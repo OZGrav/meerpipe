@@ -4,6 +4,7 @@
 # CSH SCRIPT TO SET UP ENVIRONMENT FOR OPERATION OF MEERPIPE_DB - PYTHON3
 # SHOULD PROVIDE IDENTICAL INSTRUCTIONS TO ENV_SETUP.SH
 
+module use /apps/users/pulsar/common/modulefiles
 if ( "${SYS_ARCH}" == "milan" ) then
     # Using new Ngarrgu Tindebeek (NT) cluster
     module use /apps/users/pulsar/milan/gcc-11.3.0/modulefiles
@@ -31,9 +32,3 @@ if ( ${SYS_ARCH} == "skylake" ) then
     module load scipy/1.3.0-python-3.6.4
     module load astropy/3.1.2-python-3.6.4
 endif
-
-# SET ENVIRONMENT VARIABLES
-setenv COAST_GUARD /fred/oz005/software/MeerGuard
-setenv COASTGUARD_CFG $COAST_GUARD/configurations
-setenv PATH $PATH\:$COAST_GUARD\:$COAST_GUARD/coast_guard
-setenv PYTHONPATH $PYTHONPATH\:$COAST_GUARD\:$COAST_GUARD/coast_guard

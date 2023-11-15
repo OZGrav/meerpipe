@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "meerpipe"
+version = "3.0.0"
+description = "Pulsar timing data processing pipeline for MeerTime data."
+authors = ["Your Name <you@example.com>"]
+packages = [{include = "meerpipe"}]
+include = ["meerpip/data/CHIPASS_Equ.fits", "meerpip/data/UHF_Tsky.dat", "meerpip/data/meerpipe_rms_msps.txt.dat"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.scripts]
+fluxcal                 = "meerpipe.scripts.fluxcal:main"
+generate_images_results = "meerpipe.scripts.generate_images_results:main"
+dlyfix                  = "meerpipe.scripts.dlyfix:main"
+make_stokes_movie       = "meerpipe.scripts.make_stokes_movie:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,1 @@
+Scripts that are ment to be executed onto the command line so they will be added to the $PATH

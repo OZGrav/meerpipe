@@ -1,0 +1,41 @@
+#Config             STT_true-STT_hdr 2Bin      Validity Range
+#(us)         Corr     (MJD)        (Date)
+# Legacy values for old instruments.
+
+* 1K mode, PTM not applied by PTUSE [PTM value -24.629 us]
+mjd > 58526.21089
+mjd < 70000.0000
+delay += -24.629 us
+
+* 1K mode PTM applied by PTUSE [PTM value -24.630]
+mjd > 58550.14921
+mjd < 70000.00000
+delay += 24.630 us
+
+* 1K mode, AJ added 1 sample [1.196 us] delay to PTUSE
+mjd > 58550.14921 
+mjd < 70000.00000
+delay += -1.196 us
+
+* 1K mode, PTM sensor changed from -24 to -19 us [4.785 us]
+mjd > 58557.14847
+mjd < 70000.00000
+delay += -4.785 us
+
+* 1K mode, AJ changed from 1 sample delay, to 0.5 sample delay in PTUSE
+mjd > 58575.95951
+mjd < 70000.00000
+delay += 0.5981308411 us
+
+*  306 microsec offset in CBF
+mjd > 58550
+mjd < 58690
+delay  += -306.243 us
+
+* Half sample offset in PTUSE 
+mjd > 58526
+mjd < 59261.18
+delay += -1.1962616822 us
+
+
+
