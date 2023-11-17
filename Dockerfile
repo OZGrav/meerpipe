@@ -58,6 +58,7 @@ RUN apt-get update && \
     gsl-bin \
     libgsl-dev \
     bc  && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get -y clean
 
@@ -246,7 +247,6 @@ RUN cd $PSRCHIVE_DIR && \
     ./bootstrap && \
     ./configure --prefix=$PSRCHIVE --with-x --x-libraries=/usr/lib/x86_64-linux-gnu --with-psrxml-dir=$PSRXML/install --enable-shared --enable-static \
     F77=gfortran \
-    PYTHON=$(which python3)\
     CPPFLAGS="-I"$CALCEPH"/install/include -L"$CALCEPH"/install/lib/ -I"$PGPLOT_DIR"/include/ -L"$PGPLOT_DIR"/lib/" \
     CXXFLAGS="-I"$CALCEPH"/install/include -L"$CALCEPH"/install/lib/ -I"$PGPLOT_DIR"/include/ -L"$PGPLOT_DIR"/lib/" \
     LDFLAGS="-L"$PSRXML"/install/lib -L"$CALCEPH"/install/lib/  -L"$PGPLOT_DIR"/lib/ " LIBS="-lpsrxml -lxml2" && \
