@@ -108,11 +108,12 @@ ENV C_INCLUDE_PATH $C_INCLUDE_PATH:$PGPLOT_DIR/include
 # - build psrchive
 RUN wget http://www.atnf.csiro.au/people/pulsar/psrcat/downloads/psrcat_pkg.tar.gz && tar -xvf psrcat_pkg.tar.gz -C $PSRHOME && rm psrcat_pkg.tar.gz && \
     wget https://www.imcce.fr/content/medias/recherche/equipes/asd/calceph/calceph-3.5.1.tar.gz && tar -xvf calceph-3.5.1.tar.gz -C $PSRHOME && rm calceph-3.5.1.tar.gz && \
+    wget https://sourceforge.net/projects/swig/files/swig/swig-4.0.1/swig-4.0.1.tar.gz && tar -xvf swig-4.0.1.tar.gz -C $PSRHOME && rm swig-4.0.1.tar.gz && \\
+    git config http.postBuffer 524288000 && \
     git clone git://git.code.sf.net/p/tempo/tempo tempo && \
     git clone https://bitbucket.org/psrsoft/tempo2.git && \
     git clone git://git.code.sf.net/p/psrchive/code psrchive && \
-    git clone https://github.com/SixByNine/psrxml.git && \
-    wget https://sourceforge.net/projects/swig/files/swig/swig-4.0.1/swig-4.0.1.tar.gz && tar -xvf swig-4.0.1.tar.gz -C $PSRHOME && rm swig-4.0.1.tar.gz
+    git clone https://github.com/SixByNine/psrxml.git
 
 
 # set swig environment
