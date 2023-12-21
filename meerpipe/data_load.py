@@ -19,3 +19,6 @@ RM_CAT = os.path.join(datadir, 'meerpipe_rms_msps.txt')
 
 # Delay config file for the PTUSE originally obtained from the dlyfix repo
 DELAY_CONFIG = os.path.join(datadir, 'ptuse.dlycfg')
+
+# Frequency reference file use when chopping the frequency edge channels of an archive
+FREQ_REF = os.path.join(datadir, '928ch_frequency_reference.npy')
