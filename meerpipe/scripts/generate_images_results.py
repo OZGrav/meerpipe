@@ -190,7 +190,8 @@ def generate_images(
 
     logger.info("Generating pipeline images")
     generate_SNR_images(raw_scrunched,   'raw',     logger=logger)
-    generate_SNR_images(clean_scrunched, 'cleaned', logger=logger)
+    if clean_scrunched:
+        generate_SNR_images(clean_scrunched, 'cleaned', logger=logger)
 
 
 
@@ -198,8 +199,9 @@ def generate_images(
     logger.info("Generating dynamic spectra using psrflux")
     logger.info("----------------------------------------------")
 
-    generate_dynamicspec_images(raw_file,   template, 'raw',     logger=logger)
-    generate_dynamicspec_images(clean_file, template, 'cleaned', logger=logger)
+    if clean_file:
+        generate_dynamicspec_images(raw_file,   template, 'raw',     logger=logger)
+        generate_dynamicspec_images(clean_file, template, 'cleaned', logger=logger)
 
 def generate_results(
         snr,
@@ -297,15 +299,15 @@ def main():
     parser = argparse.ArgumentParser(description="Flux calibrate MTime data")
     parser.add_argument("-pid", dest="pid", help="Project id (e.g. PTA)", required=True)
     parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
-    parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive", required=True)
+    parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive")
     parser.add_argument("-rawFp", dest="rawFp", help="Frequency, time  and polarisation scrunched raw archive", required=True)
-    parser.add_argument("-cleanFp", dest="cleanFp", help="Frequency and polarisation scrunched cleaned archive", required=True)
-    parser.add_argument("-cleanFTp", dest="cleanFTp", help="Frequency, time and polarisation scrunched cleaned archive", required=True)
-    parser.add_argument("-template", dest="template", help="Path to par file for pulsar", required=True)
+    parser.add_argument("-cleanFp", dest="cleanFp", help="Frequency and polarisation scrunched cleaned archive")
+    parser.add_argument("-cleanFTp", dest="cleanFTp", help="Frequency, time and polarisation scrunched cleaned archive")
+    parser.add_argument("-template", dest="template", help="Path to par file for pulsar")
     parser.add_argument("-parfile", dest="parfile", help="Path to par file for pulsar", required=True)
     parser.add_argument("-rcvr", dest="rcvr", help="Bandwidth label of the receiver (LBAND, UHF)", required=True)
-    parser.add_argument("-snr", dest="snr", help="Signal to noise ratio of the cleaned profile", required=True)
-    parser.add_argument("-dmfile", dest="dmfile", help="The text file with the SM results", required=True)
+    parser.add_argument("-snr", dest="snr", help="Signal to noise ratio of the cleaned profile")
+    parser.add_argument("-dmfile", dest="dmfile", help="The text file with the SM results")
     args = parser.parse_args()
 
     logger = setup_logging(console=True)
@@ -322,16 +324,17 @@ def main():
         logger=logger,
     )
 
-    # Dynamic spectrum file will be created in generate_images
-    dynspec_file = f"{args.cleanedfile}.dynspec"
+    if args.cleanedfile:
+        # Dynamic spectrum file will be created in generate_images
+        dynspec_file = f"{args.cleanedfile}.dynspec"
 
-    generate_results(
-        args.snr,
-        args.dmfile,
-        args.cleanFTp,
-        dynspec_file,
-        logger=logger,
-    )
+        generate_results(
+            args.snr,
+            args.dmfile,
+            args.cleanFTp,
+            dynspec_file,
+            logger=logger,
+        )
 
 
 if __name__ == '__main__':
