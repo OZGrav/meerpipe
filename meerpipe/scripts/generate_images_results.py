@@ -258,7 +258,7 @@ def generate_results(
         if dm_tres == "None":
             results["dm_tres"] = None
         else:
-            results["dm_tres"] = float(dm_chi2r)
+            results["dm_tres"] = float(dm_tres)
 
         rm = lines[5].split()[-1]
         if rm == "None" or rm == "RM:":
