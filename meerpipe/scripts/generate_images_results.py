@@ -178,6 +178,7 @@ def generate_images(
         clean_scrunched,
         template,
         ephemeris,
+        raw_only=False,
         rcvr="LBAND",
         logger=None,
     ):
@@ -190,16 +191,15 @@ def generate_images(
 
     logger.info("Generating pipeline images")
     generate_SNR_images(raw_scrunched,   'raw',     logger=logger)
-    if clean_scrunched:
+    if not raw_only:
         generate_SNR_images(clean_scrunched, 'cleaned', logger=logger)
 
 
 
-    logger.info("----------------------------------------------")
-    logger.info("Generating dynamic spectra using psrflux")
-    logger.info("----------------------------------------------")
-
-    if clean_file:
+    if not raw_only:
+        logger.info("----------------------------------------------")
+        logger.info("Generating dynamic spectra using psrflux")
+        logger.info("----------------------------------------------")
         generate_dynamicspec_images(raw_file,   template, 'raw',     logger=logger)
         generate_dynamicspec_images(clean_file, template, 'cleaned', logger=logger)
 
@@ -297,41 +297,51 @@ def generate_results(
 
 def main():
     parser = argparse.ArgumentParser(description="Flux calibrate MTime data")
-    parser.add_argument("-pid", dest="pid", help="Project id (e.g. PTA)", required=True)
-    parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
-    parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive")
-    parser.add_argument("-rawFp", dest="rawFp", help="Frequency, time  and polarisation scrunched raw archive", required=True)
-    parser.add_argument("-cleanFp", dest="cleanFp", help="Frequency and polarisation scrunched cleaned archive")
-    parser.add_argument("-cleanFTp", dest="cleanFTp", help="Frequency, time and polarisation scrunched cleaned archive")
-    parser.add_argument("-template", dest="template", help="Path to par file for pulsar")
-    parser.add_argument("-parfile", dest="parfile", help="Path to par file for pulsar", required=True)
-    parser.add_argument("-rcvr", dest="rcvr", help="Bandwidth label of the receiver (LBAND, UHF)", required=True)
-    parser.add_argument("-snr", dest="snr", help="Signal to noise ratio of the cleaned profile")
-    parser.add_argument("-dmfile", dest="dmfile", help="The text file with the SM results")
+    parser.add_argument("--pid", help="Project id (e.g. PTA)", required=True)
+    parser.add_argument("--raw_file", help="Raw (psradded) archive", required=True)
+    parser.add_argument("--raw_Fp", help="Frequency, time  and polarisation scrunched raw archive", required=True)
+    parser.add_argument("--cleaned_file", help="Cleaned (psradded) archive")
+    parser.add_argument("--clean_Fp", help="Frequency and polarisation scrunched cleaned archive")
+    parser.add_argument("--clean_FTp", help="Frequency, time and polarisation scrunched cleaned archive")
+    parser.add_argument("--template", help="Path to par file for pulsar")
+    parser.add_argument("--par_file", help="Path to par file for pulsar", required=True)
+    parser.add_argument("--rcvr", help="Bandwidth label of the receiver (LBAND, UHF)", required=True)
+    parser.add_argument("--snr", help="Signal to noise ratio of the cleaned profile")
+    parser.add_argument("--dm_file", help="The text file with the SM results")
+    parser.add_argument("--raw_only", help="The text file with the SM results", action='store_true')
     args = parser.parse_args()
 
     logger = setup_logging(console=True)
 
     generate_images(
         args.pid,
-        args.rawfile,
-        args.cleanedfile,
-        args.rawFp,
-        args.cleanFp,
+        args.raw_file,
+        args.cleaned_file,
+        args.raw_Fp,
+        args.clean_Fp,
         args.template,
-        args.parfile,
+        args.par_file,
+        raw_only=args.raw_only,
         rcvr="LBAND",
         logger=logger,
     )
 
-    if args.cleanedfile:
+    if args.raw_only:
+        # Make empty files to prevent nextflow errors
+        with open("empty.dat", 'w'):
+            pass
+        with open("empty.dynspec", 'w'):
+            pass
+        with open("results.json", 'w'):
+            pass
+    else:
         # Dynamic spectrum file will be created in generate_images
-        dynspec_file = f"{args.cleanedfile}.dynspec"
+        dynspec_file = f"{args.cleaned_file}.dynspec"
 
         generate_results(
             args.snr,
-            args.dmfile,
-            args.cleanFTp,
+            args.dm_file,
+            args.clean_FTp,
             dynspec_file,
             logger=logger,
         )
