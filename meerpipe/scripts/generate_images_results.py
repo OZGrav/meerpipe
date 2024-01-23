@@ -205,6 +205,7 @@ def generate_images(
 
 def generate_results(
         snr,
+        flux,
         dm_file,
         cleaned_FTp_file,
         dynspec_file,
@@ -272,22 +273,9 @@ def generate_results(
         else:
             results["rm_err"] = float(rm_err)
 
-    # Add input SNR value
+    # Add input SNR and flux value
     results["sn"] = float(snr)
-
-    # Calculate flux
-    comm = f"pdv -f {cleaned_FTp_file}"
-    logger.info("Running flux calc command:")
-    logger.info(comm)
-    args = shlex.split(comm)
-    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-    proc.wait()
-    info = proc.stdout.read().decode("utf-8")
-    logger.info(f"pdv output: {info}")
-    flux = info.split("\n")[1].split()[6]
     results["flux"] = float(flux)
-
-    # TODO calculate RM
 
     # Dump results to json
     with open("results.json", "w") as f:
@@ -307,6 +295,7 @@ def main():
     parser.add_argument("--par_file", help="Path to par file for pulsar", required=True)
     parser.add_argument("--rcvr", help="Bandwidth label of the receiver (LBAND, UHF)", required=True)
     parser.add_argument("--snr", help="Signal to noise ratio of the cleaned profile")
+    parser.add_argument("--flux", help="Flux density of the cleaned profile")
     parser.add_argument("--dm_file", help="The text file with the SM results")
     parser.add_argument("--raw_only", help="The text file with the SM results", action='store_true')
     args = parser.parse_args()
@@ -340,6 +329,7 @@ def main():
 
         generate_results(
             args.snr,
+            args.flux,
             args.dm_file,
             args.clean_FTp,
             dynspec_file,
