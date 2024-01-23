@@ -355,60 +355,86 @@ def fluxcalibrate(archive,multiplier):
 #=============================================================================
 def main():
     parser = argparse.ArgumentParser(description="Flux calibrate MTime data")
-    parser.add_argument("-psrname", dest="psrname", help="psrname", required=True)
-    parser.add_argument("-obsname", dest="obsname", help="Observation name", required=True)
-    parser.add_argument("-obsheader", dest="obsheader", help="obsheader", required=True)
-    parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive", required=True)
-    parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
-    parser.add_argument("-tpfile", dest="tpfile", help="Time and polariation scruched clenaed archive", required=True)
-    parser.add_argument("-parfile", dest="parfile", help="Path to par file for pulsar", required=True)
+    parser.add_argument(
+        "--psr_name",
+        help="psrname",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--obs_name",
+        help="Observation name",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--obs_header",
+        help="obsheader",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--archive_file",
+        help="psradded archive",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--raw_file",
+        help="Raw (psradded) archive",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--tp_file",
+        help="Time and polariation scruched clenaed archive",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--par_file",
+        help="Path to par file for pulsar",
+        type=str,
+        required=True,
+    )
     args = parser.parse_args()
 
-
-    psr_name = str(args.psrname)
-    obs_name = str(args.obsname)
-    obsheader_path = str(args.obsheader)
-    raw_file = str(args.rawfile)
-    clean_file = str(args.cleanedfile)
-
     # extract the header parameters
-    params = get_listinfo(obsheader_path)
+    params = get_listinfo(args.obs_header)
 
     # determine the receiver in use
     band = get_band(params["BW"], float(params["FREQ"]))
 
-    print ("Processing {0}:{1}".format(psr_name, obs_name))
+    print ("Processing {0}:{1}".format(args.psr_name, args.psr_name))
     print ("============================================")
-    print ("Reference par file = {0}".format(str(args.parfile)))
-    print ("Receiver = {0}".format(str(band)))
+    print ("Reference par file = {0}".format(args.par_file))
+    print ("Receiver = {0}".format(band))
 
     # Get the RA and Dec from the par file if possible
-    print (args.parfile)
-    if str(args.parfile) != "None":
-        rajd, decjd = get_radec_new(str(args.parfile))
+    rajd, decjd = get_radec_new(args.par_file)
 
-    if str(args.parfile) == "None" or rajd is None:
-        rajd, decjd = get_radec(psr_name)
+    if rajd is None:
+        rajd, decjd = get_radec(args.psr_name)
 
     if band.startswith("SBAND"):
         multiplier = 1.0
     else:
         # get receiver dependent tsky
-        tsky_jy = get_tsky_updated(rajd, decjd, psr_name, band)
+        tsky_jy = get_tsky_updated(rajd, decjd, args.psr_name, band)
 
         #Get receiver dependent ssys (LBAND -> 1390 MHz, UHF -> 800 MHz)
         nant = len(params["ANTENNAE"].split(","))
         ssys = get_Ssys(tsky_jy, nant, band)
 
         #Get expected RMS in a single channel at 1390 MHz / 800 MHz
-        info_TP = get_info(args.tpfile)
+        info_TP = get_info(args.tp_file)
         expected_rms = get_expectedRMS(info_TP, ssys)
 
         print ("============")
         #Get centre-frequencies and off-pulse rms for the .add file - and creating a dictonary
-        freqinfo = get_freqlist(raw_file)
+        freqinfo = get_freqlist(args.archive_file)
         freq_list = freqinfo[-2].split(",")
-        offrms_list = get_offrms(raw_file)
+        offrms_list = get_offrms(args.archive_file)
         #offrms_freq = dict(zip(freq_list,offrms_list)) - 2TO3
         offrms_freq = dict(list(zip(freq_list, offrms_list)))
 
@@ -419,18 +445,14 @@ def main():
         multiplier = expected_rms/observed_rms
 
     print ("============")
-    print ("Multiplier is: {0}".format(multiplier))
+    print (f"Multiplier is: {multiplier}")
     print ("============")
 
-    #Flux calibrate all the raw and cleaned file
-    fluxcalibrate(raw_file, multiplier)
-    fluxcalibrate(clean_file, multiplier)
+    #Flux calibrate the archive file
+    fluxcalibrate(args.archive_file, multiplier)
 
     print ("============")
-    print ("Flux calibrated {0}:{1}".format(psr_name, obs_name))
-    #sys.exit()
-
-
+    print (f"Flux calibrated {args.psr_name}:{args.archive_file}")
     print ("=================================================")
 
 if __name__ == '__main__':
