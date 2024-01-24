@@ -21,6 +21,13 @@ from meerpipe.utils import setup_logging
 from meerpipe.archive_utils import template_adjuster, calc_dynspec_zap_fraction
 
 
+def return_none_or_float(value):
+    if value == "None":
+        return None
+    else:
+        return float(value)
+
+
 def generate_SNR_images(
         scrunched_file,
         label,
@@ -203,6 +210,7 @@ def generate_images(
         generate_dynamicspec_images(raw_file,   template, 'raw',     logger=logger)
         generate_dynamicspec_images(clean_file, template, 'cleaned', logger=logger)
 
+
 def generate_results(
         snr,
         flux,
@@ -229,49 +237,15 @@ def generate_results(
 
     # Read in DM values
     logger.info("Reading in DM values")
-    with open(dm_file, "r") as f:
-        lines = f.readlines()
-        dm = lines[0].split()[-1]
-        if dm == "None":
-            results["dm"] = None
-        else:
-            results["dm"] = float(dm)
-
-        dm_err = lines[1].split()[-1]
-        if dm_err == "None":
-            results["dm_err"] = None
-        else:
-            results["dm_err"] = float(dm_err)
-
-        dm_epoch = lines[2].split()[-1]
-        if dm_epoch == "None":
-            results["dm_epoch"] = None
-        else:
-            results["dm_epoch"] = float(dm_epoch)
-
-        dm_chi2r = lines[3].split()[-1]
-        if dm_chi2r == "None":
-            results["dm_chi2r"] = None
-        else:
-            results["dm_chi2r"] = float(dm_chi2r)
-
-        dm_tres = lines[4].split()[-1]
-        if dm_tres == "None":
-            results["dm_tres"] = None
-        else:
-            results["dm_tres"] = float(dm_tres)
-
-        rm = lines[5].split()[-1]
-        if rm == "None" or rm == "RM:":
-            results["rm"] = None
-        else:
-            results["rm"] = float(rm)
-
-        rm_err = lines[6].split()[-1]
-        if rm_err == "None" or rm_err == "RM_ERR:":
-            results["rm_err"] = None
-        else:
-            results["rm_err"] = float(rm_err)
+    with open(dm_file, 'r') as json_file:
+        dm_results = json.load(json_file)
+    results["dm"]       = return_none_or_float(dm_results["DM"])
+    results["dm_err"]   = return_none_or_float(dm_results["ERR"])
+    results["dm_epoch"] = return_none_or_float(dm_results["EPOCH"])
+    results["dm_chi2r"] = return_none_or_float(dm_results["CHI2R"])
+    results["dm_tres"]  = return_none_or_float(dm_results["TRES"])
+    results["rm"]       = return_none_or_float(dm_results["RM"])
+    results["rm_err"]   = return_none_or_float(dm_results["RM_ERR"])
 
     # Add input SNR and flux value
     results["sn"] = float(snr)
