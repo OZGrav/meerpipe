@@ -18,7 +18,7 @@ python = "^3.10"
 [tool.poetry.dev-dependencies]
 
 [tool.poetry.scripts]
-fluxcal                 = "meerpipe.scripts.fluxcal:main"
+fluxcal_meerkat         = "meerpipe.scripts.fluxcal_meerkat:main"
 generate_images_results = "meerpipe.scripts.generate_images_results:main"
 dlyfix                  = "meerpipe.scripts.dlyfix:main"
 make_stokes_movie       = "meerpipe.scripts.make_stokes_movie:main"
