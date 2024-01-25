@@ -380,12 +380,6 @@ def main():
         required=True,
     )
     parser.add_argument(
-        "--raw_file",
-        help="Raw (psradded) archive",
-        type=str,
-        required=True,
-    )
-    parser.add_argument(
         "--tp_file",
         help="Time and polariation scruched clenaed archive",
         type=str,
