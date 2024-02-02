@@ -9,7 +9,6 @@ include = [
     "meerpip/data/CHIPASS_Equ.fits",
     "meerpip/data/meerpipe_rms_msps.txt.dat",
     "meerpip/data/ptuse.dlycfg",
-    "meerpip/data/928ch_frequency_reference.npy",
 ]
 
 [tool.poetry.dependencies]
@@ -23,6 +22,7 @@ generate_images_results = "meerpipe.scripts.generate_images_results:main"
 dlyfix                  = "meerpipe.scripts.dlyfix:main"
 make_stokes_movie       = "meerpipe.scripts.make_stokes_movie:main"
 chop_edge_channels      = "meerpipe.scripts.chop_edge_channels:main"
+calc_max_nsub           = "meerpipe.scripts.calc_max_nsub:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
