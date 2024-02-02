@@ -1,3 +1,8 @@
+# Meerpipe
+
+![tests](https://github.com/OZGrav/meerpipe/actions/workflows/pytest.yml/badge.svg)
+![documentation](https://readthedocs.org/projects/meerpipe/badge/?version=latest)
+
 ## New Nextflow Pipeline
 
 This repository no longer contains the most recent version of meerpipe, it is now the python scripts used by the [nf-core-meerpipe repository](https://github.com/OZGrav/nf-core-meerpipe) and a [docker container](https://hub.docker.com/repository/docker/nickswainston/meerpipe/general) that can be used by the pipeline (mostly for testing).
