@@ -195,6 +195,9 @@ def chopping_utility(
     if cleaned_ar.get_nchan() == 1024:
         # If standard 1024 nchan obs check the number of channels removed
         assert chopped_ar.get_nchan() == 928
+    else:
+        # A simple check to ensure channels are a factor of 32
+        assert chopped_ar.get_nchan() % 32 == 0
 
     logger.info("Done extracting")
     # dedisperse is previously true
