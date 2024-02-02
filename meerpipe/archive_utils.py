@@ -18,7 +18,6 @@ from scintools.dynspec import Dynspec
 import psrchive as ps
 
 from meerpipe.utils import setup_logging
-from meerpipe.data_load import FREQ_REF
 
 def get_band(bw, freq):
     """
