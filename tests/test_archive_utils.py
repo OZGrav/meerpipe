@@ -10,7 +10,7 @@ TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), 'test_data')
 logger = setup_logging(console=True)
 
 def test_chopping_utility():
-    # Test archives for each bands that have been reduce to an nsub of two.
+    # Test archives for each bands that have been time and polarisation scrunched.
     test_archives = [
         # Standard 1024 nchan
         ("LBAND", "J0437-4715_2019-03-26-16:26:02_zap.ar", 1024, 928),
