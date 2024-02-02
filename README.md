@@ -1,6 +1,7 @@
 # Meerpipe
 
 ![tests](https://github.com/OZGrav/meerpipe/actions/workflows/pytest.yml/badge.svg)
+![docker](https://github.com/OZGrav/meerpipe/actions/workflows/docker_build_push.yml/badge.svg)
 ![documentation](https://readthedocs.org/projects/meerpipe/badge/?version=latest)
 
 ## New Nextflow Pipeline
