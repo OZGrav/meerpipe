@@ -295,8 +295,20 @@ def main():
             pass
         with open("empty.dynspec", 'w'):
             pass
-        with open("results.json", 'w'):
-            pass
+        results = {
+            "percent_rfi_zapped": None,
+            "dm": None,
+            "dm_err": None,
+            "dm_epoch": None,
+            "dm_chi2r": None,
+            "dm_tres": None,
+            "rm": None,
+            "rm_err": None,
+            "sn": None,
+            "flux": None,
+        }
+        with open("results.json", "w") as f:
+            json.dump(results, f, indent=1)
     else:
         # Dynamic spectrum file will be created in generate_images
         dynspec_file = f"{args.cleaned_file}.dynspec"
