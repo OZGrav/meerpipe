@@ -136,15 +136,16 @@ def calc_dynspec_zap_fraction(dynspec_file):
     return retval
 
 
-def chopping_utility(archive_path, logger=None):
+def chopping_utility(
+        archive_path,
+        band,
+        logger=None
+    ):
     """
     Chop the edge frequency channels of a meertime archive.
     """
     if logger is None:
         logger = setup_logging(console=True)
-
-    # recalling comparison frequency list (should be contiguous)
-    reference_928ch_freqlist  = np.load(FREQ_REF).tolist()
 
     # cloning archive and ensuring it has not been dedispersed
     cleaned_ar = ps.Archive_load(archive_path)
@@ -153,58 +154,48 @@ def chopping_utility(archive_path, logger=None):
     if is_dedispered:
         chopped_ar.dededisperse()
 
-    # check for channel count in header parameters
-    nchan = cleaned_ar.get_nchan()
+    # Work out highest and lowest frequency channels to cut outside of based on band
+    if band == "LBAND":
+        low_freq = 895.92
+        high_freq = 1671.87
+    elif band == "UHF":
+        low_freq = 569.4
+        high_freq = 1062.4
+    elif band == "SBAND_0":
+        low_freq = 1790.57
+        high_freq = 2583.57
+    elif band == "SBAND_1":
+        low_freq = 2009.0
+        high_freq = 2802.7
+    elif band == "SBAND_2":
+        low_freq = 2227.2
+        high_freq = 3020.9
+    elif band == "SBAND_3":
+        low_freq = 2446.2
+        high_freq = 3239.9
+    elif band == "SBAND_4":
+        low_freq = 2665.2
+        high_freq = 3458.9
 
-    # in theory, the new chopping technique is faster and would work for 1024
-    # however, just in case there's some caveat I (Andrew Cameron) haven't spotted, I will only implement it
-    # for non-1024 channel data
 
-    if (nchan == 1024):
-        logger.info("Defaulting to standard 1024 channel procedure...")
+    # complex structure required as with every channel removal, indexes of chopped_ar get reset
+    recheck = True
+    while recheck:
+        recheck = False
+        freqs = chopped_ar.get_frequencies()
+        for i, chan_freq in enumerate(freqs):
+            if chan_freq < low_freq:
+                chopped_ar.remove_chan(i, i)
+                recheck = True
+                break
+            elif chan_freq > high_freq:
+                chopped_ar.remove_chan(i, i)
+                recheck = True
+                break
 
-        # complex structure required as with every channel removal, indexes of chopped_ar get reset
-        recheck = True
-        while recheck:
-            recheck = False
-            freqs = chopped_ar.get_frequencies()
-            for i,f in enumerate(freqs):
-                if f in reference_928ch_freqlist:
-                    pass
-                else:
-                    chopped_ar.remove_chan(i, i)
-                    recheck = True
-                    break
-    else:
-        logger.info("Applying new chopping algorithm (designed for non-1024 channel configurations...")
-
-        # assumes continuous block of channels to zap, which should be true or something has gone seriously wrong
-        # also assumes positive bandwidth
-        # calculate channel bandwidth and min/max frequencies
-        chbw = np.abs( (reference_928ch_freqlist[0] - reference_928ch_freqlist[-1]) / (len(reference_928ch_freqlist) - 1) )
-        minfreq = reference_928ch_freqlist[0] - chbw/2
-        maxfreq = reference_928ch_freqlist[-1] + chbw/2
-
-        recheck = True
-        while recheck:
-            recheck = False
-            freqs = chopped_ar.get_frequencies()
-            if (freqs[0] < minfreq):
-                for i,f in enumerate(freqs):
-                    if (f <= minfreq):
-                        pass
-                    else:
-                        chopped_ar.remove_chan(0, i-1)
-                        recheck=True
-                        break
-            elif (freqs[-1] > maxfreq):
-                for i,f in enumerate(freqs):
-                    if (f <= maxfreq):
-                        pass
-                    else:
-                        chopped_ar.remove_chan(i, len(freqs) - 1)
-                        recheck=True
-                        break
+    if cleaned_ar.get_nchan() == 1024:
+        # If standard 1024 nchan obs check the number of channels removed
+        assert chopped_ar.get_nchan() == 928
 
     logger.info("Done extracting")
     # dedisperse is previously true
