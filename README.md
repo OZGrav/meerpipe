@@ -1,23 +1,28 @@
+## New Nextflow Pipeline
+
+This repository no longer contains the most recent version of meerpipe, it is now the python scripts used by the [nf-core-meerpipe repository](https://github.com/OZGrav/nf-core-meerpipe) and a [docker container](https://hub.docker.com/repository/docker/nickswainston/meerpipe/general) that can be used by the pipeline (mostly for testing).
+
+
 ## Overview
 
-Meerpipe is a python-based data analysis pipeline that produces the cleaned and calibrated data that forms the basis of all pulsar timing projects with the MeerKAT radio telescope as part of the [MeerTime project](http://www.meertime.org/). For an overview of MeerTime and the various science themes, please refer to [Bailes et al. 2020](https://arxiv.org/abs/2005.14366)  
+Meerpipe is a python-based data analysis pipeline that produces the cleaned and calibrated data that forms the basis of all pulsar timing projects with the MeerKAT radio telescope as part of the [MeerTime project](http://www.meertime.org/). For an overview of MeerTime and the various science themes, please refer to [Bailes et al. 2020](https://arxiv.org/abs/2005.14366)
 
 
 ## Functionalities
 
-The raw data recorded by the Pulsar Timing User Supplied Equipment (PTUSE) is transferred to the OzStar supercomputing facility in Melbourne, Australia where meerpipe is hosted. Each new observation automatically triggers an instance of the pipeline that is launched using the Slurm job manager. The pipeline optimizes the requested memory and wall time based on the length of the observation. 
+The raw data recorded by the Pulsar Timing User Supplied Equipment (PTUSE) is transferred to the OzStar supercomputing facility in Melbourne, Australia where meerpipe is hosted. Each new observation automatically triggers an instance of the pipeline that is launched using the Slurm job manager. The pipeline optimizes the requested memory and wall time based on the length of the observation.
 
 For each observation, meerpipe implements the following routines:
 
 1. Polarisation calibration: The Jones matrices provided by the South African Radio Astronomy Observatory (SARAO) are used by meerpipe to perform polarisation calibration. A detailed description can be found in [Serylak et al. 2020](https://arxiv.org/pdf/2009.05797.pdf)
 
-2. Cleaning: The radio frequency interference in the calibrated data is removed by utilizing a combination of cleaning algorithms that are part of a customised software package, MeerGuard.  
+2. Cleaning: The radio frequency interference in the calibrated data is removed by utilizing a combination of cleaning algorithms that are part of a customised software package, MeerGuard.
 
-3. Flux calibration: Meerpipe also uses a bootstrap method to flux calibrate the data. Using the sky map in Calabretta et al. 2014, an initial estimate of the Tsky was computed. However owing to the large disparity in the  sky map as comparted to the more resolved MeerKAT beam, a secondary estimate of Tsky was performed directly from the data. This was done by observing a high-latitude pulsar and comparing its RMS with other pulsars observed in that session. This allowed an estimate of a scaling factor used to flux calibrate the data. A detailed description of this method can be found in the TPA census paper. 
+3. Flux calibration: Meerpipe also uses a bootstrap method to flux calibrate the data. Using the sky map in Calabretta et al. 2014, an initial estimate of the Tsky was computed. However owing to the large disparity in the  sky map as comparted to the more resolved MeerKAT beam, a secondary estimate of Tsky was performed directly from the data. This was done by observing a high-latitude pulsar and comparing its RMS with other pulsars observed in that session. This allowed an estimate of a scaling factor used to flux calibrate the data. A detailed description of this method can be found in the TPA census paper.
 
 4. User-defined data products: Following the requirements laid out by the various science themes within MeerTime, meerpipe produces the requested decimated data products post-cleaning. These include data products at various frequency and time resolutions along with the dynamic spectra for scintillation studies. S
 
-5. Times-of-arrival: Using the decimated data products, the times-of-arrival per observation are computed using [PSRCHIVE](http://psrchive.sourceforge.net/). 
+5. Times-of-arrival: Using the decimated data products, the times-of-arrival per observation are computed using [PSRCHIVE](http://psrchive.sourceforge.net/).
 
 ## Database management
 
@@ -49,7 +54,7 @@ In addition to the extra database functionality, the forDB branch also includes 
 
 ## Online Data Release
 
-The raw and processed data from meerpipe can be accessed via this [data portal](https://pulsars.org.au/login/). The data portal provides access to both the fold mode and the search mode data recorded with MeerKAT. Observations have a wide range of tags that allow the user to filter and curate them. 
+The raw and processed data from meerpipe can be accessed via this [data portal](https://pulsars.org.au/login/). The data portal provides access to both the fold mode and the search mode data recorded with MeerKAT. Observations have a wide range of tags that allow the user to filter and curate them.
 
 ## Dependencies
 
@@ -115,7 +120,7 @@ This would process all observations of PSR J1535-5848 from the month of August 2
 **Note:** The "forDB" code can still be run in the same way as the "main" branch, without using `db_specified_launcher.py` and without turning on any of the PSRDB functionality. Launched jobs will not be checked against PSRDB for correctness, results will not be written to PSRDB and the user will need to specify their own configuration file. This may be beneficial, as the "forDB" branch contains a number of minor bugfixes and quality of life improvements not yet migrated to the "main" branch. For further details, refer to the README file from the "main" branch.
 
 ## Further information
- 
+
  For more details, queries please contact:
  1) Dr. Aditya Parthasarathy (MPIfR): adityapartha3112@gmail.com
  2) Dr. Andrew Cameron (Swinburne University of Technology): andrewcameron@swin.edu.au

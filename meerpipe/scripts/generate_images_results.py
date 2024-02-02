@@ -21,6 +21,13 @@ from meerpipe.utils import setup_logging
 from meerpipe.archive_utils import template_adjuster, calc_dynspec_zap_fraction
 
 
+def return_none_or_float(value):
+    if value == "None":
+        return None
+    else:
+        return float(value)
+
+
 def generate_SNR_images(
         scrunched_file,
         label,
@@ -178,6 +185,7 @@ def generate_images(
         clean_scrunched,
         template,
         ephemeris,
+        raw_only=False,
         rcvr="LBAND",
         logger=None,
     ):
@@ -190,19 +198,22 @@ def generate_images(
 
     logger.info("Generating pipeline images")
     generate_SNR_images(raw_scrunched,   'raw',     logger=logger)
-    generate_SNR_images(clean_scrunched, 'cleaned', logger=logger)
+    if not raw_only:
+        generate_SNR_images(clean_scrunched, 'cleaned', logger=logger)
 
 
 
-    logger.info("----------------------------------------------")
-    logger.info("Generating dynamic spectra using psrflux")
-    logger.info("----------------------------------------------")
+    if not raw_only:
+        logger.info("----------------------------------------------")
+        logger.info("Generating dynamic spectra using psrflux")
+        logger.info("----------------------------------------------")
+        generate_dynamicspec_images(raw_file,   template, 'raw',     logger=logger)
+        generate_dynamicspec_images(clean_file, template, 'cleaned', logger=logger)
 
-    generate_dynamicspec_images(raw_file,   template, 'raw',     logger=logger)
-    generate_dynamicspec_images(clean_file, template, 'cleaned', logger=logger)
 
 def generate_results(
         snr,
+        flux,
         dm_file,
         cleaned_FTp_file,
         dynspec_file,
@@ -226,66 +237,19 @@ def generate_results(
 
     # Read in DM values
     logger.info("Reading in DM values")
-    with open(dm_file, "r") as f:
-        lines = f.readlines()
-        dm = lines[0].split()[-1]
-        if dm == "None":
-            results["dm"] = None
-        else:
-            results["dm"] = float(dm)
+    with open(dm_file, 'r') as json_file:
+        dm_results = json.load(json_file)
+    results["dm"]       = return_none_or_float(dm_results["DM"])
+    results["dm_err"]   = return_none_or_float(dm_results["ERR"])
+    results["dm_epoch"] = return_none_or_float(dm_results["EPOCH"])
+    results["dm_chi2r"] = return_none_or_float(dm_results["CHI2R"])
+    results["dm_tres"]  = return_none_or_float(dm_results["TRES"])
+    results["rm"]       = return_none_or_float(dm_results["RM"])
+    results["rm_err"]   = return_none_or_float(dm_results["RM_ERR"])
 
-        dm_err = lines[1].split()[-1]
-        if dm_err == "None":
-            results["dm_err"] = None
-        else:
-            results["dm_err"] = float(dm_err)
-
-        dm_epoch = lines[2].split()[-1]
-        if dm_epoch == "None":
-            results["dm_epoch"] = None
-        else:
-            results["dm_epoch"] = float(dm_epoch)
-
-        dm_chi2r = lines[3].split()[-1]
-        if dm_chi2r == "None":
-            results["dm_chi2r"] = None
-        else:
-            results["dm_chi2r"] = float(dm_chi2r)
-
-        dm_tres = lines[4].split()[-1]
-        if dm_tres == "None":
-            results["dm_tres"] = None
-        else:
-            results["dm_tres"] = float(dm_chi2r)
-
-        rm = lines[5].split()[-1]
-        if rm == "None" or rm == "RM:":
-            results["rm"] = None
-        else:
-            results["rm"] = float(rm)
-
-        rm_err = lines[6].split()[-1]
-        if rm_err == "None" or rm_err == "RM_ERR:":
-            results["rm_err"] = None
-        else:
-            results["rm_err"] = float(rm_err)
-
-    # Add input SNR value
+    # Add input SNR and flux value
     results["sn"] = float(snr)
-
-    # Calculate flux
-    comm = f"pdv -f {cleaned_FTp_file}"
-    logger.info("Running flux calc command:")
-    logger.info(comm)
-    args = shlex.split(comm)
-    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-    proc.wait()
-    info = proc.stdout.read().decode("utf-8")
-    logger.info(f"pdv output: {info}")
-    flux = info.split("\n")[1].split()[6]
     results["flux"] = float(flux)
-
-    # TODO calculate RM
 
     # Dump results to json
     with open("results.json", "w") as f:
@@ -295,43 +259,56 @@ def generate_results(
 
 def main():
     parser = argparse.ArgumentParser(description="Flux calibrate MTime data")
-    parser.add_argument("-pid", dest="pid", help="Project id (e.g. PTA)", required=True)
-    parser.add_argument("-rawfile", dest="rawfile", help="Raw (psradded) archive", required=True)
-    parser.add_argument("-cleanedfile", dest="cleanedfile", help="Cleaned (psradded) archive", required=True)
-    parser.add_argument("-rawFp", dest="rawFp", help="Frequency, time  and polarisation scrunched raw archive", required=True)
-    parser.add_argument("-cleanFp", dest="cleanFp", help="Frequency and polarisation scrunched cleaned archive", required=True)
-    parser.add_argument("-cleanFTp", dest="cleanFTp", help="Frequency, time and polarisation scrunched cleaned archive", required=True)
-    parser.add_argument("-template", dest="template", help="Path to par file for pulsar", required=True)
-    parser.add_argument("-parfile", dest="parfile", help="Path to par file for pulsar", required=True)
-    parser.add_argument("-rcvr", dest="rcvr", help="Bandwidth label of the receiver (LBAND, UHF)", required=True)
-    parser.add_argument("-snr", dest="snr", help="Signal to noise ratio of the cleaned profile", required=True)
-    parser.add_argument("-dmfile", dest="dmfile", help="The text file with the SM results", required=True)
+    parser.add_argument("--pid", help="Project id (e.g. PTA)", required=True)
+    parser.add_argument("--raw_file", help="Raw (psradded) archive", required=True)
+    parser.add_argument("--raw_Fp", help="Frequency, time  and polarisation scrunched raw archive", required=True)
+    parser.add_argument("--cleaned_file", help="Cleaned (psradded) archive")
+    parser.add_argument("--clean_Fp", help="Frequency and polarisation scrunched cleaned archive")
+    parser.add_argument("--clean_FTp", help="Frequency, time and polarisation scrunched cleaned archive")
+    parser.add_argument("--template", help="Path to par file for pulsar")
+    parser.add_argument("--par_file", help="Path to par file for pulsar", required=True)
+    parser.add_argument("--rcvr", help="Bandwidth label of the receiver (LBAND, UHF)", required=True)
+    parser.add_argument("--snr", help="Signal to noise ratio of the cleaned profile")
+    parser.add_argument("--flux", help="Flux density of the cleaned profile")
+    parser.add_argument("--dm_file", help="The text file with the SM results")
+    parser.add_argument("--raw_only", help="The text file with the SM results", action='store_true')
     args = parser.parse_args()
 
     logger = setup_logging(console=True)
 
     generate_images(
         args.pid,
-        args.rawfile,
-        args.cleanedfile,
-        args.rawFp,
-        args.cleanFp,
+        args.raw_file,
+        args.cleaned_file,
+        args.raw_Fp,
+        args.clean_Fp,
         args.template,
-        args.parfile,
+        args.par_file,
+        raw_only=args.raw_only,
         rcvr="LBAND",
         logger=logger,
     )
 
-    # Dynamic spectrum file will be created in generate_images
-    dynspec_file = f"{args.cleanedfile}.dynspec"
+    if args.raw_only:
+        # Make empty files to prevent nextflow errors
+        with open("empty.dat", 'w'):
+            pass
+        with open("empty.dynspec", 'w'):
+            pass
+        with open("results.json", 'w'):
+            pass
+    else:
+        # Dynamic spectrum file will be created in generate_images
+        dynspec_file = f"{args.cleaned_file}.dynspec"
 
-    generate_results(
-        args.snr,
-        args.dmfile,
-        args.cleanFTp,
-        dynspec_file,
-        logger=logger,
-    )
+        generate_results(
+            args.snr,
+            args.flux,
+            args.dm_file,
+            args.clean_FTp,
+            dynspec_file,
+            logger=logger,
+        )
 
 
 if __name__ == '__main__':

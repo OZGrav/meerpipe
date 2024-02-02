@@ -1,0 +1,29 @@
+name: Pytest
+
+on:
+  workflow_run:
+    workflows: ["Docker build and push"]
+    types:
+      - completed
+
+jobs:
+  pull_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Pull Docker image
+      run: |
+        docker pull nickswainston/meerpipe:latest
+      env:
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Run tests inside Docker container
+      run: |
+        docker run -v $PWD:/app nickswainston/meerpipe:latest pytest
+      env:
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}

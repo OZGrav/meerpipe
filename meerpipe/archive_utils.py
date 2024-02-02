@@ -17,6 +17,8 @@ from scintools.dynspec import Dynspec
 #psrchive imports
 import psrchive as ps
 
+from meerpipe.utils import setup_logging
+from meerpipe.data_load import FREQ_REF
 
 def get_band(bw, freq):
     """
@@ -132,3 +134,76 @@ def calc_dynspec_zap_fraction(dynspec_file):
         raise Exception ("File {0} cannot be found".format(dynspec_file))
 
     return retval
+
+
+def chopping_utility(
+        archive_path,
+        band,
+        logger=None
+    ):
+    """
+    Chop the edge frequency channels of a meertime archive.
+    """
+    if logger is None:
+        logger = setup_logging(console=True)
+
+    # cloning archive and ensuring it has not been dedispersed
+    cleaned_ar = ps.Archive_load(archive_path)
+    chopped_ar = cleaned_ar.clone()
+    is_dedispered = chopped_ar.get_dedispersed()
+    if is_dedispered:
+        chopped_ar.dededisperse()
+
+    # Work out highest and lowest frequency channels to cut outside of based on band
+    if band == "LBAND":
+        low_freq = 895.92
+        high_freq = 1671.87
+    elif band == "UHF":
+        low_freq = 569.4
+        high_freq = 1062.4
+    elif band == "SBAND_0":
+        low_freq = 1790.57
+        high_freq = 2583.57
+    elif band == "SBAND_1":
+        low_freq = 2009.0
+        high_freq = 2802.7
+    elif band == "SBAND_2":
+        low_freq = 2227.2
+        high_freq = 3020.9
+    elif band == "SBAND_3":
+        low_freq = 2446.2
+        high_freq = 3239.9
+    elif band == "SBAND_4":
+        low_freq = 2665.2
+        high_freq = 3458.9
+
+
+    # complex structure required as with every channel removal, indexes of chopped_ar get reset
+    recheck = True
+    while recheck:
+        recheck = False
+        freqs = chopped_ar.get_frequencies()
+        for i, chan_freq in enumerate(freqs):
+            if chan_freq < low_freq:
+                chopped_ar.remove_chan(i, i)
+                recheck = True
+                break
+            elif chan_freq > high_freq:
+                chopped_ar.remove_chan(i, i)
+                recheck = True
+                break
+
+    if cleaned_ar.get_nchan() == 1024:
+        # If standard 1024 nchan obs check the number of channels removed
+        assert chopped_ar.get_nchan() == 928
+
+    logger.info("Done extracting")
+    # dedisperse is previously true
+    if is_dedispered:
+        chopped_ar.dedisperse()
+
+    # write file with chopped in it's name
+    name = archive_path.split(".")[0]
+    extensions = ".".join(archive_path.split(".")[1:])
+    chopped_ar.unload(f"{name}_chopped.{extensions}")
+    logger.info("Unloaded chopped file")
