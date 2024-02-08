@@ -28,6 +28,7 @@ def test_chopping_utility():
         ("LBAND", "J2317+1439_2022-12-03-15:09:15_zap.ar", 4096, 3712),
         ("UHF", "J1350-5115_2022-01-03-04:04:15_zap.ar", 4096, 3712),
         ("SBAND_0", "J0737-3039A_2023-05-16-11:38:55_zap_ch16384.ar", 16384, 14848),
+        ("LBAND", "J0737-3039A_2022-09-18-07:10:50_zap.ar", 16384, 14848),
     ]
     for band, archive, input_nchan, output_nchan in test_archives:
         logger.info(f"Testing chopping utility for {archive} in {band} band")
@@ -41,6 +42,7 @@ def test_chopping_utility():
         # Check the nchan of the chopped archive
         chopped_archive = archive.replace(".ar", "_chopped.ar")
         ar = ps.Archive_load(os.path.join(TEST_DATA_DIR, chopped_archive))
+        logger.info(f"Testing {ar.get_nchan()} == {output_nchan}")
         assert ar.get_nchan() == output_nchan
 
         # Remove the chopped archive
