@@ -19,3 +19,16 @@ def test_catalogue_redundancy():
             print(f"{pulsar} has multiple RMs: {rms[pulsar]}")
 
     assert len(pulsars) == len(set(pulsars))
+
+def test_catalogue_format():
+    with open(RM_CAT, 'r') as f:
+        for line in f:
+            if line.startswith("#"):
+                continue
+            pulsar, rm = line.split()
+            if rm[0] == "-":
+                # Remove leading negative signs
+                rm = rm[1:]
+            if rm[0] == "0" and rm [1] != ".":
+                print(f"{pulsar} has a leading zero in RM: {rm}")
+                assert False
