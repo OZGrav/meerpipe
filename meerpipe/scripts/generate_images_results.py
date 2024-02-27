@@ -168,7 +168,7 @@ def generate_dynamicspec_images(
 
     try:
         dyn = Dynspec(dynspec_file, process=False, verbose=False)
-        dyn.plot_dyn(filename=f"{dynspec_file}.png" ,display=False, title=f"Dynamic Spectral ({label})")
+        dyn.plot_dyn(filename=f"{dynspec_file}.png", display=False, title=f"Dynamic Spectral ({label})", dpi=150)
         logger.info("Refilling")
         dyn.trim_edges()
         dyn.refill(linear=False)
