@@ -150,6 +150,10 @@ def generate_dynamicspec_images(
         label,
         logger=None,
     ):
+    # Load logger if no provided
+    if logger is None:
+        logger = setup_logging(console=True)
+
     ar = ps.Archive_load(archive_file)
 
     # account for phase bin differences
@@ -166,15 +170,23 @@ def generate_dynamicspec_images(
     # Work out what name of output psrflux file is
     dynspec_file = f"{archive_file}.dynspec"
 
-    try:
-        dyn = Dynspec(dynspec_file, process=False, verbose=False)
-        dyn.plot_dyn(filename=f"{dynspec_file}.png", display=False, title=f"Dynamic Spectral ({label})", dpi=150)
-        logger.info("Refilling")
-        dyn.trim_edges()
-        dyn.refill(linear=False)
-    except Exception as e:
-        logger.error("Scintools failed. Dyanmic spectra couldn't be created do to :")
-        logger.error(e)
+    dynamic_spectra(dynspec_file, label, logger=logger)
+
+
+def dynamic_spectra(
+        dynspec_file,
+        label,
+        logger=None,
+    ):
+    # Load logger if no provided
+    if logger is None:
+        logger = setup_logging(console=True)
+
+    dyn = Dynspec(dynspec_file, process=False, verbose=False)
+    dyn.plot_dyn(filename=f"{dynspec_file}.png", display=False, title=f"Dynamic Spectral ({label})", dpi=100)
+    logger.info("Refilling")
+    dyn.trim_edges()
+    dyn.refill(linear=False)
 
 
 def generate_images(
