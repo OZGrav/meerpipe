@@ -183,7 +183,7 @@ def dynamic_spectra(
         logger = setup_logging(console=True)
 
     dyn = Dynspec(dynspec_file, process=False, verbose=False)
-    dyn.plot_dyn(filename=f"{dynspec_file}.png", display=False, title=f"Dynamic Spectral ({label})", dpi=100)
+    dyn.plot_dyn(filename=f"{dynspec_file}.png", display=False, title=f"Dynamic Spectral ({label})", dpi=90)
     logger.info("Refilling")
     dyn.trim_edges()
     dyn.refill(linear=False)
