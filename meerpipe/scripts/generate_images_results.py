@@ -31,6 +31,8 @@ def return_none_or_float(value):
 def generate_SNR_images(
         scrunched_file,
         label,
+        nsub,
+        length,
         logger=None,
     ):
     # Load logger if no provided
@@ -44,15 +46,6 @@ def generate_SNR_images(
     # new - psrchive side functionality
     scrunched_arch = ps.Archive_load(scrunched_file)
     zapped_arch = scrunched_arch.clone()
-
-    # get parameters for looping
-    comm = f"vap -c nsub,length {scrunched_file}"
-    args = shlex.split(comm)
-    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-    proc.wait()
-    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
-    nsub = int(info[1].split()[1])
-    length = float(info[1].split()[2])
 
     logger.info("Beginning S/N analysis...")
     logger.info("NSUB = {0} | LENGTH = {1}".format(nsub, length))
@@ -159,14 +152,6 @@ def generate_dynamicspec_images(
     # account for phase bin differences
     temporary_template = template_adjuster(template, archive_file, "./", logger)
 
-    logger.info(f"Making dynamicspectra for {label} archive: {archive_file}")
-
-    psrflux_com = f'psrflux -s {temporary_template} {archive_file} -e dynspec'
-
-    proc_psrflux = shlex.split(psrflux_com)
-    p_psrflux = subprocess.Popen(proc_psrflux)
-    p_psrflux.wait()
-
     # Work out what name of output psrflux file is
     dynspec_file = f"{archive_file}.dynspec"
 
@@ -208,14 +193,36 @@ def generate_images(
     # Note - the functionality of this code is based on the outputs expected by 'generate_summary'
     # Should these expected outputs change, the conditions of this code should be re-assessed
 
+
+    # get parameters
+    comm = f"vap -c nsub,length {raw_scrunched}"
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+    nsub = int(info[1].split()[1])
+    length = float(info[1].split()[2])
+
     logger.info("Generating pipeline images")
-    generate_SNR_images(raw_scrunched,   'raw',     logger=logger)
+    generate_SNR_images(
+        raw_scrunched,
+        'raw',
+        nsub,
+        length,
+        logger=logger
+    )
     if not raw_only:
-        generate_SNR_images(clean_scrunched, 'cleaned', logger=logger)
+        generate_SNR_images(
+            clean_scrunched,
+            'cleaned',
+            nsub,
+            length,
+            logger=logger
+        )
 
 
 
-    if not raw_only:
+    if not raw_only and nsub > 1:
         logger.info("----------------------------------------------")
         logger.info("Generating dynamic spectra using psrflux")
         logger.info("----------------------------------------------")
