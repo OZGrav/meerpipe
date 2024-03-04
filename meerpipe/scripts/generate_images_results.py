@@ -4,6 +4,7 @@ import shlex
 import subprocess
 import numpy as np
 import argparse
+from PIL import Image
 
 import matplotlib
 matplotlib.use('Agg')
@@ -168,10 +169,25 @@ def dynamic_spectra(
         logger = setup_logging(console=True)
 
     dyn = Dynspec(dynspec_file, process=False, verbose=False)
-    dyn.plot_dyn(filename=f"{dynspec_file}.png", display=False, title=f"Dynamic Spectral ({label})", dpi=80)
+    dynspec_image = f"{dynspec_file}.png"
+    dyn.plot_dyn(filename=dynspec_image, display=False, title=f"Dynamic Spectral ({label})", dpi=150)
     logger.info("Refilling")
     dyn.trim_edges()
     dyn.refill(linear=False)
+
+    image_size = os.path.getsize(dynspec_image)
+    if image_size > 1e6:
+        # Reduce the size of the image
+        logger.info(f"Reducing size of {dynspec_image} of size {image_size} bytes to less than 1MB")
+        img = Image.open(dynspec_image)
+        reduce_by = 7e5 / image_size
+        # Resize the image to maintain the same aspect ratio
+        new_width  = int(img.width  * reduce_by)
+        new_height = int(img.height * reduce_by)
+        resized_img = img.resize((new_width, new_height), Image.ANTIALIAS)
+
+        # Save the resized image with compression
+        resized_img.save(dynspec_image, quality=85)  # Adjust the quality as needed
 
 
 def generate_images(
