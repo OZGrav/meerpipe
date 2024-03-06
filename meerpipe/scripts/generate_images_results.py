@@ -180,7 +180,7 @@ def dynamic_spectra(
         # Reduce the size of the image
         logger.info(f"Reducing size of {dynspec_image} of size {image_size} bytes to less than 1MB")
         img = Image.open(dynspec_image)
-        reduce_by = 7e5 / image_size
+        reduce_by = 5e5 / image_size
         # Resize the image to maintain the same aspect ratio
         new_width  = int(img.width  * reduce_by)
         new_height = int(img.height * reduce_by)
