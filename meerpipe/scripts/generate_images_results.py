@@ -176,18 +176,19 @@ def dynamic_spectra(
     dyn.refill(linear=False)
 
     image_size = os.path.getsize(dynspec_image)
-    if image_size > 1e6:
+    while image_size > 1e6:
         # Reduce the size of the image
         logger.info(f"Reducing size of {dynspec_image} of size {image_size} bytes to less than 1MB")
         img = Image.open(dynspec_image)
-        reduce_by = 5e5 / image_size
+        reduce_by = 8e5 / image_size
         # Resize the image to maintain the same aspect ratio
         new_width  = int(img.width  * reduce_by)
         new_height = int(img.height * reduce_by)
-        resized_img = img.resize((new_width, new_height), Image.ANTIALIAS)
+        resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
         # Save the resized image with compression
         resized_img.save(dynspec_image, quality=85)  # Adjust the quality as needed
+        image_size = os.path.getsize(dynspec_image)
 
 
 def generate_images(
