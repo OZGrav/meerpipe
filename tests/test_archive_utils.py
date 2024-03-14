@@ -1,4 +1,5 @@
 import os
+import logging
 
 import psrchive as ps
 
@@ -7,14 +8,14 @@ from meerpipe.archive_utils import chopping_utility
 
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), 'test_data')
 
-logger = setup_logging(console=True)
+logger = setup_logging(console=True, level=logging.DEBUG)
 
 def test_chopping_utility():
     # Test archives for each bands that have been time and polarisation scrunched.
     test_archives = [
         # Standard 1024 nchan
-        ("LBAND", "J0437-4715_2019-03-26-16:26:02_zap.ar", 1024, 928),
         ("UHF", "J0255-5304_2020-08-03-23:36:45_zap.ar", 1024, 928),
+        ("LBAND", "J0437-4715_2019-03-26-16:26:02_zap.ar", 1024, 928),
         ("SBAND_0", "J0737-3039A_2023-05-16-11:38:55_zap_ch1024.ar", 1024, 928),
         ("SBAND_1", "J1757-1854_2023-12-03-09:37:38_zap.ar", 1024, 928),
         # ("SBAND_2", "", 1024, 928),
@@ -25,10 +26,11 @@ def test_chopping_utility():
         # A 768 nchan obs
         ("LBAND", "J1827-0750_2020-01-10-08:29:29_zap.ar", 768, 768),
         # High nchan obs
-        ("LBAND", "J2317+1439_2022-12-03-15:09:15_zap.ar", 4096, 3712),
         ("UHF", "J1350-5115_2022-01-03-04:04:15_zap.ar", 4096, 3712),
-        ("SBAND_0", "J0737-3039A_2023-05-16-11:38:55_zap_ch16384.ar", 16384, 14848),
+        ("LBAND", "J2317+1439_2022-12-03-15:09:15_zap.ar", 4096, 3712),
         ("LBAND", "J0737-3039A_2022-09-18-07:10:50_zap.ar", 16384, 14848),
+        ("SBAND_0", "J0737-3039A_2023-05-16-11:38:55_zap_ch16384.ar", 16384, 14848),
+        ("SBAND_1", "J1756-2251_2023-05-25-20:54:23_zap.ar", 16384, 14848),
     ]
     for band, archive, input_nchan, output_nchan in test_archives:
         logger.info(f"Testing chopping utility for {archive} in {band} band")
