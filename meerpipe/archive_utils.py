@@ -170,8 +170,13 @@ def chopping_utility(
         low_freq = 1790.57
         high_freq = 2583.57
     elif band == "SBAND_1":
-        low_freq = 2009.35
-        high_freq = 2802.3
+        if cleaned_nchan == 4096:
+            # The 4096 nchan obs have a different zap range
+            low_freq = 2009.6
+            high_freq = 2802.6
+        else:
+            low_freq = 2009.35
+            high_freq = 2802.3
     elif band == "SBAND_2":
         low_freq = 2227.2
         high_freq = 3020.9

@@ -30,6 +30,7 @@ def test_chopping_utility():
         ("LBAND", "J2317+1439_2022-12-03-15:09:15_zap.ar", 4096, 3712),
         ("LBAND", "J0737-3039A_2022-09-18-07:10:50_zap.ar", 16384, 14848),
         ("SBAND_0", "J0737-3039A_2023-05-16-11:38:55_zap_ch16384.ar", 16384, 14848),
+        ("SBAND_1", "J1701-3006B_2023-06-25-23:38:49_zap.ar", 4096, 3712),
         ("SBAND_1", "J1756-2251_2023-05-25-20:54:23_zap.ar", 16384, 14848),
     ]
     for band, archive, input_nchan, output_nchan in test_archives:
