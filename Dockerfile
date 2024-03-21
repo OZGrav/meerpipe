@@ -256,6 +256,12 @@ RUN cd $PSRCHIVE_DIR && \
     make install && \
     make clean
 
+# Download and install private ephem_template repo
+WORKDIR $PSRHOME
+RUN git clone https://$(cat /run/secrets/ozgrav_repo_token)@github.com/OZGrav/meertime_ephemerides_and_templates.git
+WORKDIR $PSRHOME/meertime_ephemerides_and_templates
+RUN pip install .
+
 
 COPY . $PSRHOME/meerpipe
 WORKDIR $PSRHOME/meerpipe

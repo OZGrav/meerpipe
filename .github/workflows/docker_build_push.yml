@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - 'main'
+    tags:
+      - '*.*.*'
   pull_request:
     branches:
         - main
@@ -25,8 +27,27 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Build and push
+        name: Build and push git hash
         uses: docker/build-push-action@v5
         with:
           push: true
+          secrets: |
+            "ozgrav_repo_token=${{ secrets.OZGRAV_REPO_TOKEN }}"
+          tags: nickswainston/meerpipe:${{ github.sha }}
+      -
+        name: Build and push latest
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          secrets: |
+            "ozgrav_repo_token=${{ secrets.OZGRAV_REPO_TOKEN }}"
           tags: nickswainston/meerpipe:latest
+      -
+        name: Build and push release
+        uses: docker/build-push-action@v5
+        if: github.event_name == 'release'
+        with:
+          push: true
+          secrets: |
+            "ozgrav_repo_token=${{ secrets.OZGRAV_REPO_TOKEN }}"
+          tags: nickswainston/meerpipe:${{ github.ref_name }}
