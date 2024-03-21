@@ -1,6 +1,7 @@
 FROM ubuntu:22.04
 
 ARG OZGRAV_REPO_TOKEN
+ENV OZGRAV_REPO_TOKEN=$OZGRAV_REPO_TOKEN
 
 # Install dependencies
 ARG DEBIAN_FRONTEND=noninteractive
