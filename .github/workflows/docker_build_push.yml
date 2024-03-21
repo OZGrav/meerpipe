@@ -48,6 +48,5 @@ jobs:
         if: github.event_name == 'release'
         with:
           push: true
-          secrets: |
-            "ozgrav_repo_token=${{ secrets.OZGRAV_REPO_TOKEN }}"
+          build-args: "OZGRAV_REPO_TOKEN=${{ secrets.OZGRAV_REPO_TOKEN }}"
           tags: nickswainston/meerpipe:${{ github.ref_name }}

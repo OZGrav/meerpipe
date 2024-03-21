@@ -1,5 +1,7 @@
 FROM ubuntu:22.04
 
+ARG OZGRAV_REPO_TOKEN
+
 # Install dependencies
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
@@ -258,7 +260,7 @@ RUN cd $PSRCHIVE_DIR && \
 
 # Download and install private ephem_template repo
 WORKDIR $PSRHOME
-RUN git clone https://$(cat /run/secrets/ozgrav_repo_token)@github.com/OZGrav/meertime_ephemerides_and_templates.git
+RUN git clone https://${OZGRAV_REPO_TOKEN}@github.com/OZGrav/meertime_ephemerides_and_templates.git
 WORKDIR $PSRHOME/meertime_ephemerides_and_templates
 RUN pip install .
 
