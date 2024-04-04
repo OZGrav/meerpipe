@@ -64,6 +64,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get -y clean
 
+WORKDIR $PSRHOME
+RUN --mount=type=ssh \
+    git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
+WORKDIR $PSRHOME/meertime_ephemerides_and_templates
+RUN pip install .
+
 RUN pip install -U \
         pip \
         setuptools && \
