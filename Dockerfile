@@ -1,13 +1,6 @@
 # this is our first build stage, it will not persist in the final image to ensure the ssh key is not in the final image
 FROM ubuntu as intermediate
 
-# Define home, psrhome, OSTYPE and create the directory
-ENV HOME /home/psr
-ENV PSRHOME $HOME/software
-ENV OSTYPE linux
-RUN mkdir -p $PSRHOME
-WORKDIR $PSRHOME
-
 # install git
 RUN apt-get update
 RUN apt-get install -y \
@@ -23,12 +16,13 @@ RUN echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa
 RUN touch /root/.ssh/known_hosts
 RUN ssh -T git@github.com
 
-WORKDIR $PSRHOME
+WORKDIR /root
 RUN git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
 
 
 # this is our second build stage, it will be the final image
 FROM ubuntu:22.04
+COPY --from=intermediate /root/meertime_ephemerides_and_templates $PSRHOME/meertime_ephemerides_and_templates
 
 # Define home, psrhome, OSTYPE and create the directory
 ENV HOME /home/psr
