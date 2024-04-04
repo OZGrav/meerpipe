@@ -67,6 +67,8 @@ RUN apt-get update && \
 
 WORKDIR $PSRHOME
 RUN --mount=type=ssh \
+    ssh -T git@github.com
+RUN --mount=type=ssh \
     git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
 WORKDIR $PSRHOME/meertime_ephemerides_and_templates
 RUN pip install .
