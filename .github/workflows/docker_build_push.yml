@@ -37,7 +37,7 @@ jobs:
         name: Build and push git hash
         uses: docker/build-push-action@v5
         with:
-          ssh: default
+          build-args: SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}
           push: true
           tags: nickswainston/meerpipe:${{ github.sha }}
       -

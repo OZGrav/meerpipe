@@ -1,3 +1,31 @@
+# this is our first build stage, it will not persist in the final image
+FROM ubuntu as intermediate
+
+# Define home, psrhome, OSTYPE and create the directory
+ENV HOME /home/psr
+ENV PSRHOME $HOME/software
+ENV OSTYPE linux
+RUN mkdir -p $PSRHOME
+WORKDIR $PSRHOME
+
+# install git
+RUN apt-get update
+RUN apt-get install -y \
+    git \
+    openssh-client
+
+# add credentials on build
+ARG SSH_PRIVATE_KEY
+RUN mkdir /root/.ssh/
+RUN echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa
+
+# make sure your domain is accepted
+RUN touch /root/.ssh/known_hosts
+RUN ssh -T git@github.com
+
+WORKDIR $PSRHOME
+RUN git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
+
 FROM ubuntu:22.04
 
 ARG OZGRAV_REPO_TOKEN
@@ -60,18 +88,17 @@ RUN apt-get update && \
     libatlas-base-dev \
     gsl-bin \
     libgsl-dev \
-    bc \
-    openssh-client && \
+    bc && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get -y clean
 
-WORKDIR $PSRHOME
-RUN --mount=type=ssh \
-    ssh -T git@github.com
-RUN --mount=type=ssh \
-    git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
-WORKDIR $PSRHOME/meertime_ephemerides_and_templates
-RUN pip install .
+# WORKDIR $PSRHOME
+# RUN --mount=type=ssh \
+#     ssh -T git@github.com
+# RUN --mount=type=ssh \
+#     git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
+# WORKDIR $PSRHOME/meertime_ephemerides_and_templates
+# RUN pip install .
 
 RUN pip install -U \
         pip \
