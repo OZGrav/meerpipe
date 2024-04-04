@@ -30,6 +30,13 @@ RUN git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
 # this is our second build stage, it will be the final image
 FROM ubuntu:22.04
 
+# Define home, psrhome, OSTYPE and create the directory
+ENV HOME /home/psr
+ENV PSRHOME $HOME/software
+ENV OSTYPE linux
+RUN mkdir -p $PSRHOME
+WORKDIR $PSRHOME
+
 # Install dependencies
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
