@@ -33,6 +33,9 @@ jobs:
           host: github.com
           private-key: ${{ secrets.SSH_GITHUB_PPK }}
           private-key-name: github-ppk
+
+      - name: Test ssh
+        run: ssh -T git@github.com
       -
         name: Build and push git hash
         uses: docker/build-push-action@v5
