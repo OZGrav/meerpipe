@@ -60,7 +60,8 @@ RUN apt-get update && \
     libatlas-base-dev \
     gsl-bin \
     libgsl-dev \
-    bc  && \
+    bc \
+    openssh-client && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get -y clean
 
