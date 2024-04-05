@@ -23,12 +23,13 @@ RUN echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa
 RUN touch /root/.ssh/known_hosts
 RUN ssh -T git@github.com
 
+WORKDIR $PSRHOME
 RUN git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
 
 
 # this is our second build stage, it will be the final image
 FROM ubuntu:22.04
-COPY --from=intermediate $PSRHOME/meertime_ephemerides_and_templates $PSRHOME/meertime_ephemerides_and_templates
+# COPY --from=intermediate /root/meertime_ephemerides_and_templates $PSRHOME/meertime_ephemerides_and_templates
 
 # Define home, psrhome, OSTYPE and create the directory
 ENV HOME /home/psr
