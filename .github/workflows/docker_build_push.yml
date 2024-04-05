@@ -37,14 +37,14 @@ jobs:
         name: Build and push git hash
         uses: docker/build-push-action@v5
         with:
-          build-args: SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}
+          build-args: "SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}"
           push: true
           tags: nickswainston/meerpipe:${{ github.sha }}
       -
         name: Build and push latest
         uses: docker/build-push-action@v5
         with:
-          build-args: SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}
+          build-args: "SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}"
           push: true
           tags: nickswainston/meerpipe:latest
       -
@@ -52,6 +52,6 @@ jobs:
         uses: docker/build-push-action@v5
         if: github.event_name == 'release'
         with:
-          build-args: SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}
+          build-args: "SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}"
           push: true
           tags: nickswainston/meerpipe:${{ github.ref_name }}
