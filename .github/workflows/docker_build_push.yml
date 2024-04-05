@@ -27,6 +27,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
+        name: Set up SSH
+        uses: MrSquaare/ssh-setup-action@7bfdda6ef6839504e3a5b2625ad971b17461a0db # v3.0.0
+        with:
+          host: github.com
+          private-key: ${{ secrets.SSH_GITHUB_PPK }}
+          private-key-name: github-ppk
+      -
         name: Build and push git hash
         uses: docker/build-push-action@v5
         with:
