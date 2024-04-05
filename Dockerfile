@@ -96,7 +96,9 @@ RUN apt-get update && \
     libatlas-base-dev \
     gsl-bin \
     libgsl-dev \
-    bc && \
+    bc \
+    python-is-python3 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3 10 && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get -y clean
 
