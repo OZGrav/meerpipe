@@ -1,35 +1,36 @@
 # this is our first build stage, it will not persist in the final image to ensure the ssh key is not in the final image
 FROM ubuntu as intermediate
 
-# Define home, psrhome, OSTYPE and create the directory
-ENV HOME /home/psr
-ENV PSRHOME $HOME/software
-ENV OSTYPE linux
-RUN mkdir -p $PSRHOME
-WORKDIR $PSRHOME
-
 # install git
 RUN apt-get update
 RUN apt-get install -y \
-    git \
-    openssh-client
+        git \
+        openssh-client
 
-# add credentials on build
+# Authorize SSH Host
+RUN mkdir -p /root/.ssh && \
+    chmod 0700 /root/.ssh
+# See: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
+RUN echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > /root/.ssh/known_hosts
+RUN echo "github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=" > /root/.ssh/known_hosts
+RUN echo "github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=" > /root/.ssh/known_hosts
+
+# Add the keys and set permissions
 ARG SSH_PRIVATE_KEY
-RUN mkdir /root/.ssh/
-RUN echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa
+RUN echo "$SSH_PRIVATE_KEY" > /root/.ssh/id_rsa && \
+    chmod 600 /root/.ssh/id_rsa
 
 # make sure your domain is accepted
 RUN touch /root/.ssh/known_hosts
-RUN ssh -T git@github.com
+# RUN ssh -T git@github.com
 
-WORKDIR $PSRHOME
+WORKDIR /root
 RUN git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
 
 
 # this is our second build stage, it will be the final image
 FROM ubuntu:22.04
-COPY --from=intermediate /root/meertime_ephemerides_and_templates $PSRHOME/meertime_ephemerides_and_templates
+COPY --from=intermediate /root/meertime_ephemerides_and_templates /tmp/meertime_ephemerides_and_templates
 
 # Define home, psrhome, OSTYPE and create the directory
 ENV HOME /home/psr
@@ -277,8 +278,9 @@ RUN cd $PSRCHIVE_DIR && \
     make clean
 
 # Private ephem_template repo already downloaded so now install it
-WORKDIR $PSRHOME/meertime_ephemerides_and_templates
+WORKDIR /tmp/meertime_ephemerides_and_templates
 RUN pip install .
+RUN rm -rf /tmp/meertime_ephemerides_and_templates
 
 # Finally install the actual repos software
 COPY . $PSRHOME/meerpipe
