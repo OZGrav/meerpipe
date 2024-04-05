@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - 'main'
+    tags:
+      - '*.*.*'
   pull_request:
     branches:
         - main
@@ -25,8 +27,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Build and push
+        name: Build and push git hash
         uses: docker/build-push-action@v5
         with:
+          build-args: SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}
+          push: true
+          tags: nickswainston/meerpipe:${{ github.sha }}
+      -
+        name: Build and push latest
+        uses: docker/build-push-action@v5
+        with:
+          build-args: SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}
           push: true
           tags: nickswainston/meerpipe:latest
+      -
+        name: Build and push release
+        uses: docker/build-push-action@v5
+        if: github.event_name == 'release'
+        with:
+          build-args: SSH_PRIVATE_KEY=${{ secrets.SSH_GITHUB_PPK }}
+          push: true
+          tags: nickswainston/meerpipe:${{ github.ref_name }}

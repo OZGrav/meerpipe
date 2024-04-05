@@ -1,4 +1,35 @@
+# this is our first build stage, it will not persist in the final image to ensure the ssh key is not in the final image
+FROM ubuntu as intermediate
+
+# install git
+RUN apt-get update
+RUN apt-get install -y \
+    git \
+    openssh-client
+
+# add credentials on build
+ARG SSH_PRIVATE_KEY
+RUN mkdir /root/.ssh/
+RUN echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa
+
+# make sure your domain is accepted
+RUN touch /root/.ssh/known_hosts
+RUN ssh -T git@github.com
+
+WORKDIR /root
+RUN git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
+
+
+# this is our second build stage, it will be the final image
 FROM ubuntu:22.04
+COPY --from=intermediate /root/meertime_ephemerides_and_templates $PSRHOME/meertime_ephemerides_and_templates
+
+# Define home, psrhome, OSTYPE and create the directory
+ENV HOME /home/psr
+ENV PSRHOME $HOME/software
+ENV OSTYPE linux
+RUN mkdir -p $PSRHOME
+WORKDIR $PSRHOME
 
 # Install dependencies
 ARG DEBIAN_FRONTEND=noninteractive
@@ -57,8 +88,7 @@ RUN apt-get update && \
     libatlas-base-dev \
     gsl-bin \
     libgsl-dev \
-    bc  && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
+    bc && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get -y clean
 
@@ -79,20 +109,11 @@ RUN pip install -U \
         git+https://github.com/danielreardon/scintools.git
 
 
-
-# Define home, psrhome, OSTYPE and create the directory
-ENV HOME /home/psr
-ENV PSRHOME $HOME/software
-ENV OSTYPE linux
-RUN mkdir -p $PSRHOME
-WORKDIR $PSRHOME
-
 # setup environment variables
 
 # general *PATH environment
 ENV PATH $PATH:$PSRHOME/bin
 ENV PYTHONPATH $PYTHONPATH:$PSRHOME/lib/python3.10/site-packages
-
 # setup pgplot environment
 ENV PGPLOT_DIR /usr
 ENV PGPLOT_FONT $PGPLOT_DIR/lib/pgplot5/grfont.dat
@@ -104,11 +125,6 @@ ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$PGPLOT_DIR/lib
 ENV C_INCLUDE_PATH $C_INCLUDE_PATH:$PGPLOT_DIR/include
 
 # first get all repos then
-# - build psrcat
-# - build calceph
-# - build tempo
-# - build tempo2
-# - build psrchive
 RUN wget http://www.atnf.csiro.au/people/pulsar/psrcat/downloads/psrcat_pkg.tar.gz && tar -xvf psrcat_pkg.tar.gz -C $PSRHOME && rm psrcat_pkg.tar.gz && \
     wget https://www.imcce.fr/content/medias/recherche/equipes/asd/calceph/calceph-3.5.1.tar.gz && tar -xvf calceph-3.5.1.tar.gz -C $PSRHOME && rm calceph-3.5.1.tar.gz && \
     wget https://sourceforge.net/projects/swig/files/swig/swig-4.0.1/swig-4.0.1.tar.gz && tar -xvf swig-4.0.1.tar.gz -C $PSRHOME && rm swig-4.0.1.tar.gz && \
@@ -117,7 +133,6 @@ RUN wget http://www.atnf.csiro.au/people/pulsar/psrcat/downloads/psrcat_pkg.tar.
     git clone https://bitbucket.org/psrsoft/tempo2.git && \
     git clone git://git.code.sf.net/p/psrchive/code psrchive && \
     git clone https://github.com/SixByNine/psrxml.git
-
 
 # set swig environment
 ENV SWIG_DIR $PSRHOME/swig
@@ -164,8 +179,6 @@ RUN cd $PSRXML && \
     make && \
     make install && \
     make clean
-
-
 
 # set tempo environment
 ENV TEMPO_DIR $PSRHOME/tempo
@@ -256,7 +269,11 @@ RUN cd $PSRCHIVE_DIR && \
     make install && \
     make clean
 
+# Private ephem_template repo already downloaded so now install it
+WORKDIR $PSRHOME/meertime_ephemerides_and_templates
+RUN pip install .
 
+# Finally install the actual repos software
 COPY . $PSRHOME/meerpipe
 WORKDIR $PSRHOME/meerpipe
 RUN pip install .

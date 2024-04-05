@@ -18,7 +18,6 @@ from scintools.dynspec import Dynspec
 import psrchive as ps
 
 from meerpipe.utils import setup_logging
-from meerpipe.data_load import FREQ_REF
 
 def get_band(bw, freq):
     """
@@ -149,6 +148,7 @@ def chopping_utility(
 
     # cloning archive and ensuring it has not been dedispersed
     cleaned_ar = ps.Archive_load(archive_path)
+    cleaned_nchan = cleaned_ar.get_nchan()
     chopped_ar = cleaned_ar.clone()
     is_dedispered = chopped_ar.get_dedispersed()
     if is_dedispered:
@@ -156,8 +156,13 @@ def chopping_utility(
 
     # Work out highest and lowest frequency channels to cut outside of based on band
     if band == "LBAND":
-        low_freq = 895.92
-        high_freq = 1671.87
+        if cleaned_nchan == 4096:
+            # The 4096 nchan obs have a different zap range
+            low_freq = 895.95
+            high_freq = 1671.7
+        else:
+            low_freq = 895.7
+            high_freq = 1671.46
     elif band == "UHF":
         low_freq = 569.4
         high_freq = 1062.4
@@ -165,8 +170,13 @@ def chopping_utility(
         low_freq = 1790.57
         high_freq = 2583.57
     elif band == "SBAND_1":
-        low_freq = 2009.0
-        high_freq = 2802.7
+        if cleaned_nchan == 4096:
+            # The 4096 nchan obs have a different zap range
+            low_freq = 2009.6
+            high_freq = 2802.6
+        else:
+            low_freq = 2009.35
+            high_freq = 2802.3
     elif band == "SBAND_2":
         low_freq = 2227.2
         high_freq = 3020.9
@@ -177,6 +187,13 @@ def chopping_utility(
         low_freq = 2665.2
         high_freq = 3458.9
 
+    freqs = chopped_ar.get_frequencies()
+    nchan_remove = ( cleaned_nchan * 3 ) // 64
+    print(nchan_remove)
+    logger.debug(f"{band} below zap {freqs[nchan_remove-1]}-{freqs[nchan_remove]} and above zap {freqs[-nchan_remove-1]}-{freqs[-nchan_remove]}")
+    count_below_threshold = len([value for value in freqs if value < low_freq])
+    count_above_threshold = len([value for value in freqs if value > high_freq])
+    logger.debug(f"{band} {count_below_threshold} below zap and {count_above_threshold} above zap")
 
     # complex structure required as with every channel removal, indexes of chopped_ar get reset
     recheck = True
@@ -196,6 +213,10 @@ def chopping_utility(
     if cleaned_ar.get_nchan() == 1024:
         # If standard 1024 nchan obs check the number of channels removed
         assert chopped_ar.get_nchan() == 928
+    else:
+        # A simple check to ensure channels are a factor of 32
+        print(chopped_ar.get_nchan())
+        assert chopped_ar.get_nchan() % 32 == 0
 
     logger.info("Done extracting")
     # dedisperse is previously true

@@ -23,7 +23,7 @@ jobs:
 
     - name: Run tests inside Docker container
       run: |
-        docker run -v $PWD:/app nickswainston/meerpipe:latest pytest
+        docker run -v $PWD:/app nickswainston/meerpipe:latest /bin/bash -c "pip install pytest; pytest"
       env:
         DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}

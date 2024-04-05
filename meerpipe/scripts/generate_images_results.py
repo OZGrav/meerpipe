@@ -4,6 +4,7 @@ import shlex
 import subprocess
 import numpy as np
 import argparse
+from PIL import Image
 
 import matplotlib
 matplotlib.use('Agg')
@@ -31,6 +32,8 @@ def return_none_or_float(value):
 def generate_SNR_images(
         scrunched_file,
         label,
+        nsub,
+        length,
         logger=None,
     ):
     # Load logger if no provided
@@ -44,15 +47,6 @@ def generate_SNR_images(
     # new - psrchive side functionality
     scrunched_arch = ps.Archive_load(scrunched_file)
     zapped_arch = scrunched_arch.clone()
-
-    # get parameters for looping
-    comm = f"vap -c nsub,length {scrunched_file}"
-    args = shlex.split(comm)
-    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
-    proc.wait()
-    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
-    nsub = int(info[1].split()[1])
-    length = float(info[1].split()[2])
 
     logger.info("Beginning S/N analysis...")
     logger.info("NSUB = {0} | LENGTH = {1}".format(nsub, length))
@@ -150,31 +144,51 @@ def generate_dynamicspec_images(
         label,
         logger=None,
     ):
+    # Load logger if no provided
+    if logger is None:
+        logger = setup_logging(console=True)
+
     ar = ps.Archive_load(archive_file)
 
     # account for phase bin differences
     temporary_template = template_adjuster(template, archive_file, "./", logger)
 
-    logger.info(f"Making dynamicspectra for {label} archive: {archive_file}")
-
-    psrflux_com = f'psrflux -s {temporary_template} {archive_file} -e dynspec'
-
-    proc_psrflux = shlex.split(psrflux_com)
-    p_psrflux = subprocess.Popen(proc_psrflux)
-    p_psrflux.wait()
-
     # Work out what name of output psrflux file is
     dynspec_file = f"{archive_file}.dynspec"
 
-    try:
-        dyn = Dynspec(dynspec_file, process=False, verbose=False)
-        dyn.plot_dyn(filename=f"{dynspec_file}.png" ,display=False, title=f"Dynamic Spectral ({label})")
-        logger.info("Refilling")
-        dyn.trim_edges()
-        dyn.refill(linear=False)
-    except Exception as e:
-        logger.error("Scintools failed. Dyanmic spectra couldn't be created do to :")
-        logger.error(e)
+    dynamic_spectra(dynspec_file, label, logger=logger)
+
+
+def dynamic_spectra(
+        dynspec_file,
+        label,
+        logger=None,
+    ):
+    # Load logger if no provided
+    if logger is None:
+        logger = setup_logging(console=True)
+
+    dyn = Dynspec(dynspec_file, process=False, verbose=False)
+    dynspec_image = f"{dynspec_file}.png"
+    dyn.plot_dyn(filename=dynspec_image, display=False, title=f"Dynamic Spectral ({label})", dpi=150)
+    logger.info("Refilling")
+    dyn.trim_edges()
+    dyn.refill(linear=False)
+
+    image_size = os.path.getsize(dynspec_image)
+    while image_size > 1e6:
+        # Reduce the size of the image
+        logger.info(f"Reducing size of {dynspec_image} of size {image_size} bytes to less than 1MB")
+        img = Image.open(dynspec_image)
+        reduce_by = 8e5 / image_size
+        # Resize the image to maintain the same aspect ratio
+        new_width  = int(img.width  * reduce_by)
+        new_height = int(img.height * reduce_by)
+        resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        # Save the resized image with compression
+        resized_img.save(dynspec_image, quality=85)  # Adjust the quality as needed
+        image_size = os.path.getsize(dynspec_image)
 
 
 def generate_images(
@@ -196,14 +210,36 @@ def generate_images(
     # Note - the functionality of this code is based on the outputs expected by 'generate_summary'
     # Should these expected outputs change, the conditions of this code should be re-assessed
 
+
+    # get parameters
+    comm = f"vap -c nsub,length {raw_scrunched}"
+    args = shlex.split(comm)
+    proc = subprocess.Popen(args,stdout=subprocess.PIPE)
+    proc.wait()
+    info = proc.stdout.read().decode("utf-8").rstrip().split("\n")
+    nsub = int(info[1].split()[1])
+    length = float(info[1].split()[2])
+
     logger.info("Generating pipeline images")
-    generate_SNR_images(raw_scrunched,   'raw',     logger=logger)
+    generate_SNR_images(
+        raw_scrunched,
+        'raw',
+        nsub,
+        length,
+        logger=logger
+    )
     if not raw_only:
-        generate_SNR_images(clean_scrunched, 'cleaned', logger=logger)
+        generate_SNR_images(
+            clean_scrunched,
+            'cleaned',
+            nsub,
+            length,
+            logger=logger
+        )
 
 
 
-    if not raw_only:
+    if not raw_only and nsub > 1:
         logger.info("----------------------------------------------")
         logger.info("Generating dynamic spectra using psrflux")
         logger.info("----------------------------------------------")
@@ -295,8 +331,20 @@ def main():
             pass
         with open("empty.dynspec", 'w'):
             pass
-        with open("results.json", 'w'):
-            pass
+        results = {
+            "percent_rfi_zapped": None,
+            "dm": None,
+            "dm_err": None,
+            "dm_epoch": None,
+            "dm_chi2r": None,
+            "dm_tres": None,
+            "rm": None,
+            "rm_err": None,
+            "sn": None,
+            "flux": None,
+        }
+        with open("results.json", "w") as f:
+            json.dump(results, f, indent=1)
     else:
         # Dynamic spectrum file will be created in generate_images
         dynspec_file = f"{args.cleaned_file}.dynspec"
