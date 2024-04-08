@@ -5,6 +5,7 @@ FROM ubuntu as intermediate
 RUN apt-get update
 RUN apt-get install -y \
         git \
+        git-lfs \
         openssh-client
 
 # Authorize SSH Host
@@ -25,7 +26,9 @@ RUN touch /root/.ssh/known_hosts
 # RUN ssh -T git@github.com
 
 WORKDIR /root
-RUN git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git
+RUN git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git && \
+    cd meertime_ephemerides_and_templates && \
+    git lfs pull
 
 
 # this is our second build stage, it will be the final image
