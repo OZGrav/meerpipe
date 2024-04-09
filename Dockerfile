@@ -254,8 +254,11 @@ ENV PATH $PATH:$TEMPO2/bin
 ENV C_INCLUDE_PATH $C_INCLUDE_PATH:$TEMPO2/include
 ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$TEMPO2/lib
 # tempo2
-RUN cd $TEMPO2_DIR && \
-    git checkout $TEMPO2_VERSION && \
+WORKDIR $TEMPO2_DIR
+RUN git checkout $TEMPO2_VERSION && \
+    cd T2runtime/ephemeris && \
+    wget https://bitbucket.org/psrsoft/tempo2/raw/cf2a422576f7a24b159cebe77b02a79dfaa9fe4d/T2runtime/ephemeris/DE440.1950.2050 && \
+    cd $TEMPO2_DIR && \
     ./bootstrap && \
     cp -r T2runtime/ $TEMPO2/ && \
     ./configure --prefix=$TEMPO2 --with-x --x-libraries=/usr/lib/x86_64-linux-gnu --with-fftw3-dir=/usr/ --with-calceph=$CALCEPH/install/lib \
