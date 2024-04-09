@@ -35,6 +35,10 @@ RUN git clone git@github.com:OZGrav/meertime_ephemerides_and_templates.git && \
 FROM ubuntu:22.04
 COPY --from=intermediate /root/meertime_ephemerides_and_templates /tmp/meertime_ephemerides_and_templates
 
+# Dependency versions
+ENV PSRCHIVE_VERSION 5179775
+ENV TEMPO2_VERSION ce14d72
+
 # Define home, psrhome, OSTYPE and create the directory
 ENV HOME /home/psr
 ENV PSRHOME $HOME/software
@@ -251,6 +255,7 @@ ENV C_INCLUDE_PATH $C_INCLUDE_PATH:$TEMPO2/include
 ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$TEMPO2/lib
 # tempo2
 RUN cd $TEMPO2_DIR && \
+    git checkout $TEMPO2_VERSION && \
     ./bootstrap && \
     cp -r T2runtime/ $TEMPO2/ && \
     ./configure --prefix=$TEMPO2 --with-x --x-libraries=/usr/lib/x86_64-linux-gnu --with-fftw3-dir=/usr/ --with-calceph=$CALCEPH/install/lib \
@@ -272,6 +277,7 @@ ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$PSRCHIVE/lib
 ENV PYTHONPATH $PYTHONPATH:$PSRCHIVE/lib/python3.10/site-packages
 # psrchive (which requires tempo2 to be built)
 RUN cd $PSRCHIVE_DIR && \
+    git checkout $PSRCHIVE_VERSION && \
     ./bootstrap && \
     ./configure --prefix=$PSRCHIVE --with-x --x-libraries=/usr/lib/x86_64-linux-gnu --with-psrxml-dir=$PSRXML/install --enable-shared --enable-static \
     F77=gfortran \
