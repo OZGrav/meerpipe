@@ -36,7 +36,7 @@ FROM ubuntu:22.04
 COPY --from=intermediate /root/meertime_ephemerides_and_templates /tmp/meertime_ephemerides_and_templates
 
 # Dependency versions
-ENV PSRCHIVE_VERSION 5179775
+ENV PSRCHIVE_VERSION 4c0597b7b
 ENV TEMPO2_VERSION ce14d72
 
 # Define home, psrhome, OSTYPE and create the directory
