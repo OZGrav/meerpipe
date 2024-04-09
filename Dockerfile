@@ -256,9 +256,7 @@ ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$TEMPO2/lib
 # tempo2
 WORKDIR $TEMPO2_DIR
 RUN git checkout $TEMPO2_VERSION && \
-    cd T2runtime/ephemeris && \
     git checkout 6eb1219 T2runtime/ephemeris/DE440.1950.2050 && \
-    cd $TEMPO2_DIR && \
     ./bootstrap && \
     cp -r T2runtime/ $TEMPO2/ && \
     ./configure --prefix=$TEMPO2 --with-x --x-libraries=/usr/lib/x86_64-linux-gnu --with-fftw3-dir=/usr/ --with-calceph=$CALCEPH/install/lib \
