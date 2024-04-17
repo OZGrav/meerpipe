@@ -51,9 +51,9 @@ def main():
         minimum_duration=args.minimum_duration,
     )
     if nsub <= 1:
-        print("1")
+        print("max_1")
     else:
-        print(f"1 {nsub}")
+        print(f"max_{nsub}")
 
 
 if __name__ == '__main__':
