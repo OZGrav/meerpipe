@@ -121,7 +121,7 @@ RUN pip install -U \
         matplotlib \
         astropy \
         scipy \
-        psrdb==3.0.4 \
+        psrdb==3.0.6 \
         git+https://github.com/danielreardon/MeerGuard \
         git+https://github.com/danielreardon/scintools.git
 
