@@ -109,19 +109,20 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get -y clean
 
-RUN pip install -U \
+RUN python -m pip install -U \
         pip \
         setuptools && \
-    pip install -U \
+    python -m pip install -U \
         cython \
         scikit-image  \
         numpy==1.23.3 && \
-    pip install -U \
+    python -m pip install -U \
         pandas \
         matplotlib \
         astropy \
         scipy \
-        psrdb==3.0.6 \
+        psrdb==3.0.6 && \
+    python -m pip install -U \
         git+https://github.com/danielreardon/MeerGuard \
         git+https://github.com/danielreardon/scintools.git
 
