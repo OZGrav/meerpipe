@@ -115,7 +115,7 @@ RUN pip install -U \
     pip install -U \
         cython \
         scikit-image  \
-        numpy && \
+        numpy==1.22.3 && \
     pip install -U \
         pandas \
         matplotlib \
