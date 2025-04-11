@@ -200,6 +200,7 @@ def generate_images(
         template,
         ephemeris,
         raw_only=False,
+        cleaned_only=False,
         rcvr="LBAND",
         logger=None,
     ):
@@ -212,7 +213,10 @@ def generate_images(
 
 
     # get parameters
-    comm = f"vap -c nsub,length {raw_scrunched}"
+    if not cleaned_only:
+        comm = f"vap -c nsub,length {raw_scrunched}"
+    else:
+        comm = f"vap -c nsub,length {clean_scrunched}"
     args = shlex.split(comm)
     proc = subprocess.Popen(args,stdout=subprocess.PIPE)
     proc.wait()
@@ -221,13 +225,14 @@ def generate_images(
     length = float(info[1].split()[2])
 
     logger.info("Generating pipeline images")
-    generate_SNR_images(
-        raw_scrunched,
-        'raw',
-        nsub,
-        length,
-        logger=logger
-    )
+    if not cleaned_only:
+        generate_SNR_images(
+            raw_scrunched,
+            'raw',
+            nsub,
+            length,
+            logger=logger
+        )
     if not raw_only:
         generate_SNR_images(
             clean_scrunched,
@@ -243,7 +248,8 @@ def generate_images(
         logger.info("----------------------------------------------")
         logger.info("Generating dynamic spectra using psrflux")
         logger.info("----------------------------------------------")
-        generate_dynamicspec_images(raw_file,   template, 'raw',     logger=logger)
+        if not cleaned_only:
+            generate_dynamicspec_images(raw_file,   template, 'raw',     logger=logger)
         generate_dynamicspec_images(clean_file, template, 'cleaned', logger=logger)
 
 
@@ -296,8 +302,8 @@ def generate_results(
 def main():
     parser = argparse.ArgumentParser(description="Flux calibrate MTime data")
     parser.add_argument("--pid", help="Project id (e.g. PTA)", required=True)
-    parser.add_argument("--raw_file", help="Raw (psradded) archive", required=True)
-    parser.add_argument("--raw_Fp", help="Frequency, time  and polarisation scrunched raw archive", required=True)
+    parser.add_argument("--raw_file", help="Raw (psradded) archive")
+    parser.add_argument("--raw_Fp", help="Frequency, time  and polarisation scrunched raw archive")
     parser.add_argument("--cleaned_file", help="Cleaned (psradded) archive")
     parser.add_argument("--clean_Fp", help="Frequency and polarisation scrunched cleaned archive")
     parser.add_argument("--clean_FTp", help="Frequency, time and polarisation scrunched cleaned archive")
@@ -307,7 +313,8 @@ def main():
     parser.add_argument("--snr", help="Signal to noise ratio of the cleaned profile")
     parser.add_argument("--flux", help="Flux density of the cleaned profile")
     parser.add_argument("--dm_file", help="The text file with the SM results")
-    parser.add_argument("--raw_only", help="The text file with the SM results", action='store_true')
+    parser.add_argument("--raw_only", help="Generate only raw data plots", action='store_true')
+    parser.add_argument("--cleaned_only", help="Generate only cleaned data plots", action='store_true')
     args = parser.parse_args()
 
     logger = setup_logging(console=True)
@@ -321,6 +328,7 @@ def main():
         args.template,
         args.par_file,
         raw_only=args.raw_only,
+        cleaned_only=args.cleaned_only,
         rcvr="LBAND",
         logger=logger,
     )
