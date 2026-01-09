@@ -151,7 +151,7 @@ def generate_dynamicspec_images(
     ar = ps.Archive_load(archive_file)
 
     # account for phase bin differences
-    temporary_template = template_adjuster(template, archive_file, "./", logger)
+    #temporary_template = template_adjuster(template, archive_file, "./", logger)
 
     # Work out what name of output psrflux file is
     dynspec_file = f"{archive_file}.dynspec"
