@@ -148,7 +148,7 @@ def generate_dynamicspec_images(
     if logger is None:
         logger = setup_logging(console=True)
 
-    ar = ps.Archive_load(archive_file)
+    #ar = ps.Archive_load(archive_file)
 
     # account for phase bin differences
     #temporary_template = template_adjuster(template, archive_file, "./", logger)
